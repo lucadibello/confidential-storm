@@ -9,6 +9,7 @@
             "REMOTE_GID": "1010",
             "NODE_VERSION": "16.20.2",
             "NEOVIM_VERSION": "0.11.4",
+            "STORM_VERSION": "2.8.3",
             "GIT_EMAIL": "lucadibello@proton.me",
             "GIT_NAME": "Luca Di Bello"
         }
