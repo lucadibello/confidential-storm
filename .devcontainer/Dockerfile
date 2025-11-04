@@ -8,15 +8,16 @@ ARG REMOTE_GROUP=${REMOTE_USER}
 ARG REMOTE_UID=1010
 ARG REMOTE_GID=${REMOTE_UID}
 ARG REMOTE_HOME=/home/${REMOTE_USER}
+ARG TARGET_ARCH=x64
 
 ARG GIT_EMAIL=lucadibello@proton.me
 ARG GIT_NAME="Luca Di Bello"
 
+# Settings for additional tools
+ARG GRAALVM_VERSION=22.3.3
+ARG OPENJDK_VERSION=17
 ARG NEOVIM_VERSION=0.11.4
-
 ARG NODE_VERSION=22.20.0
-ARG NODE_ARCH=x64
-
 ARG STORM_VERSION=2.8.2
 ARG APACHE_MIRROR=https://dlcdn.apache.org/storm
 
@@ -27,7 +28,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     REMOTE_HOME=${REMOTE_HOME} \
     GIT_NAME=${GIT_NAME} \
     GIT_EMAIL=${GIT_EMAIL} \
-    STORM_HOME=/opt/storm
+    STORM_HOME=/opt/storm \
+    GRAALVM_HOME=graalvm-ce-java17-linux-${TARGET_ARCH}-${GRAALVM_VERSION} \
+    JAVA_HOME=graalvm-ce-java17-linux-${TARGET_ARCH}-${GRAALVM_VERSION}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends software-properties-common \
@@ -49,6 +52,8 @@ RUN apt-get update \
         \
         # Shells & terminal
         sudo tmux zsh \
+        # Newer Java version
+        openjdk-${OPENJDK_VERSION}-jdk \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/fdfind /usr/local/bin/fd
 
@@ -106,6 +111,41 @@ RUN curl -fsSL https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ri
     && dpkg -i /tmp/ripgrep.deb \
     && rm /tmp/ripgrep.deb
 
+# Install newer GraalVM version (Java 17) for native-image support.
+# https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-22.3.3/graalvm-ce-java17-linux-amd64-22.3.3.tar.gz
+# NOTE: we install an older version of GraalVM as ubuntu 18 only suppots OpenJDK up to version 17
+# NOTE: we only need native-image! GraalVM can coexist with OpenJDK installations.
+RUN curl -fsSL "https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-${GRAALVM_VERSION}/graalvm-ce-java17-linux-${TARGET_ARCH}-${GRAALVM_VERSION}.tar.gz" \
+  && tar -xzf "graalvm-ce-java17-linux-${TARGET_ARCH}-${GRAALVM_VERSION}.tar.gz" \
+  && mv "graalvm-ce-java17-linux-${TARGET_ARCH}-${GRAALVM_VERSION}" /root/tools \
+  && /root/tools/graalvm-ce-java17-linux-${TARGET_ARCH}-${GRAALVM_VERSION}/bin/gu install native-image \
+  && echo "GraalVM ${GRAALVM_VERSION} installed successfully."
+
+# TODO: Update java_home to point to newer GraalVM version
+
+# NOTE: these are the settings already present inside the /etc/environment file
+# GRAALVM_HOME="/root/tools/graalvm-ce-java11-22.2.0"
+# JAVA_HOME="/root/tools/graalvm-ce-java11-22.2.0"
+
+
+# TODO: Set OpenJDK 25 as default Java version using update-alternatives
+# NOTE: why? host is compiled using openjdk, enclave using graalvm!
+# ➜  confidentialstorm git:(main) java --version
+# openjdk 11.0.17 2022-10-18
+# OpenJDK Runtime Environment (build 11.0.17+8-post-Ubuntu-1ubuntu218.04)
+# OpenJDK 64-Bit Server VM (build 11.0.17+8-post-Ubuntu-1ubuntu218.04, mixed mode, sharing)
+# ➜  confidentialstorm git:(main) /root/tools/graalvm-ce-java11-22.2.0/bin/java --version
+# openjdk 11.0.16 2022-07-19
+# OpenJDK Runtime Environment GraalVM CE 22.2.0 (build 11.0.16+8-jvmci-22.2-b06)
+# OpenJDK 64-Bit Server VM GraalVM CE 22.2.0 (build 11.0.16+8-jvmci-22.2-b06, mixed mode, sharing)
+# ➜  confidentialstorm git:(main) echo $JAVA_HOME
+# /root/tools/graalvm-ce-java11-22.2.0
+
+RUN update-alternatives --set java /usr/lib/jvm/java-17-openjdk-*/bin/java \
+  && update-alternatives --set javac /usr/lib/jvm/java-17-openjdk-*/bin/javac \
+  
+
+
 # lazygit (binary release)
 RUN LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | \grep -Po '"tag_name": *"v\K[^"]*') && \
   curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz" && \
@@ -114,15 +154,15 @@ RUN LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygi
   echo "LazyGit installed successfully."
 
 # Install Node.JS LST (useful for tools!)
-RUN curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" && \
-    tar -xf "node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" && \
-    mv "node-v${NODE_VERSION}-linux-${NODE_ARCH}" /usr/local/node-v${NODE_VERSION} && \
+RUN curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${TARGET_ARCH}.tar.xz" && \
+    tar -xf "node-v${NODE_VERSION}-linux-${TARGET_ARCH}.tar.xz" && \
+    mv "node-v${NODE_VERSION}-linux-${TARGET_ARCH}" /usr/local/node-v${NODE_VERSION} && \
     ln -sf /usr/local/node-v${NODE_VERSION}/bin/node /usr/local/bin/node && \
     ln -sf /usr/local/node-v${NODE_VERSION}/bin/npm /usr/local/bin/npm && \
     ln -sf /usr/local/node-v${NODE_VERSION}/bin/npx /usr/local/bin/npx && \
     echo "Verifying Node.js installation..." && \
     node -v && npm -v && \
-    rm -rf /tmp/node-v${NODE_VERSION}-linux-${NODE_ARCH}* && \
+    rm -rf /tmp/node-v${NODE_VERSION}-linux-${TARGET_ARCH}* && \
     echo "Node.js installed successfully."
 
 # Install Neovim 0.11 (nightly channel)
