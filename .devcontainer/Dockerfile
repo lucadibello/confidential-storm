@@ -31,8 +31,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GIT_NAME=${GIT_NAME} \
     GIT_EMAIL=${GIT_EMAIL} \
     STORM_HOME=/opt/storm \
-    GRAALVM_HOME=graalvm-ce-java17-linux-${GRAALVM_ARCH}-${GRAALVM_VERSION} \
-    JAVA_HOME=graalvm-ce-java17-linux-${GRAALVM_ARCH}-${GRAALVM_VERSION}
+    GRAALVM_HOME=/root/tools/graalvm-ce-java17-${GRAALVM_VERSION} \
+    JAVA_HOME=/root/tools/graalvm-ce-java17-${GRAALVM_VERSION}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends software-properties-common \
