@@ -1,0 +1,256 @@
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+      http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+  -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.apache</groupId>
+        <artifactId>apache</artifactId>
+        <version>23</version>
+    </parent>
+    <groupId>org.apache.teaclave.javasdk</groupId>
+    <artifactId>JavaEnclave</artifactId>
+    <packaging>pom</packaging>
+    <version>0.1.0</version>
+    <name>${project.artifactId}</name>
+    <description>The parent project of java enclave</description>
+    <url>https://github.com/apache/incubator-teaclave-java-tee-sdk</url>
+    <inceptionYear>2022</inceptionYear>
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+    <scm>
+        <url>https://github.com/apache/incubator-teaclave-java-tee-sdk</url>
+        <connection>scm:git:https://github.com/apache/incubator-teaclave-java-tee-sdk.git</connection>
+        <developerConnection>scm:git:https://github.com/apache/incubator-teaclave-java-tee-sdk.git</developerConnection>
+        <tag>HEAD</tag>
+    </scm>
+    <mailingLists>
+        <mailingList>
+            <name>Development List</name>
+            <subscribe>dev-subscribe@teaclave.apache.org</subscribe>
+            <unsubscribe>dev-unsubscribe@teaclave.apache.org</unsubscribe>
+            <post>dev@teaclave.apache.org</post>
+        </mailingList>
+        <mailingList>
+            <name>Commits List</name>
+            <subscribe>commits-subscribe@teaclave.apache.org</subscribe>
+            <unsubscribe>commits-unsubscribe@teaclave.apache.org</unsubscribe>
+            <post>commits@teaclave.apache.org</post>
+        </mailingList>
+        <mailingList>
+            <name>Issues List</name>
+            <subscribe>issues-subscribe@teaclave.apache.org</subscribe>
+            <unsubscribe>issues-unsubscribe@teaclave.apache.org</unsubscribe>
+            <post>issues@teaclave.apache.org</post>
+        </mailingList>
+    </mailingLists>
+    <developers>
+        <developer>
+            <id>teaclave.java.tee.sdk</id>
+            <name>The Teaclave Project Contributors</name>
+            <email>dev-subscribe@teaclave.apache.org</email>
+            <url>https://teaclave.apache.org/</url>
+        </developer>
+    </developers>
+    <organization>
+        <name>The Apache Software Foundation</name>
+        <url>http://www.apache.org/</url>
+    </organization>
+    <issueManagement>
+        <system>Github Issues</system>
+        <url>https://github.com/apache/incubator-teaclave-java-tee-sdk/issues</url>
+    </issueManagement>
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <org.apache.teaclave.javasdk.platform>MOCK_IN_SVM:TEE_SDK:EMBEDDED_LIB_OS</org.apache.teaclave.javasdk.platform>
+        <surefire.version>3.0.0-M5</surefire.version>
+        <svm.maven.version>0.9.13</svm.maven.version>
+    </properties>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>1.19</version>
+            </dependency>
+            <dependency>
+                <groupId>org.json</groupId>
+                <artifactId>json</artifactId>
+                <version>20211205</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.teaclave.javasdk</groupId>
+                <artifactId>common</artifactId>
+                <version>0.1.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.teaclave.javasdk</groupId>
+                <artifactId>enclave</artifactId>
+                <version>0.1.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.teaclave.javasdk</groupId>
+                <artifactId>host</artifactId>
+                <version>0.1.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.3</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-api</artifactId>
+                <version>5.7.1</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-engine</artifactId>
+                <version>1.8.2</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <version>5.6.2</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit-pioneer</groupId>
+                <artifactId>junit-pioneer</artifactId>
+                <version>1.5.0</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.graalvm.buildtools</groupId>
+                <artifactId>junit-platform-native</artifactId>
+                <version>${svm.maven.version}</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+    <modules>
+        <module>common</module>
+        <module>enclave</module>
+        <module>host</module>
+    </modules>
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.8.1</version>
+                    <configuration>
+                        <source>11</source>
+                        <target>11</target>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${surefire.version}</version>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>2.5.2</version>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>2.8.2</version>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-site-plugin</artifactId>
+                    <version>3.7.1</version>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-project-info-reports-plugin</artifactId>
+                    <version>3.0.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.graalvm.buildtools</groupId>
+                    <artifactId>native-maven-plugin</artifactId>
+                    <version>${svm.maven.version}</version>
+                    <extensions>true</extensions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>licenseCheck</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>license-maven-plugin</artifactId>
+                        <version>2.0.0</version>
+                        <executions>
+                            <execution>
+                                <id>license-check</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>add-third-party</goal>
+                                </goals>
+                                <configuration>
+                                    <includeOptional>false</includeOptional>
+                                    <useMissingFile>false</useMissingFile>
+                                    <failOnMissing>false</failOnMissing>
+                                    <licenseMerges>
+                                        <licenseMerge>Apache License, Version 2.0|The Apache Software License, Version
+                                            2.0|ASF 2.0|Apache 2|Apache-2.0|Apache 2.0 License|Apache 2.0|Apache License v2.0|Apache License 2.0|The Apache License, Version 2.0|The Apache Software License, Version 2.0
+                                        </licenseMerge>
+                                        <licenseMerge>The MIT License|MIT License</licenseMerge>
+                                        <licenseMerge>The 3-Clause BSD License|New BSD License|3-Clause BSD
+                                            License|BSD|3-Clause BSD License|The New BSD License
+                                        </licenseMerge>
+                                    </licenseMerges>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>
