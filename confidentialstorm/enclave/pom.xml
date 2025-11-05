@@ -17,7 +17,7 @@
     </parent>
 
     <properties>
-        <svm.maven.version>0.9.13</svm.maven.version>
+	<svm.maven.version>0.11.2</svm.maven.version>
         <org.apache.teaclave.javasdk.enclave.privatePem.path></org.apache.teaclave.javasdk.enclave.privatePem.path>
     </properties>
     <profiles>
