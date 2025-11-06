@@ -18,7 +18,7 @@
 CC = gcc
 CXX = g++
 
-TEE_SDK_PATH = /opt/teesdk/sgxsdk
+TEE_SDK_PATH = /opt/sgxsdk
 UBUNTU_OS = $(shell if [ -d "/usr/lib/x86_64-linux-gnu" ]; then echo "yes"; else echo "no"; fi;)
 ifeq ("$(UBUNTU_OS)", "yes")
     DCAP_LIB_PATH = /usr/lib/x86_64-linux-gnu
