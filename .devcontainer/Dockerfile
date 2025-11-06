@@ -39,19 +39,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # 0) Install base dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  # Build & toolchain
   autoconf automake build-essential cmake g++ gcc make ocaml ocamlbuild zlib1g-dev python-is-python3 pkg-config perl file \
-  # VCS
   git \
-  # Networking & crypto
   ca-certificates curl openssh-client openssh-server openssl wget gnupg jq \
-  # Archiving & compression
   tar unzip xz-utils \
-  # Shells & terminal
   sudo tmux zsh \
-  # Java
   openjdk-${OPENJDK_VERSION}-jdk \
-  # SGX build prereqs
   libssl-dev libtool \
   && rm -rf /var/lib/apt/lists/*
 
@@ -94,11 +87,12 @@ RUN GROUP_NAME="${REMOTE_GROUP}" \
 RUN set -eux; \
   install -d -m 0755 /etc/apt/keyrings; \
   curl -fsSL "https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key" -o /etc/apt/keyrings/intel-sgx-keyring.asc; \
-  https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key; \
-  echo 'deb [signed-by=/etc/apt/keyrings/intel-sgx-keyring.asc arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu noble main' \
-  > /etc/apt/sources.list.d/intel-sgx.list; \
+  echo 'deb [signed-by=/etc/apt/keyrings/intel-sgx-keyring.asc arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu noble main' > /etc/apt/sources.list.d/intel-sgx.list; \
+  curl -fsSL "https://occlum.io/occlum-package-repos/debian/public.key" -o /etc/apt/keyrings/occulum-keyring.asc; \
+  echo 'deb [signed-by=/etc/apt/keyrings/occulum-keyring.asc arch=amd64] https://occlum.io/occlum-package-repos/debian noble main' > /etc/apt/sources.list.d/occulum.list; \
   apt-get update; \
   apt-get install -y --no-install-recommends \
+  occulum \
   libsgx-launch-dev \
   libsgx-urts \
   libsgx-uae-service \
@@ -117,9 +111,8 @@ RUN set -eux; \
   url="https://download.01.org/intel-sgx/sgx-linux/2.26/distro/ubuntu24.04-server/sgx_linux_x64_sdk_2.26.100.0.bin"; \
   curl -fsSL -o /tmp/sgx_sdk.bin "$url"; \
   chmod +x /tmp/sgx_sdk.bin; \
-  /tmp/sgx_sdk.bin --prefix /opt/teesdk; \
-  rm -f /tmp/sgx_sdk.bin; \
-  echo 'source /opt/teesdk/sgxsdk/environment' > /etc/profile.d/sgx-env.sh
+  /tmp/sgx_sdk.bin --prefix /opt; \
+  rm -f /tmp/sgx_sdk.bin;
 
 # b) GraalVM (Java 17) + native-image
 RUN set -eux; \
@@ -130,9 +123,6 @@ RUN set -eux; \
   ln -sf /root/tools/graalvm-ce-java17-${GRAALVM_VERSION}/bin/native-image /usr/local/bin/native-image; \
   rm -f /tmp/graalvm.tgz; \
   echo "GraalVM ${GRAALVM_VERSION} installed successfully."
-
-# z) ensure user owns tools
-RUN chown -R "${REMOTE_USER}:${REMOTE_GROUP}" /root/tools
 
 # 2) Additional tools
 
@@ -215,13 +205,15 @@ RUN mkdir -p /var/run/sshd \
 
 # g) Auto-source SGX SDK for interactive shells (bash & zsh)
 RUN set -eux; \
-  echo '[ -f /opt/sgxsdk/environment ] && . /opt/sgxsdk/environment' > /etc/profile.d/sgxsdk.sh; \
-  chmod 0644 /etc/profile.d/sgxsdk.sh; \
-  # zsh: source only for interactive shells
+  echo '[ -f /opt/sgxsdk/environment ] && . /opt/sgxsdk/environment' > /etc/profile.d/sgx-env.sh; \
+  chmod 0644 /etc/profile.d/sgx-env.sh; \
   printf '%s\n' \
   'if [[ -o interactive && -f /opt/sgxsdk/environment ]]; then' \
   '  source /opt/sgxsdk/environment' \
   'fi' >> /etc/zsh/zshrc
+
+# FINALLY - ensure user owns tools
+RUN chown -R "${REMOTE_USER}:${REMOTE_GROUP}" /root/tools
 
 EXPOSE 2222 6666
 WORKDIR /workspaces/teaclave-storm
