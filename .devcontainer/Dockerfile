@@ -37,7 +37,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
   PKG_CONFIG_PATH=/opt/sgxsdk/pkgconfig:$PKG_CONFIG_PATH \
   LD_LIBRARY_PATH=/opt/sgxsdk/sdk_libs:$LD_LIBRARY_PATH
 
-# 0) Install base dependencies
+# 0) Core setup
 RUN apt-get update && apt-get install -y --no-install-recommends \
   autoconf automake build-essential cmake g++ gcc make ocaml ocamlbuild zlib1g-dev python-is-python3 pkg-config perl file \
   git \
@@ -48,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libssl-dev libtool \
   && rm -rf /var/lib/apt/lists/*
 
-# e) Create non-root user with passwordless sudo + matching UID/GID of host user
+# a) Create non-root user with passwordless sudo + matching UID/GID of host user
 RUN GROUP_NAME="${REMOTE_GROUP}" \
   && EXISTING_GID_GROUP="$(getent group "${REMOTE_GID}" | cut -d: -f1 || true)" \
   && if [ -n "${EXISTING_GID_GROUP}" ]; then \
@@ -83,16 +83,16 @@ RUN GROUP_NAME="${REMOTE_GROUP}" \
   && chmod 0440 /etc/sudoers.d/90-"${REMOTE_USER}" \
   && echo "${GROUP_NAME}" > /etc/devcontainer-group
 
-# 1) Intel SGX runtime libs from Intel apt repo (noble)
+# b) Intel SGX runtime libs from Intel apt repo (noble)
 RUN set -eux; \
   install -d -m 0755 /etc/apt/keyrings; \
   curl -fsSL "https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key" -o /etc/apt/keyrings/intel-sgx-keyring.asc; \
   echo 'deb [signed-by=/etc/apt/keyrings/intel-sgx-keyring.asc arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu noble main' > /etc/apt/sources.list.d/intel-sgx.list; \
-  curl -fsSL "https://occlum.io/occlum-package-repos/debian/public.key" -o /etc/apt/keyrings/occulum-keyring.asc; \
-  echo 'deb [signed-by=/etc/apt/keyrings/occulum-keyring.asc arch=amd64] https://occlum.io/occlum-package-repos/debian noble main' > /etc/apt/sources.list.d/occulum.list; \
+  # curl -fsSL "https://occlum.io/occlum-package-repos/debian/public.key" -o /etc/apt/keyrings/occulum-keyring.asc; \
+  # echo 'deb [signed-by=/etc/apt/keyrings/occulum-keyring.asc arch=amd64] https://occlum.io/occlum-package-repos/debian noble main' > /etc/apt/sources.list.d/occulum.list; \
   apt-get update; \
   apt-get install -y --no-install-recommends \
-  occulum \
+  # occulum \
   libsgx-launch-dev \
   libsgx-urts \
   libsgx-uae-service \
@@ -102,6 +102,17 @@ RUN set -eux; \
   libsgx-dcap-default-qpl \
   sgx-aesm-service \
   && rm -rf /var/lib/apt/lists/*
+
+# c) Install occulum from source
+RUN set -eux; \
+  git clone https://github.com/occlum/occlum /tmp/occlum-src; \
+  cd /tmp/occlum-src; \
+  OCCLUM_RELEASE_BUILD=1 make submodule; \
+  OCCLUM_RELEASE_BUILD=1 make; \
+  OCCLUM_RELEASE_BUILD=1 make install;
+
+# d) Copy occulum DCAP libraries locally for remote attestation support
+# COPY --from=docker.io/occlum/occlum:0.31.0-ubuntu22.04 /opt/occlum/toolchains/dcap_lib /opt/occlum/toolchains/dcap_lib
 
 # 1) Install core components for development
 RUN mkdir -p /root/tools
