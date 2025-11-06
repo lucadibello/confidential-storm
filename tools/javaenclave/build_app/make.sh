@@ -50,4 +50,4 @@ do
   export "$enclave_platform"=TRUE
 done
 
-make -f ./Makefile
+make -f ./Makefile all
