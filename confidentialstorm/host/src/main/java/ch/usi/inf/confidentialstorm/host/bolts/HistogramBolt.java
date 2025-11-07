@@ -1,11 +1,11 @@
 package ch.usi.inf.confidentialstorm.host.bolts;
 
+import ch.usi.inf.confidentialstorm.common.api.HistogramService;
+import ch.usi.inf.confidentialstorm.common.model.HistogramUpdate;
+import ch.usi.inf.confidentialstorm.host.bolts.base.ConfidentialBolt;
 import org.apache.storm.Config;
 import org.apache.storm.Constants;
-import org.apache.storm.task.OutputCollector;
-import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
-import org.apache.storm.topology.base.BaseRichBolt;
 import org.apache.storm.tuple.Tuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,19 +20,27 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class HistogramBolt extends BaseRichBolt {
-    private OutputCollector collector;
-    private Map<String, Long> hist;
-    private Logger LOG;
-    private ExecutorService io;
+public class HistogramBolt extends ConfidentialBolt<HistogramService> {
+    private final Logger LOG = LoggerFactory.getLogger(getClass());
     private final String OUTPUT_FILE = "data/histogram.txt";
+    private ExecutorService io;
+
+    public HistogramBolt() {
+        super(HistogramService.class);
+    }
 
     @Override
-    public void prepare(Map<String, Object> topoConf, TopologyContext context, OutputCollector collector) {
-        this.collector = collector;
-        this.hist = new HashMap<>();
+    protected void afterPrepare(Map<String, Object> topoConf, org.apache.storm.task.TopologyContext context) {
+        super.afterPrepare(topoConf, context);
         this.io = Executors.newSingleThreadExecutor();
-        this.LOG = LoggerFactory.getLogger(this.getClass());
+    }
+
+    @Override
+    protected void beforeCleanup() {
+        if (io != null) {
+            io.shutdown();
+        }
+        super.beforeCleanup();
     }
 
     @Override
@@ -73,27 +81,26 @@ public class HistogramBolt extends BaseRichBolt {
     }
 
     @Override
-    public void execute(Tuple input) {
+    protected void processTuple(Tuple input, HistogramService service) {
         if (isTickTuple(input)) {
-            LOG.info("[HistogramBolt] Received tick tuple. Exporting histogram snapshot with {} entries.", hist.size());
-            io.submit(() -> writeSnapshot(new HashMap<>(hist)));
+            var snapshot = service.snapshot();
+            LOG.info("[HistogramBolt] Received tick tuple. Exporting histogram snapshot with {} entries.", snapshot.counts().size());
+            Map<String, Long> snap = snapshot.counts();
+            if (io != null) {
+                io.submit(() -> writeSnapshot(snap));
+            } else {
+                writeSnapshot(snap);
+            }
             return;
         }
         String word = input.getStringByField("word");
         Long newCount = input.getLongByField("count");
-        // update the histogram!
-        hist.put(word, newCount);
+        service.update(new HistogramUpdate(word, newCount));
         collector.ack(input);
     }
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        // NOTE: not output. this is a sink!
-    }
-
-    @Override
-    public void cleanup() {
-        io.shutdown();
-        super.cleanup();
+        // sink bolt
     }
 }
