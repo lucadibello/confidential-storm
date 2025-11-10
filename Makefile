@@ -44,8 +44,8 @@ host:
 	$(MVN) -f $(ROOT_POM) -pl host -am $(MAVEN_FLAGS) $(MAVEN_GOALS)
 
 run-local:
-	@echo "Running Storm topology locally..."
-	@sudo storm local confidentialstorm/host/target/confidentialstorm-topology.jar ch.usi.inf.confidentialstorm.WordCountTopology -- --local
+	@echo "Running Storm topology locally (120 seconds)..."
+	@sudo storm local --local-ttl 120 confidentialstorm/host/target/confidentialstorm-topology.jar ch.usi.inf.confidentialstorm.WordCountTopology -- --local
 	@echo "Finished local run."
 
 submit:

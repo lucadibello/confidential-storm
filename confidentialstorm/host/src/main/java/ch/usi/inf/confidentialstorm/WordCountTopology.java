@@ -29,11 +29,11 @@ public class WordCountTopology extends ConfigurableTopology {
         LOG.info("Starting WordCountTopology in {} mode", isProd ? "PROD" : "LOCAL");
 
         // WordSpout: stream of phrases from a book
-        builder.setSpout("random-joke-spout", new RandomJokeSpout(), 1);
+        builder.setSpout("random-joke-spout", new RandomJokeSpout(), 2);
         // SplitSentenceBolt: splits each sentence into a stream of words
-        builder.setBolt("sentence-split", new SplitSentenceBolt(), 1).shuffleGrouping("random-joke-spout");
+        builder.setBolt("sentence-split", new SplitSentenceBolt(), 3).shuffleGrouping("random-joke-spout");
         // WordCountBolt: counts the words that are emitted
-        builder.setBolt("word-count", new WordCounterBolt(), 1).fieldsGrouping("sentence-split", new Fields("word"));
+        builder.setBolt("word-count", new WordCounterBolt(), 3).fieldsGrouping("sentence-split", new Fields("word"));
         // HistogramBolt: merges partial counters into a single (global) histogram
         builder.setBolt("histogram-global", new HistogramBolt(), 1).globalGrouping("word-count");
 
@@ -56,11 +56,11 @@ public class WordCountTopology extends ConfigurableTopology {
                 // submit topology to local cluster
                 cluster.submitTopology("WordCountTopology", conf, builder.createTopology());
 
-                // run up to 1 minute
-                // NOTE: `storm local` run (by default) for 20 seconds only and then kill the topology.
-                // This sleep is needed to avoid calling killTopology too early / returning too early.
+                // set upper bound for local execution
+                // NOTE: this is needed to avoid local mode to exit immediately. Control the timeout using --local-ttl
+                // argument when launching the topology locally (i.e. storm local --local-ttl 150 ...)
                 try {
-                    Thread.sleep(60000);
+                    Thread.sleep(150_000);
                 } catch (Exception exception) {
                     System.out.println("Thread interrupted exception : " + exception);
                     LOG.error("Thread interrupted exception : ", exception);
