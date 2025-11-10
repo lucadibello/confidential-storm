@@ -4,6 +4,9 @@ target/
 build/
 out/
 
+# Output histogram snapshot
+data/
+
 # Java package files
 *.jar
 *.war
