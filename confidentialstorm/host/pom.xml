@@ -74,6 +74,19 @@
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <exclude>META-INF/DEPENDENCIES</exclude>
+                                        <exclude>META-INF/LICENSE*</exclude>
+                                        <exclude>META-INF/NOTICE*</exclude>
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/versions/**/module-info.class</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <artifact>org.apache.teaclave.javasdk:enclave</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/native-image/reflect-config.json</exclude>
+                                        <exclude>META-INF/native-image/serialization-config.json</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
