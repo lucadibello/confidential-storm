@@ -9,7 +9,7 @@ MAVEN_FLAGS ?= -DskipTests
 # Toggle native profile (requires SGX-enabled env) via `make ENCLAVE_PROFILE= enclave`.
 ENCLAVE_PROFILE ?= -Pnative
 
-.PHONY: all build help clean common enclave host run
+.PHONY: all build help clean common enclave host submit run-local
 
 all: build
 
@@ -42,3 +42,13 @@ enclave:
 
 host:
 	$(MVN) -f $(ROOT_POM) -pl host -am $(MAVEN_FLAGS) $(MAVEN_GOALS)
+
+run-local:
+	@echo "Running Storm topology locally..."
+	@sudo storm local confidentialstorm/host/target/confidentialstorm-topology.jar ch.usi.inf.confidentialstorm.WordCountTopology -- --local
+	@echo "Finished local run."
+
+submit:
+	@echo "Submitting Storm topology to cluster..."
+	@storm jar confidentialstorm/host/target/confidentialstorm-topology.jar ch.inf.usi.confidentialstorm.WordCountTopology -- --cluster
+	@echo "Finished submission.";
