@@ -15,34 +15,53 @@ Everything you need to prototype a secure Apache Storm topology with confidentia
 
 ```mermaid
 flowchart LR
-  subgraph R[RandomJokeSpout ×2]
+  classDef spaced fill=none,stroke-width:1px,padding:40px;
+
+  subgraph R[RandomJokeSpout x2]
+    class R spaced
     R1[Spout #1]
     R2[Spout #2]
   end
-  subgraph S[SplitSentenceBolt ×3]
-    S1["Split Bolt #1"]
-    S2["Split Bolt #2"]
-    S3["Split Bolt #3"]
+
+  subgraph S[SplitSentenceBolt x3 + Enclaves]
+    class S spaced
+    direction LR
+    subgraph S1Grp["Split Pair #1"]
+      S1["Split Bolt #1"]
+      SE1["Split Enclave #1 (SGX)"]
+    end
+    subgraph S2Grp["Split Pair #2"]
+      S2["Split Bolt #2"]
+      SE2["Split Enclave #2 (SGX)"]
+    end
+    subgraph S3Grp["Split Pair #3"]
+      S3["Split Bolt #3"]
+      SE3["Split Enclave #3 (SGX)"]
+    end
   end
-  subgraph SE[SplitSentence Enclaves]
-    SE1["Split Enclave #1 (SGX)"]
-    SE2["Split Enclave #2 (SGX)"]
-    SE3["Split Enclave #3 (SGX)"]
+
+  subgraph W[WordCounterBolt x3 + Enclaves]
+    class W spaced
+    direction LR
+    subgraph W1Grp["WordCounter Pair #1"]
+      W1["WordCounter Bolt #1"]
+      WE1["WordCounter Enclave #1 (SGX)"]
+    end
+    subgraph W2Grp["WordCounter Pair #2"]
+      W2["WordCounter Bolt #2"]
+      WE2["WordCounter Enclave #2 (SGX)"]
+    end
+    subgraph W3Grp["WordCounter Pair #3"]
+      W3["WordCounter Bolt #3"]
+      WE3["WordCounter Enclave #3 (SGX)"]
+    end
   end
-  subgraph W[WordCounterBolt ×3]
-    W1["WordCounter Bolt #1"]
-    W2["WordCounter Bolt #2"]
-    W3["WordCounter Bolt #3"]
-  end
-  subgraph WE[WordCounter Enclaves]
-    WE1["WordCounter Enclave #1 (SGX)"]
-    WE2["WordCounter Enclave #2 (SGX)"]
-    WE3["WordCounter Enclave #3 (SGX)"]
-  end
-  subgraph H[HistogramBolt ×1]
+
+  subgraph H[HistogramBolt x1 + Enclave]
+    class H spaced
     H1["Histogram Bolt"]
+    HE["Histogram Enclave (SGX)"]
   end
-  HE["Histogram Enclave (SGX)"]
 
   R1 --> S1
   R1 --> S2
