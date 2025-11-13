@@ -17,7 +17,7 @@
     </parent>
 
     <properties>
-        <svm.maven.version>0.9.13</svm.maven.version>
+        <svm.maven.version>0.11.2</svm.maven.version>
         <org.apache.teaclave.javasdk.enclave.privatePem.path></org.apache.teaclave.javasdk.enclave.privatePem.path>
     </properties>
     <profiles>
@@ -54,6 +54,8 @@
                                         <buildArg>--shared</buildArg>
                                         <buildArg>--no-fallback</buildArg>
                                         <buildArg>-H:Path=svm-output</buildArg>
+                                        <buildArg>-H:Path=${project.build.directory}/svm-output</buildArg>
+                                        <buildArg>-o ${project.build.directory}/svm-output/lib_mock_svm_load</buildArg>
                                     </buildArgs>
                                 </configuration>
                                 <phase>package</phase>
@@ -70,7 +72,8 @@
                                         <buildArg>--no-fallback</buildArg>
                                         <buildArg>-H:-AllowVMInternalThreads</buildArg>
                                         <buildArg>-H:+RunInEnclave</buildArg>
-                                        <buildArg>-H:Path=svm-output</buildArg>
+                                        <buildArg>-H:Path=${project.build.directory}/svm-output</buildArg>
+                                        <buildArg>-o ${project.build.directory}/svm-output/lib_tee_sdk_svm_load</buildArg>
                                     </buildArgs>
                                 </configuration>
                                 <phase>package</phase>
@@ -95,7 +98,7 @@
                                 <configuration>
                                     <executable>bash</executable>
                                     <arguments>
-                                        <argument>/opt/javaenclave/build_app/make.sh</argument>
+                                        <argument>/workspaces/teaclave-storm/tools/javaenclave/build_app/make.sh</argument>
                                         <argument>${project.basedir}</argument>
                                         <argument>${org.apache.teaclave.javasdk.platform}</argument>
                                         <argument>${org.apache.teaclave.javasdk.enclave.privatePem.path}</argument>

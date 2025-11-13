@@ -13,7 +13,7 @@ import ch.usi.inf.confidentialstorm.host.bolts.SplitSentenceBolt;
 import ch.usi.inf.confidentialstorm.host.bolts.WordCounterBolt;
 import ch.usi.inf.confidentialstorm.host.spouts.RandomJokeSpout;
 
-class WordCountTopology extends ConfigurableTopology {
+public class WordCountTopology extends ConfigurableTopology {
     private static final String PROD_SYSTEM_PROPERTY = "storm.prod";
     private static final String PROD_ENV_VAR = "STORM_PROD";
 
@@ -25,8 +25,8 @@ class WordCountTopology extends ConfigurableTopology {
     public int run(String[] args) {
         TopologyBuilder builder = new TopologyBuilder();
         Logger LOG = LoggerFactory.getLogger(WordCountTopology.class);
-    boolean isProd = isProdEnvironment(args);
-    LOG.info("Starting WordCountTopology in {} mode", isProd ? "PROD" : "LOCAL");
+        boolean isProd = isProdEnvironment(args);
+        LOG.info("Starting WordCountTopology in {} mode", isProd ? "PROD" : "LOCAL");
 
         // WordSpout: stream of phrases from a book
         builder.setSpout("random-joke-spout", new RandomJokeSpout(), 2);
@@ -39,25 +39,34 @@ class WordCountTopology extends ConfigurableTopology {
 
         // configure spout wait strategy to avoid starving other bolts
         // NOTE: learn more here https://storm.apache.org/releases/current/Performance.html
-        conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_STRATEGY,
-                "org.apache.storm.policy.WaitStrategyProgressive");
+        conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_STRATEGY, "org.apache.storm.policy.WaitStrategyProgressive");
         conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_PROGRESSIVE_LEVEL1_COUNT, 1); // wait after 1 consecutive empty emit
         conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_PROGRESSIVE_LEVEL2_COUNT, 100); // wait after 100 consecutive empty emits
-        conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_PROGRESSIVE_LEVEL3_SLEEP_MILLIS, 1);
+        conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_PROGRESSIVE_LEVEL3_SLEEP_MILLIS, 1); // sleep 1 ms at level 3
 
         // run the topology (locally if not production, otherwise submit to nimbus)
         conf.setDebug(false);
         if (!isProd) {
-            // submit topology
+            // conf.put("confidentialstorm.enclave.type", "MOCK_IN_SVM");
+            conf.put("confidentialstorm.enclave.type", "TEE_SDK");
+        }
+        if (!isProd) {
             LOG.warn("Running in local mode");
             try (LocalCluster cluster = new LocalCluster()) {
+                // submit topology to local cluster
                 cluster.submitTopology("WordCountTopology", conf, builder.createTopology());
+
+                // set upper bound for local execution
+                // NOTE: this is needed to avoid local mode to exit immediately. Control the timeout using --local-ttl
+                // argument when launching the topology locally (i.e. storm local --local-ttl 150 ...)
                 try {
-                    Thread.sleep(60000);
+                    Thread.sleep(150_000);
                 } catch (Exception exception) {
                     System.out.println("Thread interrupted exception : " + exception);
                     LOG.error("Thread interrupted exception : ", exception);
                 }
+
+                // kill topology
                 cluster.killTopology("WordCountTopology");
                 return 0;
             } catch (Exception e) {
@@ -69,21 +78,21 @@ class WordCountTopology extends ConfigurableTopology {
         }
     }
 
-  private boolean isProdEnvironment(String[] args) {
-    if (args != null) {
-      for (String arg : args) {
-        if ("--prod".equalsIgnoreCase(arg) || "--production".equalsIgnoreCase(arg)) {
-          return true;
+    private boolean isProdEnvironment(String[] args) {
+        if (args != null) {
+            for (String arg : args) {
+                if ("--prod".equalsIgnoreCase(arg) || "--production".equalsIgnoreCase(arg)) {
+                    return true;
+                }
+                if ("--local".equalsIgnoreCase(arg)) {
+                    return false;
+                }
+            }
         }
-        if ("--local".equalsIgnoreCase(arg)) {
-          return false;
+        String sysProp = System.getProperty(PROD_SYSTEM_PROPERTY);
+        if (sysProp != null) {
+            return Boolean.parseBoolean(sysProp);
         }
-      }
-    }
-    String sysProp = System.getProperty(PROD_SYSTEM_PROPERTY);
-    if (sysProp != null) {
-      return Boolean.parseBoolean(sysProp);
-    }
         String envVar = System.getenv(PROD_ENV_VAR);
         if (envVar != null) {
             return Boolean.parseBoolean(envVar);

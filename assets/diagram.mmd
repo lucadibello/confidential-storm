@@ -1,0 +1,132 @@
+%%{init: {"flowchart": {"defaultRenderer": "elk","elk": {
+  "direction": "DOWN",
+  "alignment": "CENTER",
+  'mergeEdges': true,
+  'nodePlacementStrategy': "LINEAR_SEGMENTS"
+}}}}%%
+flowchart LR
+
+  %% ===== PIPELINE WRAPPER (helps center layout) =====
+  subgraph Pipeline["Confidential Word Count Topology"]
+    %% ===== RANDOM JOKE SPOUTS (stage 1) =====
+    subgraph R["RandomJokeSpouts x2"]
+      R1["Spout 1"]:::spoutNode
+      R2["Spout 2"]:::spoutNode
+    end
+    class R groupSpout
+
+
+    %% ===== SPLIT SENTENCE (stage 2) =====
+    subgraph S["SplitSentenceBolts x3"]
+
+      subgraph S1Grp["SPLIT PAIR 1"]
+        S1["Split Bolt 1"]:::splitBolt
+        SE1["SplitSentenceService #1 (SGX)"]:::enclaveNode
+        S1 -- "SplitSentenceRequest" --> SE1
+        SE1 -- "SplitSentenceResponse" --> S1
+      end
+      class S1Grp pairSplit
+
+      subgraph S2Grp["SPLIT PAIR 2"]
+        S2["Split Bolt 2"]:::splitBolt
+        SE2["SplitSentenceService #2 (SGX)"]:::enclaveNode
+        S2 -- "SplitSentenceRequest" --> SE2
+        SE2 -- "SplitSentenceResponse" --> S2
+      end
+      class S2Grp pairSplit
+
+      subgraph S3Grp["SPLIT PAIR 3"]
+        S3["Split Bolt 3"]:::splitBolt
+        SE3["SplitSentenceService #3 (SGX)"]:::enclaveNode
+        S3 -- "SplitSentenceRequest" --> SE3
+        SE3 -- "SplitSentenceResponse" --> S3
+      end
+      class S3Grp pairSplit
+
+    end
+    class S groupSplit
+
+
+    %% ===== WORD COUNTER (stage 3) =====
+    subgraph W["WordCounterBolts x3"]
+
+      subgraph W1Grp["WORD COUNTER PAIR 1"]
+        W1["Word Counter Bolt 1"]:::wordBolt
+        WE1["WordCountService #1 (SGX)"]:::enclaveNode
+        W1 -- "WordCountRequest" --> WE1
+        WE1 -- "WordCountResponse" --> W1
+      end
+      class W1Grp pairWord
+
+      subgraph W2Grp["WORD COUNTER PAIR 2"]
+        W2["Word Counter Bolt 2"]:::wordBolt
+        WE2["WordCountService #2 (SGX)"]:::enclaveNode
+        W2 -- "WordCountRequest" --> WE2
+        WE2 -- "WordCountResponse" --> W2
+      end
+      class W2Grp pairWord
+
+      subgraph W3Grp["WORD COUNTER PAIR 3"]
+        W3["Word Counter Bolt 3"]:::wordBolt
+        WE3["WordCountService #3 (SGX)"]:::enclaveNode
+        W3 -- "WordCountRequest" --> WE3
+        WE3 -- "WordCountResponse" --> W3
+      end
+      class W3Grp pairWord
+
+    end
+    class W groupWord
+
+
+    %% ===== HISTOGRAM (stage 4) =====
+    subgraph H["HistogramBolt x1"]
+      H1["Histogram Bolt"]:::histBolt
+      HE["HistogramService (SGX)"]:::enclaveNode
+      H1 -- "HistogramUpdateRequest" --> HE
+      HE -- "HistogramSnapshotResponse" --> H1
+    end
+    class H groupHist
+    class H pairHist
+
+
+    %% ===== PIPELINE FLOW =====
+    R1 --> S1
+    R1 --> S2
+    R1 --> S3
+
+    R2 --> S1
+    R2 --> S2
+    R2 --> S3
+
+    S1 --> W1
+    S2 --> W2
+    S3 --> W3
+
+    W1 --> H1
+    W2 --> H1
+    W3 --> H1
+  end
+  class Pipeline pipelineFrame
+
+  %% ===== STYLING =====
+  %% Node styles share the same palette as their subgraph backgrounds
+  classDef spoutNode fill:#8ecae6,stroke:#2879a7,color:#0b2b3c,stroke-width:2px;
+  classDef splitBolt fill:#b2f2bb,stroke:#2f9e44,color:#18361b,stroke-width:1.5px;
+  classDef wordBolt fill:#ffe066,stroke:#f59f00,color:#5c3d00,stroke-width:1.5px;
+  classDef histBolt fill:#c8b6ff,stroke:#845ef7,color:#2f195f,stroke-width:1.5px;
+  classDef enclaveNode fill:#e9ecef,stroke:#495057,color:#212529,stroke-width:1.2px;
+  classDef pipelineFrame fill:none,stroke:#adb5bd,stroke-width:1px,stroke-dasharray:6 4,color:#343a40,padding-top:5px;
+
+  %% Subgraph backgrounds – translucent fills highlight each bolt family
+  style R fill:#8ecae6,fill-opacity:0.35,stroke:#2879a7,stroke-width:2px,color:#0b2b3c,padding:18px
+  style S fill:#b2f2bb,fill-opacity:0.32,stroke:#2f9e44,stroke-width:1px,color:#18361b,padding:18px
+  style S1Grp fill:#b2f2bb,fill-opacity:0.3,stroke:#2f9e44,color:#18361b,padding:12px
+  style S2Grp fill:#b2f2bb,fill-opacity:0.3,stroke:#2f9e44,color:#18361b,padding:12px
+  style S3Grp fill:#b2f2bb,fill-opacity:0.3,stroke:#2f9e44,color:#18361b,padding:12px
+
+  style W fill:#fff3bf,fill-opacity:0.38,stroke:#f59f00,stroke-width:1px,color:#5c3d00,padding:18px
+  style W1Grp fill:#fff3bf,fill-opacity:0.35,stroke:#f59f00,color:#5c3d00,padding:12px
+  style W2Grp fill:#fff3bf,fill-opacity:0.35,stroke:#f59f00,color:#5c3d00,padding:12px
+  style W3Grp fill:#fff3bf,fill-opacity:0.35,stroke:#f59f00,color:#5c3d00,padding:12px
+
+  style H fill:#e5dbff,fill-opacity:0.4,stroke:#845ef7,stroke-width:1px,color:#2f195f,padding:18px
