@@ -128,6 +128,3 @@ confidentialstorm/
 - All text processing (splitting, counting, histogram aggregation) happens inside SGX enclaves, protecting data from both the host OS and other processes.
 - The `ConfidentialBolt` base class provides a common pattern for Storm bolts that delegate to Teaclave services over secure channels.
 - Enclave attestation and secure channel establishment are handled by the Teaclave Java SDK; verify attestation evidence and provision production keys before deploying to untrusted environments.
-
-> [!WARNING]
-> This is a work in progress. Production deployments should implement strict attestation verification, secure provisioning of enclave code, and encrypted state persistence before handling real data.
