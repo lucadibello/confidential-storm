@@ -119,7 +119,7 @@ confidentialstorm/
 - [Apache Teaclave Java TEE SDK 0.1.0](https://teaclave.apache.org/) with the SGX platform plugins configured; the devcontainer uses the `teaclave/teaclave-java-tee-sdk:v0.1.0-ubuntu18.04` base image.
 - GraalVM CE 22.2.0 (Java 17) with `native-image` plus a standard C/C++ toolchain (`gcc`, `g++`, `cmake`, `make`, `zlib1g-dev`, etc.) to build the enclave shared libraries.
 - Intel SGX-capable hardware with the PSW/driver installed, or SGX simulation mode; set `org.apache.teaclave.javasdk.platform` accordingly.
-- Apache Storm CLI 2.8.x available on the host machine. The local workflow uses `sudo storm local`, so your user must have sudo rights (or an equivalent capability-based setup).
+- Apache Storm CLI 2.8.x available on the host machine. The local workflow uses `sudo storm local` to access SGX devices, so your user must have sudo privileges or be able to access the devices.
 - Docker Engine + Docker Compose if you plan to run the optional `docker-compose.yml` cluster or the VS Code devcontainer (the compose stack expects an external `storm-net` bridge).
 - Optional: `devcontainer` CLI / VS Code Dev Containers and [go-task](https://taskfile.dev) to run the helper tasks.
 
