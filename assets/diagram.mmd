@@ -22,7 +22,7 @@ flowchart TB
     subgraph S["SplitSentenceBolts x3"]
       direction TB
 
-      subgraph S1Grp["SPLIT PAIR 1"]
+      subgraph S1Grp["Confidential Split 1"]
         direction TB
         S1["Split Bolt 1"]:::splitBolt
         SE1["SplitSentenceService #1 (SGX)"]:::enclaveNode
@@ -31,7 +31,7 @@ flowchart TB
       end
       class S1Grp pairSplit
 
-      subgraph S2Grp["SPLIT PAIR 2"]
+      subgraph S2Grp["Confidential Split 2"]
         direction TB
         S2["Split Bolt 2"]:::splitBolt
         SE2["SplitSentenceService #2 (SGX)"]:::enclaveNode
@@ -40,7 +40,7 @@ flowchart TB
       end
       class S2Grp pairSplit
 
-      subgraph S3Grp["SPLIT PAIR 3"]
+      subgraph S3Grp["Confidential Split 3"]
         direction TB
         S3["Split Bolt 3"]:::splitBolt
         SE3["SplitSentenceService #3 (SGX)"]:::enclaveNode
@@ -57,7 +57,7 @@ flowchart TB
     subgraph W["WordCounterBolts x3"]
       direction TB
 
-      subgraph W1Grp["WORD COUNTER PAIR 1"]
+      subgraph W1Grp["Confidential Word Counter 1"]
         direction TB
         W1["Word Counter Bolt 1"]:::wordBolt
         WE1["WordCountService #1 (SGX)"]:::enclaveNode
@@ -66,7 +66,7 @@ flowchart TB
       end
       class W1Grp pairWord
 
-      subgraph W2Grp["WORD COUNTER PAIR 2"]
+      subgraph W2Grp["Confidential Word Counter 2"]
         direction TB
         W2["Word Counter Bolt 2"]:::wordBolt
         WE2["WordCountService #2 (SGX)"]:::enclaveNode
@@ -75,7 +75,7 @@ flowchart TB
       end
       class W2Grp pairWord
 
-      subgraph W3Grp["WORD COUNTER PAIR 3"]
+      subgraph W3Grp["Confidential Word Counter 3"]
         direction TB
         W3["Word Counter Bolt 3"]:::wordBolt
         WE3["WordCountService #3 (SGX)"]:::enclaveNode
