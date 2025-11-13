@@ -19,7 +19,7 @@ flowchart TB
 
 
     %% ===== SPLIT SENTENCE (stage 2) =====
-    subgraph S["SplitSentenceBolts x3"]
+    subgraph S["Confidential SplitSentenceBolts x3"]
       direction TB
 
       subgraph S1Grp["Confidential Split 1"]
@@ -54,7 +54,7 @@ flowchart TB
 
 
     %% ===== WORD COUNTER (stage 3) =====
-    subgraph W["WordCounterBolts x3"]
+    subgraph W["Confidential WordCounterBolts x3"]
       direction TB
 
       subgraph W1Grp["Confidential Word Counter 1"]
@@ -89,7 +89,7 @@ flowchart TB
 
 
     %% ===== HISTOGRAM (stage 4) =====
-    subgraph H["HistogramBolt x1"]
+    subgraph H["Confidential HistogramBolt x1"]
       direction TB
       H1["Histogram Bolt"]:::histBolt
       HE["HistogramService (SGX)"]:::enclaveNode
