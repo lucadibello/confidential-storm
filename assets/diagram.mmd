@@ -4,12 +4,14 @@
   'mergeEdges': true,
   'nodePlacementStrategy': "LINEAR_SEGMENTS"
 }}}}%%
-flowchart LR
+flowchart TB
 
   %% ===== PIPELINE WRAPPER (helps center layout) =====
   subgraph Pipeline["Confidential Word Count Topology"]
+    direction TB
     %% ===== RANDOM JOKE SPOUTS (stage 1) =====
     subgraph R["RandomJokeSpouts x2"]
+      direction TB
       R1["Spout 1"]:::spoutNode
       R2["Spout 2"]:::spoutNode
     end
@@ -18,8 +20,10 @@ flowchart LR
 
     %% ===== SPLIT SENTENCE (stage 2) =====
     subgraph S["SplitSentenceBolts x3"]
+      direction TB
 
       subgraph S1Grp["SPLIT PAIR 1"]
+        direction TB
         S1["Split Bolt 1"]:::splitBolt
         SE1["SplitSentenceService #1 (SGX)"]:::enclaveNode
         S1 -- "SplitSentenceRequest" --> SE1
@@ -28,6 +32,7 @@ flowchart LR
       class S1Grp pairSplit
 
       subgraph S2Grp["SPLIT PAIR 2"]
+        direction TB
         S2["Split Bolt 2"]:::splitBolt
         SE2["SplitSentenceService #2 (SGX)"]:::enclaveNode
         S2 -- "SplitSentenceRequest" --> SE2
@@ -36,6 +41,7 @@ flowchart LR
       class S2Grp pairSplit
 
       subgraph S3Grp["SPLIT PAIR 3"]
+        direction TB
         S3["Split Bolt 3"]:::splitBolt
         SE3["SplitSentenceService #3 (SGX)"]:::enclaveNode
         S3 -- "SplitSentenceRequest" --> SE3
@@ -49,8 +55,10 @@ flowchart LR
 
     %% ===== WORD COUNTER (stage 3) =====
     subgraph W["WordCounterBolts x3"]
+      direction TB
 
       subgraph W1Grp["WORD COUNTER PAIR 1"]
+        direction TB
         W1["Word Counter Bolt 1"]:::wordBolt
         WE1["WordCountService #1 (SGX)"]:::enclaveNode
         W1 -- "WordCountRequest" --> WE1
@@ -59,6 +67,7 @@ flowchart LR
       class W1Grp pairWord
 
       subgraph W2Grp["WORD COUNTER PAIR 2"]
+        direction TB
         W2["Word Counter Bolt 2"]:::wordBolt
         WE2["WordCountService #2 (SGX)"]:::enclaveNode
         W2 -- "WordCountRequest" --> WE2
@@ -67,6 +76,7 @@ flowchart LR
       class W2Grp pairWord
 
       subgraph W3Grp["WORD COUNTER PAIR 3"]
+        direction TB
         W3["Word Counter Bolt 3"]:::wordBolt
         WE3["WordCountService #3 (SGX)"]:::enclaveNode
         W3 -- "WordCountRequest" --> WE3
@@ -80,6 +90,7 @@ flowchart LR
 
     %% ===== HISTOGRAM (stage 4) =====
     subgraph H["HistogramBolt x1"]
+      direction TB
       H1["Histogram Bolt"]:::histBolt
       HE["HistogramService (SGX)"]:::enclaveNode
       H1 -- "HistogramUpdateRequest" --> HE
