@@ -25,7 +25,7 @@ Dataset source: <https://github.com/taivop/joke-dataset/blob/master/stupidstuff.
 
    ```bash
    cd confidentialstorm
-   mvn clean package
+   mvn clean package -DskipTests -Pnative
    ```
 
 2. Launch the word-count topology with the Storm CLI (requires the topology jar produced in step 1):
@@ -59,11 +59,11 @@ Tip: remove `data/histogram.txt` between runs if you prefer a clean snapshot.
 
 ## Submit to a remote Storm cluster
 
-1. Build the shaded topology jar:
+1. Build the shaded topology jar as before:
 
    ```bash
    cd confidentialstorm
-   mvn clean package -pl host -am
+   mvn clean package -DskipTests -Pnative
    ```
 
    The artifact lands in `confidentialstorm/host/target/confidentialstorm-topology.jar` and already bundles the enclave artifacts produced by the `enclave` module.
