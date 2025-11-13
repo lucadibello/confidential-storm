@@ -1,4 +1,4 @@
-# teaclave-storm
+# confidential-storm-starter
 
 Everything you need to prototype a secure Apache Storm topology with confidential computing, powered by Apache Teaclave SGX enclaves. This repository adapts the [`apache-storm-starter`](https://github.com/lucadibello/apache-storm-starter/) word-count example so every sensitive operation runs inside Intel SGX enclaves while the host topology stays unchanged.
 
