@@ -5,7 +5,7 @@ dotenv: [".env"]
 vars:
   WORKSPACE: .
   SESSION: dev
-  CONTAINER_NAME: teaclave-storm
+  CONTAINER_NAME: confidential-storm-devcontainer
   TUNNEL_SRV: sws01
   TUNNEL_USER: luca
   SSH_TUNNEL_REMOTE_PORT: 2222
@@ -57,4 +57,3 @@ tasks:
     desc: Forward the devcontainer’s Neovim headless server port to your machine for remote-UI access
     cmds:
       - ssh -N -L {{.NVIM_TUNNEL_LOCAL_PORT}}:127.0.0.1:{{.NVIM_TUNNEL_REMOTE_PORT}} {{.TUNNEL_USER}}@{{.TUNNEL_SRV}}
-
