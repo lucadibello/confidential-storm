@@ -21,6 +21,8 @@
     "--device=/dev/sgx_enclave:/dev/sgx/enclave",
     "--device=/dev/sgx_provision:/dev/sgx/provision",
     "--device=/dev/sgx_vepc:/dev/sgx/vepc",
+    "--env-file",
+    "../.env",
     "--network",
     "storm-net",
     "--publish",
@@ -30,12 +32,8 @@
   ],
   "overrideCommand": false,
   "workspaceFolder": "/workspaces/confidential-storm-starter",
-  "forwardPorts": [
-    2222
-  ],
-  "mounts": [
-    "source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind"
-  ],
+  "forwardPorts": [2222],
+  "mounts": ["source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind"],
   "containerEnv": {
     "SSH_AUTH_SOCK": "/ssh-agent",
     "NVIM_LISTEN_ADDRESS": "0.0.0.0:6666"
