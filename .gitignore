@@ -83,3 +83,9 @@ data/*
 
 # Gradle
 .gradle/
+
+# jdtls files
+.factorypath
+
+# secrets
+.env
