@@ -9,7 +9,7 @@ MAVEN_FLAGS ?= -DskipTests
 # Toggle native profile (requires SGX-enabled env) via `make ENCLAVE_PROFILE= enclave`.
 ENCLAVE_PROFILE ?= -Pnative
 
-.PHONY: all build help clean common enclave host submit run-local
+.PHONY: all build help clean common enclave host submit run-local seal-dataset
 
 all: build
 
@@ -47,6 +47,11 @@ run-local:
 	@echo "Running Storm topology locally (120 seconds)..."
 	@sudo storm local --local-ttl 120 confidentialstorm/host/target/confidentialstorm-topology.jar ch.usi.inf.confidentialstorm.WordCountTopology -- --local
 	@echo "Finished local run."
+
+seal-dataset:
+	@echo "Sealing dataset (encrypting jokes.json to jokes.enc.json)..."
+	@dotenv -e .env -- python3 tools/seal-dataset/main.py confidentialstorm/host/src/main/resources/jokes.json confidentialstorm/host/src/main/resources/jokes.enc.json
+	@echo "Finished encryption."
 
 submit:
 	@echo "Submitting Storm topology to cluster..."
