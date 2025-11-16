@@ -21,8 +21,8 @@ TEE_SDK_CONFIG_FILE_PATH=$1
 TEE_SDK_BUILD_WORKSPACE=$2
 
 # prepare for TeeSDK.conf
-cp /workspaces/teaclave-storm/tools/javaenclave/config/template/TeeSDK.conf "${TEE_SDK_BUILD_WORKSPACE}"
-user_tee_sdk_enclave_config_file=/workspaces/teaclave-storm/tools/javaenclave/config/template/java_enclave_configure.json
+cp /workspaces/confidential-storm-starter/tools/javaenclave/config/template/TeeSDK.conf "${TEE_SDK_BUILD_WORKSPACE}"
+user_tee_sdk_enclave_config_file=/workspaces/confidential-storm-starter/tools/javaenclave/config/template/java_enclave_configure.json
 if [[ -f "${TEE_SDK_CONFIG_FILE_PATH}/java_enclave_configure.json" ]]; then
     user_tee_sdk_enclave_config_file=${TEE_SDK_CONFIG_FILE_PATH}/java_enclave_configure.json
 fi

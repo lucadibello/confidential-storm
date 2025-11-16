@@ -194,7 +194,7 @@ RUN TARGET_GROUP="$(cat /etc/devcontainer-group 2>/dev/null || echo "${REMOTE_GR
 EXPOSE 2222 6666
 
 # set default directory
-WORKDIR /workspaces/teaclave-storm
+WORKDIR /workspaces/confidential-storm-starter
 
 ENTRYPOINT ["/usr/local/bin/devcontainer-entrypoint"]
 CMD ["/usr/sbin/sshd", "-D", "-e"]
