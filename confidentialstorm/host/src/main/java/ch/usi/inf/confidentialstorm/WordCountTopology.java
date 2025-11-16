@@ -33,7 +33,7 @@ public class WordCountTopology extends ConfigurableTopology {
         // SplitSentenceBolt: splits each sentence into a stream of words
         builder.setBolt("sentence-split", new SplitSentenceBolt(), 3).shuffleGrouping("random-joke-spout");
         // WordCountBolt: counts the words that are emitted
-        builder.setBolt("word-count", new WordCounterBolt(), 3).fieldsGrouping("sentence-split", new Fields("word"));
+        builder.setBolt("word-count", new WordCounterBolt(), 3).fieldsGrouping("sentence-split", new Fields("wordKey"));
         // HistogramBolt: merges partial counters into a single (global) histogram
         builder.setBolt("histogram-global", new HistogramBolt(), 1).globalGrouping("word-count");
 
