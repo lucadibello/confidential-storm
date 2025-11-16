@@ -22,7 +22,7 @@
     "--device=/dev/sgx_provision:/dev/sgx/provision",
     "--device=/dev/sgx_vepc:/dev/sgx/vepc",
     "--env-file",
-    "../.env",
+    ".env",
     "--network",
     "storm-net",
     "--publish",
