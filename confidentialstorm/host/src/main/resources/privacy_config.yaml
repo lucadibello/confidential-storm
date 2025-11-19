@@ -1,0 +1,22 @@
+# Privacy configuration file for the application
+
+# Application privacy level - user-level or event-level privacy
+PRIVACY_LEVEL: "user" # Options: "user" for user-level privacy, "event" for event-level privacy (when data not linked to specific subject)
+
+## Contribution Limits
+# NOTE: Choosing the right contribution parameters C and L_M is crucial for privacy-utility trade-off.
+# SOLUTION? Pick C as the 99th percentile of user contributions to avoid excessive clipping.
+
+# Max number of user contributions per privacy unit (i.e. per data stream)
+C: 5  # Integer value representing the maximum contributions allowed
+
+# Max record value - clamping threshold for data values
+L_M: 100.0  # Float value representing the upper limit for data values
+
+## Differential Privacy Parameters
+
+# Epsilon - privacy budget parameter
+EPSILON: 1.0  # Float value representing the privacy budget
+
+# Delta - probability of privacy breach parameter
+DELTA: 1e-5  # Float value representing the acceptable probability of privacy breach
