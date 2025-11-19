@@ -19,7 +19,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # constants
-SOURCE_NAME = "DATASET"
+SOURCE_NAME = "_DATASET" # unique name to identify source
+DESTINATION_NAME = "_MAPPER" # special component inside topology that will map the AAD to the real source/destinations
 
 
 def load_stream_key() -> bytes:
@@ -73,12 +74,12 @@ def main(dataset_path: str, output_path: str):
         # random nonce (12 bytes) – included in ciphertext package
         nonce = os.urandom(12)
 
-        # We need to compute a private source name to add to the AAD
-        private_source_name = compute_private_source_name(SOURCE_NAME, nonce)
-
         # build header (this will later be AAD)
         # NOTE: this is empty at generation, but may be recomputed during
-        header = {"source": private_source_name}
+        header = {
+            "source": compute_private_source_name(SOURCE_NAME, nonce),
+            "destination": compute_private_source_name(DESTINATION_NAME, nonce),
+        }
 
         # serialize header as JSON and use as AAD
         aad = json.dumps(header, sort_keys=True).encode("utf-8")
