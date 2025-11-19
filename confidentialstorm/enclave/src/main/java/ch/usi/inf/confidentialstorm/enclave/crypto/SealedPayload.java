@@ -1,5 +1,8 @@
 package ch.usi.inf.confidentialstorm.enclave.crypto;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+import ch.usi.inf.confidentialstorm.common.crypto.model.aad.AADSpecification;
+import ch.usi.inf.confidentialstorm.common.crypto.model.aad.DecodedAAD;
+import ch.usi.inf.confidentialstorm.common.crypto.util.AADUtils;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
@@ -9,10 +12,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
-import java.util.HexFormat;
-import java.util.Map;
-import java.util.Objects;
-import java.util.TreeMap;
+import java.util.*;
 
 public final class SealedPayload {
     // FIXME: This is just for development.
@@ -27,27 +27,31 @@ public final class SealedPayload {
     private SealedPayload() {
     }
 
-    public static String decryptToString(EncryptedValue sealed) {
-        byte[] plaintext = decrypt(sealed);
-        return new String(plaintext, StandardCharsets.UTF_8);
-    }
-
     public static byte[] decrypt(EncryptedValue sealed) {
         Objects.requireNonNull(sealed, "Encrypted payload cannot be null");
         Cipher cipher = initCipher(Cipher.DECRYPT_MODE, sealed.nonce(), sealed.associatedData());
         return doFinal(cipher, sealed.ciphertext());
     }
 
-    public static EncryptedValue encryptString(String plaintext, Map<String, Object> aadFields) {
+    public static String decryptToString(EncryptedValue sealed) {
+        byte[] plaintext = decrypt(sealed);
+        return new String(plaintext, StandardCharsets.UTF_8);
+    }
+
+    public static EncryptedValue encryptString(String plaintext, AADSpecification aadSpec) {
         byte[] data = plaintext.getBytes(StandardCharsets.UTF_8);
-        return encrypt(data, aadFields);
+        return encrypt(data, aadSpec);
     }
 
     public static EncryptedValue encrypt(byte[] plaintext, Map<String, Object> aadFields) {
+        return encrypt(plaintext, AADSpecification.builder().putAll(aadFields).build());
+    }
+
+    public static EncryptedValue encrypt(byte[] plaintext, AADSpecification aadSpec) {
         Objects.requireNonNull(plaintext, "Plaintext cannot be null");
-        byte[] aad = encodeAad(aadFields);
         byte[] nonce = new byte[12];
         RANDOM.nextBytes(nonce);
+        byte[] aad = encodeAad(aadSpec, nonce);
         Cipher cipher = initCipher(Cipher.ENCRYPT_MODE, nonce, aad);
         byte[] ciphertext = doFinal(cipher, plaintext);
         return new EncryptedValue(aad, nonce, ciphertext);
@@ -62,6 +66,35 @@ public final class SealedPayload {
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Unable to derive routing key", e);
         }
+    }
+
+    public static void verifyRoute(EncryptedValue sealed,
+                                   String expectedSourceComponentName,
+                                   String expectedDestinationComponentName) {
+        // NOTE: the source component can be null when the payload is created outside the enclave
+        Objects.requireNonNull(expectedDestinationComponentName, "Expected destination cannot be null");
+
+        // get decoded aad from sealed value
+        DecodedAAD aad = DecodedAAD.fromBytes(sealed.associatedData());
+
+        // ensure that the source and destination match
+        System.out.println("Decoded AAD: " + aad);
+
+        // source can be null if not expected
+        if (expectedSourceComponentName != null)
+            aad.requireSource(expectedSourceComponentName, sealed.nonce());
+        // destination must match
+        aad.requireDestination(expectedDestinationComponentName, sealed.nonce());
+    }
+
+    public static void verifyRoute(EncryptedValue sealed, Class<?> expectedSourceComponent, Class<?> expectedDestinationComponent) {
+        verifyRoute(sealed, expectedSourceComponent.getName(), expectedDestinationComponent.getName());
+    }
+    public static void verifyRoute(EncryptedValue sealed, String expectedSourceComponentName, Class<?> expectedDestinationComponent) {
+        verifyRoute(sealed, expectedSourceComponentName, expectedDestinationComponent.getName());
+    }
+    public static void verifyRoute(EncryptedValue sealed, Class<?> expectedSourceComponent, String expectedDestinationComponentName) {
+        verifyRoute(sealed, expectedSourceComponent.getName(), expectedDestinationComponentName);
     }
 
     private static Cipher initCipher(int mode, byte[] nonce, byte[] aad) {
@@ -86,11 +119,16 @@ public final class SealedPayload {
         }
     }
 
-    private static byte[] encodeAad(Map<String, Object> fields) {
-        if (fields == null || fields.isEmpty()) {
+    private static byte[] encodeAad(AADSpecification aad, byte[] nonce) {
+        if (aad == null || aad.isEmpty()) {
             return EMPTY_AAD;
         }
-        Map<String, Object> sorted = new TreeMap<>(fields);
+        Map<String, Object> sorted = new TreeMap<>(aad.attributes());
+        aad.sourceComponent().ifPresent(name -> sorted.put("source", AADUtils.privatizeComponentName(name, nonce)));
+        aad.destinationComponent().ifPresent(name -> sorted.put("destination", AADUtils.privatizeComponentName(name, nonce)));
+        if (sorted.isEmpty()) {
+            return EMPTY_AAD;
+        }
         StringBuilder builder = new StringBuilder();
         builder.append('{');
         boolean first = true;

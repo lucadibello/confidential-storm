@@ -15,7 +15,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.jupiter.version>5.10.2</junit.jupiter.version>
         <junit.platform.version>1.10.2</junit.platform.version>
-        <org.apache.teaclave.javasdk.platform>MOCK_IN_SVM:TEE_SDK:EMBEDDED_LIB_OS</org.apache.teaclave.javasdk.platform>
+        <org.apache.teaclave.javasdk.platform>MOCK_IN_SVM:TEE_SDK</org.apache.teaclave.javasdk.platform>
     </properties>
 
     <dependencyManagement>

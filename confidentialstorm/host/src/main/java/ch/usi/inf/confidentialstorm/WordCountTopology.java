@@ -29,11 +29,11 @@ public class WordCountTopology extends ConfigurableTopology {
         LOG.info("Starting WordCountTopology in {} mode", isProd ? "PROD" : "LOCAL");
 
         // WordSpout: stream of phrases from a book
-        builder.setSpout("random-joke-spout", new RandomJokeSpout(), 2);
+        builder.setSpout("random-joke-spout", new RandomJokeSpout(), 1);
         // SplitSentenceBolt: splits each sentence into a stream of words
-        builder.setBolt("sentence-split", new SplitSentenceBolt(), 3).shuffleGrouping("random-joke-spout");
+        builder.setBolt("sentence-split", new SplitSentenceBolt(), 1).shuffleGrouping("random-joke-spout");
         // WordCountBolt: counts the words that are emitted
-        builder.setBolt("word-count", new WordCounterBolt(), 3).fieldsGrouping("sentence-split", new Fields("wordKey"));
+        builder.setBolt("word-count", new WordCounterBolt(), 1).fieldsGrouping("sentence-split", new Fields("wordKey"));
         // HistogramBolt: merges partial counters into a single (global) histogram
         builder.setBolt("histogram-global", new HistogramBolt(), 1).globalGrouping("word-count");
 
@@ -47,8 +47,8 @@ public class WordCountTopology extends ConfigurableTopology {
         // run the topology (locally if not production, otherwise submit to nimbus)
         conf.setDebug(false);
         if (!isProd) {
-            // conf.put("confidentialstorm.enclave.type", "MOCK_IN_SVM");
-            conf.put("confidentialstorm.enclave.type", "TEE_SDK");
+            conf.put("confidentialstorm.enclave.type", "MOCK_IN_SVM");
+            // conf.put("confidentialstorm.enclave.type", "TEE_SDK");
         }
         if (!isProd) {
             LOG.warn("Running in local mode");
