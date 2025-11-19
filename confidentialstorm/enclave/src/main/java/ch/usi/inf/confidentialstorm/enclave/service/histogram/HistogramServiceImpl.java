@@ -1,8 +1,9 @@
-package ch.usi.inf.confidentialstorm.enclave.histogram;
+package ch.usi.inf.confidentialstorm.enclave.service.histogram;
 
 import ch.usi.inf.confidentialstorm.common.api.HistogramService;
-import ch.usi.inf.confidentialstorm.common.model.HistogramSnapshotResponse;
-import ch.usi.inf.confidentialstorm.common.model.HistogramUpdateRequest;
+import ch.usi.inf.confidentialstorm.common.api.model.HistogramSnapshotResponse;
+import ch.usi.inf.confidentialstorm.common.api.model.HistogramUpdateRequest;
+import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
 import com.google.auto.service.AutoService;
 
 import java.util.HashMap;
@@ -14,7 +15,9 @@ public class HistogramServiceImpl implements HistogramService {
 
     @Override
     public void update(HistogramUpdateRequest update) {
-        histogram.put(update.word(), update.count());
+        String word = SealedPayload.decryptToString(update.word());
+        long count = Long.parseLong(SealedPayload.decryptToString(update.count()));
+        histogram.put(word, count);
     }
 
     @Override

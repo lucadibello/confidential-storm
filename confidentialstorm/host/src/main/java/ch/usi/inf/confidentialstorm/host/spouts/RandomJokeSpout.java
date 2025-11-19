@@ -34,7 +34,7 @@ public class RandomJokeSpout implements IRichSpout {
     // we need to load the jokes in memory
     JokeReader jokeReader = new JokeReader();
     try {
-        jokes = jokeReader.readAll("jokes.json");
+        jokes = jokeReader.readAll("jokes.enc.json");
     } catch (IOException e) {
         throw new RuntimeException(e);
     }

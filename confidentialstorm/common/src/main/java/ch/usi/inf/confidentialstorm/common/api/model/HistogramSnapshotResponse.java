@@ -1,4 +1,4 @@
-package ch.usi.inf.confidentialstorm.common.model;
+package ch.usi.inf.confidentialstorm.common.api.model;
 
 import java.io.Serial;
 import java.io.Serializable;

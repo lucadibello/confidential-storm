@@ -1,8 +1,9 @@
 package ch.usi.inf.confidentialstorm.host.bolts;
 
 import ch.usi.inf.confidentialstorm.common.api.HistogramService;
-import ch.usi.inf.confidentialstorm.common.model.HistogramSnapshotResponse;
-import ch.usi.inf.confidentialstorm.common.model.HistogramUpdateRequest;
+import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+import ch.usi.inf.confidentialstorm.common.api.model.HistogramSnapshotResponse;
+import ch.usi.inf.confidentialstorm.common.api.model.HistogramUpdateRequest;
 import ch.usi.inf.confidentialstorm.host.bolts.base.ConfidentialBolt;
 import org.apache.storm.Config;
 import org.apache.storm.Constants;
@@ -102,9 +103,9 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
         }
 
         // in any case -> update the histogram with the new values
-        String word = input.getStringByField("word");
-        Long newCount = input.getLongByField("count");
-        LOG.info("[HistogramBolt] Updating histogram with new count: {} -> {}", word, newCount);
+        EncryptedValue word = (EncryptedValue) input.getValueByField("word");
+        EncryptedValue newCount = (EncryptedValue) input.getValueByField("count");
+        LOG.info("[HistogramBolt] Updating histogram with encrypted tuple");
         service.update(new HistogramUpdateRequest(word, newCount));
 
         // acknowledge the tuple

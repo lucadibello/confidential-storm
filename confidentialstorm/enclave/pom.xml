@@ -20,6 +20,7 @@
         <svm.maven.version>0.11.2</svm.maven.version>
         <org.apache.teaclave.javasdk.enclave.privatePem.path></org.apache.teaclave.javasdk.enclave.privatePem.path>
     </properties>
+
     <profiles>
         <profile>
             <id>native</id>
@@ -98,7 +99,7 @@
                                 <configuration>
                                     <executable>bash</executable>
                                     <arguments>
-                                        <argument>/workspaces/teaclave-storm/tools/javaenclave/build_app/make.sh</argument>
+                                        <argument>/workspaces/confidential-storm-starter/tools/javaenclave/build_app/make.sh</argument>
                                         <argument>${project.basedir}</argument>
                                         <argument>${org.apache.teaclave.javasdk.platform}</argument>
                                         <argument>${org.apache.teaclave.javasdk.enclave.privatePem.path}</argument>

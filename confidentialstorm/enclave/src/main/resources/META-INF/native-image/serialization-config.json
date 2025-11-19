@@ -1,4 +1,14 @@
 [
+  { "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord" },
+  { "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue" },
+
+  { "name": "ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceRequest" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceResponse" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.model.WordCountRequest" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.model.WordCountResponse" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.model.HistogramSnapshotResponse" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.model.HistogramUpdateRequest" },
+
   { "name": "java.util.ArrayList" },
   { "name": "java.util.LinkedList" },
   { "name": "java.util.HashMap" },
@@ -21,11 +31,20 @@
   { "name": "java.util.Collections$UnmodifiableCollection" },
   { "name": "java.util.Collections$UnmodifiableList" },
   { "name": "java.util.Collections$UnmodifiableRandomAccessList" },
+
   { "name": "java.util.Collections$UnmodifiableSet" },
   { "name": "java.util.Collections$UnmodifiableMap" },
   { "name": "java.util.Collections$UnmodifiableMap$UnmodifiableEntrySet" },
 
   { "name": "java.util.ImmutableCollections$ListN" },
   { "name": "java.util.ImmutableCollections$SetN" },
-  { "name": "java.util.ImmutableCollections$MapN" }
+  { "name": "java.util.ImmutableCollections$MapN" },
+
+  { "name": "java.lang.LinkageError" },
+  { "name": "java.lang.IllegalStateException" },
+  { "name": "java.lang.Long" },
+  { "name": "java.security.GeneralSecurityException" },
+  { "name": "javax.crypto.BadPaddingException" },
+  { "name": "javax.crypto.AEADBadTagException" },
+  { "name": "com.oracle.svm.core.jdk.UnsupportedFeatureError" }
 ]
