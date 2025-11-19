@@ -21,28 +21,6 @@ import java.util.TreeMap;
 
 public final class JokeReader {
 
-    public static final class Joke {
-        public final long sequence;
-        public final int id;
-        public final String category;
-        public final String rating;
-        public final EncryptedValue body;
-
-        public Joke(long sequence, int id, String category, String rating, EncryptedValue body) {
-            this.sequence = sequence;
-            this.id = id;
-            this.category = category;
-            this.rating = rating;
-            this.body = body;
-        }
-
-        @Override
-        public String toString() {
-            return "Joke{id=%d, seq=%d, category='%s', rating='%s'}"
-                    .formatted(id, sequence, category, rating);
-        }
-    }
-
     private final ObjectMapper mapper;
 
     public JokeReader() {
@@ -50,7 +28,7 @@ public final class JokeReader {
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
-    public List<Joke> readAll(String jsonResourceName) throws IOException {
+    public List<EncryptedValue> readAll(String jsonResourceName) throws IOException {
         ClassLoader classloader = Thread.currentThread().getContextClassLoader();
         InputStream resourceStream = classloader.getResourceAsStream(jsonResourceName);
         if (resourceStream == null) {
@@ -61,25 +39,23 @@ public final class JokeReader {
             if (!root.isArray()) {
                 throw new IllegalArgumentException("Expected JSON array for jokes dataset");
             }
-            List<Joke> jokes = new ArrayList<>();
+            List<EncryptedValue> encryptedJokes = new ArrayList<>();
             for (JsonNode entry : root) {
                 JsonNode headerNode = entry.get("header");
                 if (headerNode == null || !headerNode.isObject()) {
                     continue;
                 }
-                Map<String, Object> header = mapper.convertValue(headerNode, new TypeReference<>() {});
+                Map<String, Object> header = mapper.convertValue(headerNode, new TypeReference<>() {
+                });
                 byte[] aad = buildAadBytes(header);
                 byte[] nonce = decodeBase64(entry.get("nonce"));
                 byte[] ciphertext = decodeBase64(entry.get("ciphertext"));
-                EncryptedValue body = new EncryptedValue(aad, nonce, ciphertext);
 
-                long seq = toLong(header.get("seq"));
-                int id = (int) toLong(header.get("id"));
-                String category = Objects.toString(header.getOrDefault("category", "unknown"));
-                String rating = Objects.toString(header.getOrDefault("rating", "unrated"));
-                jokes.add(new Joke(seq, id, category, rating, body));
+                // wrap fields inside EncryptedValue object
+                EncryptedValue joke = new EncryptedValue(aad, nonce, ciphertext);
+                encryptedJokes.add(joke);
             }
-            return jokes;
+            return encryptedJokes;
         }
     }
 
@@ -141,7 +117,7 @@ public final class JokeReader {
     // Tiny demo
     public static void main(String[] args) throws Exception {
         JokeReader reader = new JokeReader();
-        List<Joke> jokes = reader.readAll("jokes.enc.json");
+        List<EncryptedValue> jokes = reader.readAll("jokes.enc.json");
         System.out.println("Loaded " + jokes.size() + " jokes");
         if (!jokes.isEmpty()) {
             System.out.println(jokes.get(0));

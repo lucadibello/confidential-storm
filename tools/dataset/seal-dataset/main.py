@@ -6,6 +6,7 @@ import base64
 
 # needed for encryption + data integrity
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+from cryptography.hazmat.primitives.hashes import Hash, SHA256
 
 
 # Setup logger
@@ -16,6 +17,9 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+# constants
+SOURCE_NAME = "DATASET"
 
 
 def load_stream_key() -> bytes:
@@ -62,30 +66,22 @@ def main(dataset_path: str, output_path: str):
     encrypted_entries = []
 
     # Read each entry and prepare encryption
-    for seq, entry in enumerate(dataset_data):
-        # extract some fields (for header / AAD)
-        category = entry.get("category", "unknown")
-        entry_id = entry.get("id", f"entry_{seq}")
-        rating = entry.get("rating", "unrated")
-
+    for entry in dataset_data:
         # serialize entire entry as json (plaintext)
         entry_json = json.dumps(entry, ensure_ascii=False)
 
+        # random nonce (12 bytes) – included in ciphertext package
+        nonce = os.urandom(12)
+
+        # We need to compute a private source name to add to the AAD
+        private_source_name = compute_private_source_name(SOURCE_NAME, nonce)
+
         # build header (this will later be AAD)
-        # NOTE: we include both seq and id to ensure uniqueness
-        header = {
-            "seq": seq,  # sequence number
-            # non-sensitive fields of the entry
-            "id": entry_id,
-            "category": category,
-            "rating": rating,
-        }
+        # NOTE: this is empty at generation, but may be recomputed during
+        header = {"source": private_source_name}
 
         # serialize header as JSON and use as AAD
         aad = json.dumps(header, sort_keys=True).encode("utf-8")
-
-        # random nonce (12 bytes) – included in ciphertext package
-        nonce = os.urandom(12)
 
         # ChaCha20-Poly1305: ct includes ciphertext + tag (aad)
         ct = aead.encrypt(nonce, entry_json.encode("utf-8"), aad)
@@ -106,6 +102,16 @@ def main(dataset_path: str, output_path: str):
         f"Encrypted dataset written to '{output_path}' "
         f"({len(encrypted_entries)} entries)."
     )
+
+
+def compute_private_source_name(source_name: str, nounce: bytes) -> str:
+    digest = Hash(SHA256())
+    digest.update(source_name.encode("utf-8"))
+    digest.update(nounce)
+    result_hash = digest.finalize()
+
+    # base64 result to return a string
+    return base64.b64encode(result_hash).decode("ascii")
 
 
 if __name__ == "__main__":
