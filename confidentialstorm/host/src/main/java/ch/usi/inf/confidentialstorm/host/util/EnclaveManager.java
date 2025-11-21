@@ -25,6 +25,7 @@ public class EnclaveManager<S> {
     }
 
     public EnclaveManager(Class<S> serviceClass, EnclaveType enclaveType) {
+        LOG.info("Creating EnclaveManager for service {}", serviceClass.getName());
         this.serviceClass = serviceClass;
         this.defaultEnclaveType = enclaveType;
     }
@@ -39,9 +40,9 @@ public class EnclaveManager<S> {
             this.enclave = Enclaves.createEnclave(activeEnclaveType);
             this.service = Enclaves.loadService(this.enclave, this.serviceClass);
             LOG.info("Confidential service {} initialized in enclave of type {}", serviceClass.getName(), activeEnclaveType);
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
             LOG.error("Failed to initialize confidential service {} in enclave of type {}", serviceClass.getName(), activeEnclaveType, e);
-            throw e; // bubble up
+            throw new RuntimeException(e); // bubble up
         }
     }
 

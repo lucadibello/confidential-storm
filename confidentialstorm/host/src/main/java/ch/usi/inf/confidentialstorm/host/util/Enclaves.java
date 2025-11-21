@@ -20,22 +20,30 @@ public class Enclaves {
     private static final Logger LOG = LoggerFactory.getLogger(Enclaves.class);
 
     public static Enclave createEnclave(EnclaveType enclaveType) {
+        LOG.info("Creating enclave of type {}", enclaveType);
         try {
-            return EnclaveFactory.create(enclaveType);
-        } catch (EnclaveCreatingException e) {
+            Enclave enclave = EnclaveFactory.create(enclaveType);
+            LOG.info("Successfully created enclave of type {}", enclaveType);
+            return enclave;
+        } catch (Throwable e) {
+            LOG.error("Unable to create enclave of type {}", enclaveType, e);
             throw new IllegalStateException("Unable to create enclave of type " + enclaveType, e);
         }
     }
 
 
     public static <S> S loadService(Enclave enclave, Class<S> serviceClass) {
+        LOG.info("Loading service {} from enclave", serviceClass.getName());
         try {
             Iterator<S> services = enclave.load(serviceClass);
             if (!services.hasNext()) {
                 throw new IllegalStateException("No enclave service registered for " + serviceClass.getName());
             }
-            return services.next();
-        } catch (ServicesLoadingException e) {
+            S service = services.next();
+            LOG.info("Successfully loaded service {} from enclave", serviceClass.getName());
+            return service;
+        } catch (Throwable e) {
+            LOG.error("Unable to load enclave service for {}", serviceClass.getName(), e);
             throw new IllegalStateException("Unable to load enclave service for " + serviceClass.getName(), e);
         }
     }
