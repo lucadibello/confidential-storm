@@ -94,7 +94,7 @@ public class WordCountTopology extends ConfigurableTopology {
                 }
 
                 // kill topology
-                // cluster.killTopology("WordCountTopology");
+                cluster.killTopology("WordCountTopology");
                 return 0;
             } catch (Exception e) {
                 return 1;
