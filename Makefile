@@ -44,8 +44,13 @@ host:
 	$(MVN) -f $(ROOT_POM) -pl host -am $(MAVEN_FLAGS) $(MAVEN_GOALS)
 
 run-local:
-	@echo "Running Storm topology locally (120 seconds)..."
-	@sudo storm local --local-ttl 120 confidentialstorm/host/target/confidentialstorm-topology.jar ch.usi.inf.confidentialstorm.WordCountTopology -- --local
+	@echo "Running Storm topology locally with debug logging (120 seconds)..."
+	@sudo storm local -c topology.debug=true --local-ttl 120 confidentialstorm/host/target/confidentialstorm-topology.jar ch.usi.inf.confidentialstorm.WordCountTopology -- --local
+	@echo "Finished local run."
+
+run-local-java:
+	@echo "Running Storm topology locally with bare java command..."
+	@$(RUNNER_SCRIPT)
 	@echo "Finished local run."
 
 seal-dataset:
