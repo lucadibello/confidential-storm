@@ -46,9 +46,9 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
 
         // send out each encrypted word
         for (EncryptedWord word : response.words()) {
-            collector.emit(input, new Values(word.routingKey(), word.payload()));
+            getCollector().emit(input, new Values(word.routingKey(), word.payload()));
         }
-        collector.ack(input);
+        getCollector().ack(input);
     }
 
     @Override

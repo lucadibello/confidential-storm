@@ -1,7 +1,6 @@
 package ch.usi.inf.confidentialstorm.host.bolts.base;
 
-import ch.usi.inf.confidentialstorm.host.util.EnclaveManager;
-
+import ch.usi.inf.confidentialstorm.host.base.ConfidentialComponentState;
 import org.apache.storm.task.OutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.base.BaseRichBolt;
@@ -17,34 +16,32 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
 
     private final Logger LOG = LoggerFactory.getLogger(getClass());
 
-    protected OutputCollector collector;
-    private String componentId;
-    private int taskId;
-    private EnclaveManager<S> enclaveManager;
+    protected final ConfidentialComponentState<OutputCollector, S> state;
 
     protected ConfidentialBolt(Class<S> serviceClass) {
         this(serviceClass, EnclaveType.TEE_SDK);
     }
 
     protected ConfidentialBolt(Class<S> serviceClass, EnclaveType enclaveType) {
-        // initialize enclave manager to streamline enclave and service loading
-        this.enclaveManager = new EnclaveManager<>(serviceClass, enclaveType);
+        this.state = new ConfidentialComponentState<>(serviceClass, enclaveType);
     }
 
     @Override
     public final void prepare(Map<String, Object> topoConf, TopologyContext context, OutputCollector collector) {
-        this.componentId = context.getThisComponentId();
-        this.taskId = context.getThisTaskId();
-        this.collector = collector;
+        state.setCollector(collector);
+        state.setComponentId(context.getThisComponentId());
+        state.setTaskId(context.getThisTaskId());
 
-        LOG.info("Preparing bolt {} (task {}) with enclave type {}", componentId, taskId);
+        LOG.info("Preparing bolt {} (task {}) with enclave type {}",
+                state.getComponentId(), state.getTaskId(), state.getEnclaveManager().getActiveEnclaveType());
         try {
             // initialize the enclave via EnclaveManager
-            this.enclaveManager.initializeEnclave(topoConf);
+            state.getEnclaveManager().initializeEnclave(topoConf);
             // execute hook for subclasses
             afterPrepare(topoConf, context);
         } catch (RuntimeException e) {
-            LOG.error("Failed to prepare bolt {} (task {})", componentId, taskId, e);
+            LOG.error("Failed to prepare bolt {} (task {})",
+                    state.getComponentId(), state.getTaskId(), e);
             throw e;
         }
     }
@@ -52,9 +49,10 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
     @Override
     public final void execute(Tuple input) {
         try {
-            processTuple(input, this.enclaveManager.getService());
+            processTuple(input, state.getEnclaveManager().getService());
         } catch (RuntimeException e) {
-            LOG.error("Bolt {} (task {}) failed processing tuple {}", componentId, taskId,
+            LOG.error("Bolt {} (task {}) failed processing tuple {}",
+                    state.getComponentId(), state.getTaskId(),
                     summarizeTuple(input), e);
             throw e;
         }
@@ -67,9 +65,10 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
 
         // destroy the enclave via EnclaveManager
         try {
-            this.enclaveManager.destroy();
+            state.destroy();
         } catch (EnclaveDestroyingException e) {
-            LOG.error("Failed to destroy enclave for bolt {} (task {})", componentId, taskId, e);
+            LOG.error("Failed to destroy enclave for bolt {} (task {})",
+                    state.getComponentId(), state.getTaskId(), e);
         }
 
         super.cleanup();
@@ -84,6 +83,10 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
     }
 
     protected abstract void processTuple(Tuple input, S service);
+
+    protected OutputCollector getCollector() {
+        return state.getCollector();
+    }
 
     private String summarizeTuple(Tuple input) {
         if (input == null) {

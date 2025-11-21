@@ -109,7 +109,7 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
         service.update(new HistogramUpdateRequest(word, newCount));
 
         // acknowledge the tuple
-        collector.ack(input);
+        getCollector().ack(input);
     }
 
     @Override

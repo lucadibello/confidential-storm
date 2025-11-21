@@ -43,8 +43,8 @@ public class WordCounterBolt extends ConfidentialBolt<WordCountService> {
         EncryptedValue count = resp.count();
 
         // emit the word and its current count
-        collector.emit(input, new Values(word, count));
-        collector.ack(input);
+        getCollector().emit(input, new Values(word, count));
+        getCollector().ack(input);
         LOG.info("[WordCounterBolt {}] Word: {} Current count: {}", boltId, word, count);
     }
 
