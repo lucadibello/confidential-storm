@@ -2,6 +2,7 @@ package ch.usi.inf.confidentialstorm;
 
 import org.apache.storm.Config;
 import org.apache.storm.LocalCluster;
+import org.apache.storm.generated.StormTopology;
 import org.apache.storm.topology.ConfigurableTopology;
 import org.apache.storm.topology.TopologyBuilder;
 import org.apache.storm.tuple.Fields;
@@ -81,7 +82,13 @@ public class WordCountTopology extends ConfigurableTopology {
             LOG.warn("Running in local mode");
             try (LocalCluster cluster = new LocalCluster()) {
                 // submit topology to local cluster
-                cluster.submitTopology("WordCountTopology", conf, builder.createTopology());
+                LOG.info("Building topology...");
+                StormTopology topo = builder.createTopology();
+                LOG.info("Topology built correctly! {}", topo.toString());
+
+                LOG.info("Submitting WordCountTopology to local cluster");
+                cluster.submitTopology("WordCountTopology", conf, topo);
+                LOG.info("WordCountTopology submitted to local cluster");
 
                 // set upper bound for local execution
                 // NOTE: this is needed to avoid local mode to exit immediately. Control the timeout using --local-ttl
@@ -94,7 +101,9 @@ public class WordCountTopology extends ConfigurableTopology {
                 }
 
                 // kill topology
+                LOG.info("Killing WordCountTopology");
                 cluster.killTopology("WordCountTopology");
+                LOG.info("WordCountTopology killed");
                 return 0;
             } catch (Exception e) {
                 LOG.error("Failed to run WordCountTopology in local mode", e);
