@@ -97,6 +97,7 @@ public class WordCountTopology extends ConfigurableTopology {
                 cluster.killTopology("WordCountTopology");
                 return 0;
             } catch (Exception e) {
+                LOG.error("Failed to run WordCountTopology in local mode", e);
                 return 1;
             }
         } else {
