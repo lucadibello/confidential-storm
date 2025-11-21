@@ -36,8 +36,9 @@ public abstract class ConfidentialSpout extends BaseRichSpout {
         LOG.info("Preparing spout {} (task {}) with enclave type {}",
                 state.getComponentId(), state.getTaskId(), state.getEnclaveManager().getActiveEnclaveType());
         try {
-            // initialize the enclave via EnclaveManager
+            LOG.debug("Attempting to initialize enclave for spout {} (task {})", state.getComponentId(), state.getTaskId());
             state.getEnclaveManager().initializeEnclave(topoConf);
+            LOG.debug("Successfully initialized enclave for spout {} (task {})", state.getComponentId(), state.getTaskId());
             // execute hook for subclasses
             afterOpen(topoConf, context, spoutOutputCollector);
         } catch (Throwable e) {
