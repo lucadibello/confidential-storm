@@ -16,18 +16,22 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConfidentialBolt.class);
 
-    protected final ConfidentialComponentState<OutputCollector, S> state;
+    private final Class<S> serviceClass;
+    private final EnclaveType enclaveType;
+    protected transient ConfidentialComponentState<OutputCollector, S> state;
 
     protected ConfidentialBolt(Class<S> serviceClass) {
         this(serviceClass, EnclaveType.TEE_SDK);
     }
 
     protected ConfidentialBolt(Class<S> serviceClass, EnclaveType enclaveType) {
-        this.state = new ConfidentialComponentState<>(serviceClass, enclaveType);
+        this.serviceClass = serviceClass;
+        this.enclaveType = enclaveType;
     }
 
     @Override
     public final void prepare(Map<String, Object> topoConf, TopologyContext context, OutputCollector collector) {
+        this.state = new ConfidentialComponentState<>(serviceClass, enclaveType);
         state.initialize();
         state.setCollector(collector);
         state.setComponentId(context.getThisComponentId());

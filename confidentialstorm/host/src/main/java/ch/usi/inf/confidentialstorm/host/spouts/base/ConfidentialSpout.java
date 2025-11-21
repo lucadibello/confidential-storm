@@ -16,18 +16,18 @@ public abstract class ConfidentialSpout extends BaseRichSpout {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConfidentialSpout.class);
 
-    protected final ConfidentialComponentState<SpoutOutputCollector, SpoutMapperService> state;
+    protected transient ConfidentialComponentState<SpoutOutputCollector, SpoutMapperService> state;
 
     public ConfidentialSpout() {
         LOG.info("Creating Confidential Spout");
-        this.state = new ConfidentialComponentState<>(
-                SpoutMapperService.class,
-                EnclaveType.TEE_SDK
-        );
     }
 
     @Override
     public void open(Map<String, Object> topoConf, TopologyContext context, SpoutOutputCollector spoutOutputCollector) {
+        this.state = new ConfidentialComponentState<>(
+                SpoutMapperService.class,
+                EnclaveType.TEE_SDK
+        );
         state.initialize();
         LOG.info("Opening Confidential Spout");
         state.setComponentId(context.getThisComponentId());
