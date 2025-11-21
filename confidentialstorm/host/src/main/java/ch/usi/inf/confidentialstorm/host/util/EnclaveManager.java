@@ -13,10 +13,11 @@ import java.util.Objects;
 public class EnclaveManager<S> {
     private final Class<S> serviceClass;
     private final EnclaveType defaultEnclaveType;
-    private final Logger LOG = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(EnclaveManager.class);
 
     private Enclave enclave;
-    // This is done to allow developers to specify the enclave type at runtime via a system property
+    // This is done to allow developers to specify the enclave type at runtime via a
+    // system property
     private EnclaveType activeEnclaveType;
     private S service;
 
@@ -30,7 +31,7 @@ public class EnclaveManager<S> {
         this.defaultEnclaveType = enclaveType;
     }
 
-    public void initializeEnclave(Map<String,Object> topoConf) {
+    public void initializeEnclave(Map<String, Object> topoConf) {
         // create the enclave + initialize the service
         LOG.info("Preparing enclave for service {}...", serviceClass.getName());
         this.activeEnclaveType = Enclaves.resolveEnclaveType(topoConf, this.defaultEnclaveType);
@@ -39,9 +40,11 @@ public class EnclaveManager<S> {
         try {
             this.enclave = Enclaves.createEnclave(activeEnclaveType);
             this.service = Enclaves.loadService(this.enclave, this.serviceClass);
-            LOG.info("Confidential service {} initialized in enclave of type {}", serviceClass.getName(), activeEnclaveType);
+            LOG.info("Confidential service {} initialized in enclave of type {}", serviceClass.getName(),
+                    activeEnclaveType);
         } catch (Throwable e) {
-            LOG.error("Failed to initialize confidential service {} in enclave of type {}", serviceClass.getName(), activeEnclaveType, e);
+            LOG.error("Failed to initialize confidential service {} in enclave of type {}", serviceClass.getName(),
+                    activeEnclaveType, e);
             throw new RuntimeException(e); // bubble up
         }
     }
@@ -66,4 +69,3 @@ public class EnclaveManager<S> {
         return activeEnclaveType != null ? activeEnclaveType : defaultEnclaveType;
     }
 }
-

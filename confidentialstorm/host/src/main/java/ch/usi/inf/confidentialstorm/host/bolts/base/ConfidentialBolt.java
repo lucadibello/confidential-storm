@@ -14,7 +14,7 @@ import java.util.Map;
 
 public abstract class ConfidentialBolt<S> extends BaseRichBolt {
 
-    private final Logger LOG = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(ConfidentialBolt.class);
 
     protected final ConfidentialComponentState<OutputCollector, S> state;
 
