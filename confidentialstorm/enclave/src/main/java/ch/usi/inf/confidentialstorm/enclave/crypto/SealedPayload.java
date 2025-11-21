@@ -1,9 +1,16 @@
 package ch.usi.inf.confidentialstorm.enclave.crypto;
+
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.crypto.model.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.common.crypto.model.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.common.crypto.util.AADUtils;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
@@ -16,6 +23,7 @@ import java.security.SecureRandom;
 import java.util.*;
 
 public final class SealedPayload {
+    private static final Logger LOG = LoggerFactory.getLogger(SealedPayload.class);
     // FIXME: This is just for development.
     private static final String STREAM_KEY_HEX =
             "a46bf317953bf1a8f71439f74f30cd889ec0aa318f8b6431789fb10d1053d932";
@@ -24,6 +32,10 @@ public final class SealedPayload {
     private static final SecretKey MAC_KEY = new SecretKeySpec(STREAM_KEY, "HmacSHA256");
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final byte[] EMPTY_AAD = new byte[0];
+
+    private static final ObjectMapper AAD_MAPPER = JsonMapper.builder()
+            .configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true)
+            .build();
 
     private SealedPayload() {
     }
@@ -79,7 +91,7 @@ public final class SealedPayload {
         DecodedAAD aad = DecodedAAD.fromBytes(sealed.associatedData());
 
         // ensure that the source and destination match
-        System.out.println("Decoded AAD: " + aad);
+        LOG.debug("Decoded AAD: {}", aad);
 
         // source can be null if not expected
         if (expectedSourceComponentName != null)
@@ -136,39 +148,10 @@ public final class SealedPayload {
         if (sorted.isEmpty()) {
             return EMPTY_AAD;
         }
-        StringBuilder builder = new StringBuilder();
-        builder.append('{');
-        boolean first = true;
-        for (Map.Entry<String, Object> entry : sorted.entrySet()) {
-            if (!first) {
-                builder.append(',');
-            }
-            first = false;
-            builder.append('"').append(escape(entry.getKey())).append('"').append(':');
-            builder.append(renderValue(entry.getValue()));
+        try {
+            return AAD_MAPPER.writeValueAsBytes(sorted);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Unable to encode AAD", e);
         }
-        builder.append('}');
-        return builder.toString().getBytes(StandardCharsets.UTF_8);
-    }
-
-    private static String renderValue(Object value) {
-        if (value == null) {
-            return "null";
-        }
-        if (value instanceof Number || value instanceof Boolean) {
-            return value.toString();
-        }
-        return "\"" + escape(value.toString()) + "\"";
-    }
-
-    private static String escape(String value) {
-        StringBuilder escaped = new StringBuilder(value.length());
-        for (char c : value.toCharArray()) {
-            if (c == '\\' || c == '"') {
-                escaped.append('\\');
-            }
-            escaped.append(c);
-        }
-        return escaped.toString();
     }
 }
