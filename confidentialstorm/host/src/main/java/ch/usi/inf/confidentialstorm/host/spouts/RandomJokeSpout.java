@@ -52,8 +52,10 @@ public class RandomJokeSpout extends ConfidentialSpout {
     // generate the next random joke
     int idx = rand.nextInt(encryptedJokes.size());
     EncryptedValue currentJoke = encryptedJokes.get(idx);
-    LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), currentJoke);
-    this.state.getCollector().emit(new Values(currentJoke));
+    EncryptedValue routedJoke = getMapperService().setupRoute(currentJoke);
+
+    LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJoke);
+    getCollector().emit(new Values(routedJoke));
 
     // sleep for a while to avoid starving the topology
     try {

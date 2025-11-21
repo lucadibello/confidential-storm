@@ -25,7 +25,7 @@ public abstract class ConfidentialSpout extends BaseRichSpout  {
     @Override
     public void open(Map<String, Object> topoConf, TopologyContext context, SpoutOutputCollector spoutOutputCollector) {
         state.setComponentId(context.getThisComponentId());
-        state.setTaskId(Integer.parseInt(context.getThisComponentId()));
+        state.setTaskId(context.getThisTaskId());
         state.setCollector(spoutOutputCollector);
 
         LOG.info("Preparing bolt {} (task {}) with enclave type {}",
@@ -66,6 +66,14 @@ public abstract class ConfidentialSpout extends BaseRichSpout  {
 
     protected void beforeClose() {
         // hook for subclass
+    }
+
+    protected SpoutMapperService getMapperService() {
+        return state.getEnclaveManager().getService();
+    }
+
+    protected SpoutOutputCollector getCollector() {
+        return state.getCollector();
     }
 
     @Override
