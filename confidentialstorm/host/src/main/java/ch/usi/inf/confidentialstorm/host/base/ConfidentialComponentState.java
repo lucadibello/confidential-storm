@@ -8,10 +8,18 @@ public final class ConfidentialComponentState<C, S> {
     private C collector;
     private String componentId;
     private int taskId;
-    private final EnclaveManager<S> enclaveManager;
+    private EnclaveManager<S> enclaveManager;
+    private final Class<S> serviceClass;
+    private final EnclaveType enclaveType;
+
 
     public ConfidentialComponentState(Class<S> serviceClass, EnclaveType enclaveType)  {
-        this.enclaveManager = new EnclaveManager<>(serviceClass, enclaveType);
+        this.serviceClass = serviceClass;
+        this.enclaveType = enclaveType;
+    }
+
+    public void initialize() {
+        this.enclaveManager = new EnclaveManager<>(this.serviceClass, this.enclaveType);
     }
 
     public C getCollector() {

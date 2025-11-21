@@ -28,6 +28,7 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
 
     @Override
     public final void prepare(Map<String, Object> topoConf, TopologyContext context, OutputCollector collector) {
+        state.initialize();
         state.setCollector(collector);
         state.setComponentId(context.getThisComponentId());
         state.setTaskId(context.getThisTaskId());

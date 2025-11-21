@@ -28,6 +28,7 @@ public abstract class ConfidentialSpout extends BaseRichSpout {
 
     @Override
     public void open(Map<String, Object> topoConf, TopologyContext context, SpoutOutputCollector spoutOutputCollector) {
+        state.initialize();
         LOG.info("Opening Confidential Spout");
         state.setComponentId(context.getThisComponentId());
         state.setTaskId(context.getThisTaskId());
