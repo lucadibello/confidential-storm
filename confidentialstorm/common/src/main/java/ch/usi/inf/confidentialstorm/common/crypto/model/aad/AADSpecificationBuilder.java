@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-public class AADSpecificationBuilder {
+public final class AADSpecificationBuilder {
     // NOTE: LinkedHashMap is used to preserve insertion order (necessary to generate consistent AAD byte representation)
     private final Map<String, Object> attributes = new LinkedHashMap<>();
     private String sourceComponent;
