@@ -1,5 +1,6 @@
 package ch.usi.inf.confidentialstorm.common.crypto.model.aad;
 
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.Collections;
@@ -40,6 +41,11 @@ public final class AADSpecificationBuilder {
         return sourceComponent(componentType.getName());
     }
 
+    public AADSpecificationBuilder sourceComponent(TopologySpecification.Component component) {
+        Objects.requireNonNull(component, "Component cannot be null");
+        return sourceComponent(component.toString());
+    }
+
     public AADSpecificationBuilder destinationComponent(@NonNull String componentName) {
         this.destinationComponent = Objects.requireNonNull(componentName, "Component name cannot be null");
         return this;
@@ -48,6 +54,11 @@ public final class AADSpecificationBuilder {
     public AADSpecificationBuilder destinationComponent(@NonNull Class<?> componentType) {
         Objects.requireNonNull(componentType, "Component type cannot be null");
         return destinationComponent(componentType.getName());
+    }
+
+    public AADSpecificationBuilder destinationComponent(TopologySpecification.Component component) {
+        Objects.requireNonNull(component, "Component cannot be null");
+        return destinationComponent(component.toString());
     }
 
     public AADSpecification build() {

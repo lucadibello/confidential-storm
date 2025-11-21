@@ -1,9 +1,9 @@
 package ch.usi.inf.confidentialstorm.enclave.service.bolts.histogram;
 
 import ch.usi.inf.confidentialstorm.common.api.HistogramService;
-import ch.usi.inf.confidentialstorm.common.api.WordCountService;
 import ch.usi.inf.confidentialstorm.common.api.model.HistogramUpdateRequest;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 
 import java.util.Collection;
@@ -18,13 +18,13 @@ public abstract class HistogramServiceVerifier extends ConfidentialBoltService<H
     public abstract void updateImpl(HistogramUpdateRequest update);
 
     @Override
-    public Class<?> expectedSourceComponentName() {
-        return WordCountService.class;
+    public TopologySpecification.Component expectedSourceComponent() {
+        return TopologySpecification.Component.WORD_COUNT;
     }
 
     @Override
-    public Class<?> expectedDestinationComponentName() {
-        return HistogramService.class;
+    public TopologySpecification.Component expectedDestinationComponent() {
+        return TopologySpecification.Component.HISTOGRAM_GLOBAL;
     }
 
     @Override

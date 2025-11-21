@@ -52,7 +52,7 @@ public class RandomJokeSpout extends ConfidentialSpout {
     // generate the next random joke
     int idx = rand.nextInt(encryptedJokes.size());
     EncryptedValue currentJoke = encryptedJokes.get(idx);
-    EncryptedValue routedJoke = getMapperService().setupRoute(currentJoke);
+    EncryptedValue routedJoke = getMapperService().setupRoute(getComponentId(), currentJoke);
 
     LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJoke);
     getCollector().emit(new Values(routedJoke));

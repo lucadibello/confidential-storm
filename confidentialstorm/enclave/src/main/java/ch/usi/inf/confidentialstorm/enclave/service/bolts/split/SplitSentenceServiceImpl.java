@@ -1,12 +1,12 @@
 package ch.usi.inf.confidentialstorm.enclave.service.bolts.split;
 
 import ch.usi.inf.confidentialstorm.common.api.SplitSentenceService;
-import ch.usi.inf.confidentialstorm.common.api.WordCountService;
 import ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceRequest;
 import ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceResponse;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord;
 import ch.usi.inf.confidentialstorm.common.crypto.model.aad.AADSpecification;
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
 import com.google.auto.service.AutoService;
 
@@ -43,8 +43,8 @@ public class SplitSentenceServiceImpl extends SplitSentenceVerifier {
             // Create new AAD specification (custom for each word)
             AADSpecification aad = AADSpecification.builder()
                     // NOTE: specify source and destination components for verification purposes
-                    .sourceComponent(SplitSentenceService.class.getName())
-                    .destinationComponent(WordCountService.class.getName())
+                    .sourceComponent(TopologySpecification.Component.SENTENCE_SPLIT)
+                    .destinationComponent(TopologySpecification.Component.WORD_COUNT)
                     .build();
 
             // encrypt the word with its AAD

@@ -1,11 +1,11 @@
 package ch.usi.inf.confidentialstorm.enclave.service.bolts.wordcount;
 
-import ch.usi.inf.confidentialstorm.common.api.HistogramService;
 import ch.usi.inf.confidentialstorm.common.api.WordCountService;
 import ch.usi.inf.confidentialstorm.common.api.model.WordCountRequest;
 import ch.usi.inf.confidentialstorm.common.api.model.WordCountResponse;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.crypto.model.aad.AADSpecification;
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
 import com.google.auto.service.AutoService;
 
@@ -31,8 +31,8 @@ public class WordCountServiceImpl extends WordCountVerifier {
 
         // Create AAD for both sealed values
         AADSpecification aad = AADSpecification.builder()
-                .sourceComponent(WordCountService.class.getName())
-                .destinationComponent(HistogramService.class.getName())
+                .sourceComponent(TopologySpecification.Component.WORD_COUNT)
+                .destinationComponent(TopologySpecification.Component.HISTOGRAM_GLOBAL)
                 .build();
 
         // Seal the word and the new count

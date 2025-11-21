@@ -19,22 +19,24 @@ public abstract class ConfidentialSpout extends BaseRichSpout  {
     protected final ConfidentialComponentState<SpoutOutputCollector, SpoutMapperService> state;
 
     public ConfidentialSpout() {
+        LOG.info("Creating Confidential Spout");
         this.state = new ConfidentialComponentState<>(SpoutMapperService.class, EnclaveType.TEE_SDK);
     }
 
     @Override
     public void open(Map<String, Object> topoConf, TopologyContext context, SpoutOutputCollector spoutOutputCollector) {
+        LOG.info("Opening Confidential Spout");
         state.setComponentId(context.getThisComponentId());
         state.setTaskId(context.getThisTaskId());
         state.setCollector(spoutOutputCollector);
 
-        LOG.info("Preparing bolt {} (task {}) with enclave type {}",
+        LOG.info("Preparing spout {} (task {}) with enclave type {}",
                 state.getComponentId(), state.getTaskId(), state.getEnclaveManager().getActiveEnclaveType());
         try {
             // initialize the enclave via EnclaveManager
             state.getEnclaveManager().initializeEnclave(topoConf);
             // execute hook for subclasses
-            afterOpen(topoConf, context); // hook for subclass
+            afterOpen(topoConf, context, spoutOutputCollector);
         } catch (RuntimeException e) {
             LOG.error("Failed to prepare spout {} (task {})",
                     state.getComponentId(), state.getTaskId(), e);
@@ -42,7 +44,9 @@ public abstract class ConfidentialSpout extends BaseRichSpout  {
         }
     }
 
-    protected abstract void afterOpen(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector);
+    protected void afterOpen(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector) {
+        // hook for subclass
+    }
 
     @Override
     public void close() {
@@ -60,10 +64,6 @@ public abstract class ConfidentialSpout extends BaseRichSpout  {
         super.close();
     }
 
-    protected void afterOpen(Map<String, Object> topoConf, TopologyContext context) {
-        // hook for subclass
-    }
-
     protected void beforeClose() {
         // hook for subclass
     }
@@ -74,6 +74,10 @@ public abstract class ConfidentialSpout extends BaseRichSpout  {
 
     protected SpoutOutputCollector getCollector() {
         return state.getCollector();
+    }
+
+    protected String getComponentId() {
+        return state.getComponentId();
     }
 
     @Override
