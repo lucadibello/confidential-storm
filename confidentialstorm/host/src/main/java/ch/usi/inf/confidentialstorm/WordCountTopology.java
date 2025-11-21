@@ -13,7 +13,6 @@ import ch.usi.inf.confidentialstorm.host.bolts.HistogramBolt;
 import ch.usi.inf.confidentialstorm.host.bolts.SplitSentenceBolt;
 import ch.usi.inf.confidentialstorm.host.bolts.WordCounterBolt;
 import ch.usi.inf.confidentialstorm.host.spouts.RandomJokeSpout;
-import ch.usi.inf.confidentialstorm.host.spouts.NormalRandomJokeSpout;
 
 public class WordCountTopology extends ConfigurableTopology {
     private static final String PROD_SYSTEM_PROPERTY = "storm.prod";
@@ -33,7 +32,7 @@ public class WordCountTopology extends ConfigurableTopology {
         // WordSpout: stream of phrases from a book
         builder.setSpout(
                 TopologySpecification.Component.RANDOM_JOKE_SPOUT.toString(),
-                new NormalRandomJokeSpout(),
+                new RandomJokeSpout(),
                 1
         );
 
@@ -73,9 +72,6 @@ public class WordCountTopology extends ConfigurableTopology {
         if (!isProd) {
             conf.put("confidentialstorm.enclave.type", "MOCK_IN_SVM");
             conf.setDebug(true);
-
-            // set log level to DEBUG for local testing using slf4j
-            System.setProperty(org.slf4j.impl.SimpleLogger.DEFAULT_LOG_LEVEL_KEY, "Info");
         }
         if (!isProd) {
             LOG.warn("Running in local mode");
