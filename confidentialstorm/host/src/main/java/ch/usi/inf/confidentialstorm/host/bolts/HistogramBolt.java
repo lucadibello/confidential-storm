@@ -24,7 +24,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class HistogramBolt extends ConfidentialBolt<HistogramService> {
-    private final Logger LOG = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(HistogramBolt.class);
     private final String OUTPUT_FILE = "data/histogram.txt";
     private ExecutorService io;
 

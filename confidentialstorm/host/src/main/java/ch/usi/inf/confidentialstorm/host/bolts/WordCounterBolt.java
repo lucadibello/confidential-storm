@@ -17,7 +17,7 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import java.util.Map;
 
 public class WordCounterBolt extends ConfidentialBolt<WordCountService> {
-    private final Logger LOG = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(WordCounterBolt.class);
     private int boltId;
 
     public WordCounterBolt() {

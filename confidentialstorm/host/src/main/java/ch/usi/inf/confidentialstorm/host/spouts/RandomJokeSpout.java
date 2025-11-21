@@ -21,7 +21,7 @@ public class RandomJokeSpout extends ConfidentialSpout {
   private static final long EMIT_DELAY_MS = 250;
   private List<EncryptedValue> encryptedJokes;
   private Random rand;
-  private final Logger LOG = LoggerFactory.getLogger(getClass());
+  private static final Logger LOG = LoggerFactory.getLogger(RandomJokeSpout.class);
 
   @Override
   protected void afterOpen(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector) {

@@ -19,7 +19,7 @@ import java.util.Objects;
 
 public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
     private int boltId;
-    private final Logger LOG = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(SplitSentenceBolt.class);
 
     public SplitSentenceBolt() {
         super(SplitSentenceService.class);

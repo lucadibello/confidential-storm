@@ -39,10 +39,10 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
             state.getEnclaveManager().initializeEnclave(topoConf);
             // execute hook for subclasses
             afterPrepare(topoConf, context);
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
             LOG.error("Failed to prepare bolt {} (task {})",
                     state.getComponentId(), state.getTaskId(), e);
-            throw e;
+            throw new RuntimeException(e);
         }
     }
 
@@ -50,11 +50,11 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
     public final void execute(Tuple input) {
         try {
             processTuple(input, state.getEnclaveManager().getService());
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
             LOG.error("Bolt {} (task {}) failed processing tuple {}",
                     state.getComponentId(), state.getTaskId(),
                     summarizeTuple(input), e);
-            throw e;
+            throw new RuntimeException(e);
         }
     }
 
