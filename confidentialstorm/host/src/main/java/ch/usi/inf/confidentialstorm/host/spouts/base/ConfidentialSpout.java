@@ -37,10 +37,10 @@ public abstract class ConfidentialSpout extends BaseRichSpout  {
             state.getEnclaveManager().initializeEnclave(topoConf);
             // execute hook for subclasses
             afterOpen(topoConf, context, spoutOutputCollector);
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
             LOG.error("Failed to prepare spout {} (task {})",
                     state.getComponentId(), state.getTaskId(), e);
-            throw e;
+            throw new RuntimeException(e);
         }
     }
 
@@ -85,10 +85,10 @@ public abstract class ConfidentialSpout extends BaseRichSpout  {
         try {
             // call hook for subclass
             executeNextTuple();
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
             LOG.error("Error in nextTuple of spout {} (task {})",
                     state.getComponentId(), state.getTaskId(), e);
-            throw e;
+            throw new RuntimeException(e);
         }
     }
 
