@@ -31,7 +31,6 @@ public class Enclaves {
         }
     }
 
-
     public static <S> S loadService(Enclave enclave, Class<S> serviceClass) {
         LOG.info("Loading service {} from enclave", serviceClass.getName());
         try {
@@ -48,7 +47,6 @@ public class Enclaves {
         }
     }
 
-
     public static EnclaveType resolveEnclaveType(Map<String, Object> topoConf, EnclaveType defaultEnclaveType) {
         String override = extractOverrideFromTopologyConf(topoConf);
         if (override == null) {
@@ -61,7 +59,6 @@ public class Enclaves {
             return defaultEnclaveType;
         }
     }
-
 
     private static String extractOverrideFromTopologyConf(Map<String, Object> topoConf) {
         Object confValue = topoConf != null ? topoConf.get(ENCLAVE_TYPE_CONF_KEY) : null;

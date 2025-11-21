@@ -24,11 +24,6 @@ public class RandomJokeSpout extends ConfidentialSpout {
   private final Logger LOG = LoggerFactory.getLogger(getClass());
 
   @Override
-  public Map<String, Object> getComponentConfiguration() {
-    return Map.of();
-  }
-
-  @Override
   protected void afterOpen(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector) {
     // we need to load the jokes in memory
     JokeReader jokeReader = new JokeReader();
@@ -69,14 +64,4 @@ public class RandomJokeSpout extends ConfidentialSpout {
   public void declareOutputFields(OutputFieldsDeclarer declarer) {
     declarer.declare(new Fields("body"));
   }
-
-  @Override
-  public void ack(Object msgId) {
-  }
-
-  @Override
-  public void fail(Object msgId) {
-    // Implementation here
-  }
-
 }

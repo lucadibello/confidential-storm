@@ -70,7 +70,11 @@ public class WordCountTopology extends ConfigurableTopology {
         // run the topology (locally if not production, otherwise submit to nimbus)
         conf.setDebug(false);
         if (!isProd) {
+            // if not in production
+
+            // Mock enclaves - don't use in production
             conf.put("confidentialstorm.enclave.type", "MOCK_IN_SVM");
+            // Enable debug for local runs
             conf.setDebug(true);
         }
         if (!isProd) {

@@ -32,10 +32,10 @@ public class EnclaveManager<S> {
 
     public void initializeEnclave(Map<String,Object> topoConf) {
         // create the enclave + initialize the service
+        LOG.info("Preparing enclave for service {}...", serviceClass.getName());
         this.activeEnclaveType = Enclaves.resolveEnclaveType(topoConf, this.defaultEnclaveType);
         Objects.requireNonNull(this.activeEnclaveType, "Active enclave type cannot be null");
 
-        LOG.info("Preparing enclave for service {} of type {}", serviceClass.getName(), activeEnclaveType);
         try {
             this.enclave = Enclaves.createEnclave(activeEnclaveType);
             this.service = Enclaves.loadService(this.enclave, this.serviceClass);

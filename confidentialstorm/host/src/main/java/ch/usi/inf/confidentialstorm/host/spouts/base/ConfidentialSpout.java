@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
-public abstract class ConfidentialSpout extends BaseRichSpout  {
+public abstract class ConfidentialSpout extends BaseRichSpout {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConfidentialSpout.class);
 
@@ -20,7 +20,10 @@ public abstract class ConfidentialSpout extends BaseRichSpout  {
 
     public ConfidentialSpout() {
         LOG.info("Creating Confidential Spout");
-        this.state = new ConfidentialComponentState<>(SpoutMapperService.class, EnclaveType.TEE_SDK);
+        this.state = new ConfidentialComponentState<>(
+                SpoutMapperService.class,
+                EnclaveType.TEE_SDK
+        );
     }
 
     @Override
@@ -60,8 +63,6 @@ public abstract class ConfidentialSpout extends BaseRichSpout  {
             LOG.error("Failed to destroy enclave for bolt {} (task {})",
                     this.state.getComponentId(), this.state.getTaskId(), e);
         }
-
-        super.close();
     }
 
     protected void beforeClose() {
@@ -90,6 +91,11 @@ public abstract class ConfidentialSpout extends BaseRichSpout  {
                     state.getComponentId(), state.getTaskId(), e);
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public Map<String, Object> getComponentConfiguration() {
+        return Map.of();
     }
 
     protected abstract void executeNextTuple();
