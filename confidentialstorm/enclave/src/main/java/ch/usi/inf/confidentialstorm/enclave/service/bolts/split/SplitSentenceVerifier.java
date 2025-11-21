@@ -1,10 +1,10 @@
 package ch.usi.inf.confidentialstorm.enclave.service.bolts.split;
 
 import ch.usi.inf.confidentialstorm.common.api.SplitSentenceService;
-import ch.usi.inf.confidentialstorm.common.api.WordCountService;
 import ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceRequest;
 import ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceResponse;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 
 import java.util.Collection;
@@ -24,14 +24,13 @@ public abstract class SplitSentenceVerifier extends ConfidentialBoltService<Spli
     }
 
     @Override
-    public Class<?> expectedSourceComponentName() {
-        // we don't have a specific source component to verify
-        return null;
+    public TopologySpecification.Component expectedSourceComponent() {
+        return TopologySpecification.Component.RANDOM_JOKE_SPOUT;
     }
 
     @Override
-    public Class<?> expectedDestinationComponentName() {
-        return WordCountService.class;
+    public TopologySpecification.Component expectedDestinationComponent() {
+        return TopologySpecification.Component.SENTENCE_SPLIT;
     }
 
     @Override

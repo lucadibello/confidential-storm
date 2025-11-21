@@ -3,6 +3,7 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.crypto.model.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.common.crypto.model.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.common.crypto.util.AADUtils;
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
@@ -96,6 +97,12 @@ public final class SealedPayload {
     public static void verifyRoute(EncryptedValue sealed, Class<?> expectedSourceComponent, String expectedDestinationComponentName) {
         verifyRoute(sealed, expectedSourceComponent.getName(), expectedDestinationComponentName);
     }
+    public static void verifyRoute(EncryptedValue sealed,
+                                   TopologySpecification.Component expectedSourceComponent,
+                                   TopologySpecification.Component expectedDestinationComponent) {
+        verifyRoute(sealed, expectedSourceComponent.toString(), expectedDestinationComponent.toString());
+    }
+
 
     private static Cipher initCipher(int mode, byte[] nonce, byte[] aad) {
         try {

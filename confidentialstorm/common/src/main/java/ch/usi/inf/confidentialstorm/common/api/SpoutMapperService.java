@@ -5,5 +5,5 @@ import org.apache.teaclave.javasdk.common.annotations.EnclaveService;
 
 @EnclaveService
 public interface SpoutMapperService {
-    EncryptedValue setupRoute(EncryptedValue entry);
+    EncryptedValue setupRoute(String componentId, EncryptedValue entry);
 }

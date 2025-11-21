@@ -8,10 +8,12 @@ import org.apache.storm.tuple.Fields;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.host.bolts.HistogramBolt;
 import ch.usi.inf.confidentialstorm.host.bolts.SplitSentenceBolt;
 import ch.usi.inf.confidentialstorm.host.bolts.WordCounterBolt;
 import ch.usi.inf.confidentialstorm.host.spouts.RandomJokeSpout;
+import ch.usi.inf.confidentialstorm.host.spouts.NormalRandomJokeSpout;
 
 public class WordCountTopology extends ConfigurableTopology {
     private static final String PROD_SYSTEM_PROPERTY = "storm.prod";
@@ -29,13 +31,35 @@ public class WordCountTopology extends ConfigurableTopology {
         LOG.info("Starting WordCountTopology in {} mode", isProd ? "PROD" : "LOCAL");
 
         // WordSpout: stream of phrases from a book
-        builder.setSpout("random-joke-spout", new RandomJokeSpout(), 1);
+        builder.setSpout(
+                TopologySpecification.Component.RANDOM_JOKE_SPOUT.toString(),
+                new NormalRandomJokeSpout(),
+                1
+        );
+
         // SplitSentenceBolt: splits each sentence into a stream of words
-        builder.setBolt("sentence-split", new SplitSentenceBolt(), 1).shuffleGrouping("random-joke-spout");
+        builder.setBolt(
+                TopologySpecification.Component.SENTENCE_SPLIT.toString(),
+                new SplitSentenceBolt(),
+                1
+        ).shuffleGrouping(TopologySpecification.Component.RANDOM_JOKE_SPOUT.toString());
+
         // WordCountBolt: counts the words that are emitted
-        builder.setBolt("word-count", new WordCounterBolt(), 1).fieldsGrouping("sentence-split", new Fields("wordKey"));
+        builder.setBolt(
+                TopologySpecification.Component.WORD_COUNT.toString(),
+                new WordCounterBolt(),
+                1
+        ).fieldsGrouping(
+                TopologySpecification.Component.SENTENCE_SPLIT.toString(),
+                new Fields("wordKey")
+        );
+
         // HistogramBolt: merges partial counters into a single (global) histogram
-        builder.setBolt("histogram-global", new HistogramBolt(), 1).globalGrouping("word-count");
+        builder.setBolt(
+                TopologySpecification.Component.HISTOGRAM_GLOBAL.toString(),
+                new HistogramBolt(),
+                1
+        ).globalGrouping(TopologySpecification.Component.WORD_COUNT.toString());
 
         // configure spout wait strategy to avoid starving other bolts
         // NOTE: learn more here https://storm.apache.org/releases/current/Performance.html
@@ -48,7 +72,10 @@ public class WordCountTopology extends ConfigurableTopology {
         conf.setDebug(false);
         if (!isProd) {
             conf.put("confidentialstorm.enclave.type", "MOCK_IN_SVM");
-            // conf.put("confidentialstorm.enclave.type", "TEE_SDK");
+            conf.setDebug(true);
+
+            // set log level to DEBUG for local testing using slf4j
+            System.setProperty(org.slf4j.impl.SimpleLogger.DEFAULT_LOG_LEVEL_KEY, "Info");
         }
         if (!isProd) {
             LOG.warn("Running in local mode");
@@ -67,7 +94,7 @@ public class WordCountTopology extends ConfigurableTopology {
                 }
 
                 // kill topology
-                cluster.killTopology("WordCountTopology");
+                // cluster.killTopology("WordCountTopology");
                 return 0;
             } catch (Exception e) {
                 return 1;
