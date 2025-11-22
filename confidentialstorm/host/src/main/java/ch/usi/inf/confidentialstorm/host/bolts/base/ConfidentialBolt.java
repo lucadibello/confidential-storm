@@ -1,6 +1,7 @@
 package ch.usi.inf.confidentialstorm.host.bolts.base;
 
 import ch.usi.inf.confidentialstorm.host.base.ConfidentialComponentState;
+import ch.usi.inf.confidentialstorm.host.util.EnclaveErrorUtils;
 import org.apache.storm.task.OutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.base.BaseRichBolt;
@@ -57,9 +58,16 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
         try {
             processTuple(input, state.getEnclaveManager().getService());
         } catch (Throwable e) {
-            LOG.error("Bolt {} (task {}) failed processing tuple {}",
+            Throwable root = EnclaveErrorUtils.unwrap(e);
+            LOG.error("Bolt {} (task {}) failed processing tuple {} due to enclave error {}",
                     state.getComponentId(), state.getTaskId(),
-                    summarizeTuple(input), e);
+                    summarizeTuple(input), EnclaveErrorUtils.format(root), root);
+            try {
+                state.getCollector().reportError(root);
+                state.getCollector().fail(input);
+            } catch (Throwable reportingError) {
+                LOG.warn("Failed to report error for tuple {}", summarizeTuple(input), reportingError);
+            }
             throw new RuntimeException(e);
         }
     }

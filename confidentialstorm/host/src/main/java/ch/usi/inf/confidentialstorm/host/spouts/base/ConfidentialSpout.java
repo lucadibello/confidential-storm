@@ -2,6 +2,7 @@ package ch.usi.inf.confidentialstorm.host.spouts.base;
 
 import ch.usi.inf.confidentialstorm.common.api.SpoutMapperService;
 import ch.usi.inf.confidentialstorm.host.base.ConfidentialComponentState;
+import ch.usi.inf.confidentialstorm.host.util.EnclaveErrorUtils;
 import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.base.BaseRichSpout;
@@ -89,8 +90,16 @@ public abstract class ConfidentialSpout extends BaseRichSpout {
             // call hook for subclass
             executeNextTuple();
         } catch (Throwable e) {
+            Throwable root = EnclaveErrorUtils.unwrap(e);
             LOG.error("Error in nextTuple of spout {} (task {})",
                     state.getComponentId(), state.getTaskId(), e);
+            try {
+                state.getCollector().reportError(root);
+            } catch (Throwable reportingError) {
+                LOG.error("Failed to report error from spout {} (task {})",
+                        state.getComponentId(), state.getTaskId(), reportingError);
+            }
+
             throw new RuntimeException(e);
         }
     }
