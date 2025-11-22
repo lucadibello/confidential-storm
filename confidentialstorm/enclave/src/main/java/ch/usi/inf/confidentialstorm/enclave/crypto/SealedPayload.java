@@ -5,6 +5,10 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.common.crypto.model.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.common.crypto.util.AADUtils;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -78,7 +82,7 @@ public final class SealedPayload {
             byte[] digest = mac.doFinal(value.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest);
         } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("Unable to derive routing key", e);
+            throw new RoutingKeyDerivationException("Unable to derive routing key", e);
         }
     }
 
@@ -127,7 +131,7 @@ public final class SealedPayload {
             }
             return cipher;
         } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("Unable to initialize cipher", e);
+            throw new CipherInitializationException("Unable to initialize cipher", e);
         }
     }
 
@@ -135,7 +139,7 @@ public final class SealedPayload {
         try {
             return cipher.doFinal(input);
         } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("Unable to process sealed payload", e);
+            throw new SealedPayloadProcessingException("Unable to process sealed payload", e);
         }
     }
 
@@ -154,7 +158,7 @@ public final class SealedPayload {
         try {
             return AAD_MAPPER.writeValueAsBytes(sorted);
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Unable to encode AAD", e);
+            throw new AADEncodingException("Unable to encode AAD", e);
         }
     }
 }

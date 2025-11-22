@@ -9,6 +9,20 @@
   { "name": "ch.usi.inf.confidentialstorm.common.api.model.HistogramSnapshotResponse" },
   { "name": "ch.usi.inf.confidentialstorm.common.api.model.HistogramUpdateRequest" },
 
+  { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveCryptoException"},
+  { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException"},
+  { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException"},
+  { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException"},
+  { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException"},
+
+  { "name":  "java.security.GeneralSecurityException"},
+  { "name":  "javax.crypto.BadPaddingException"},
+  { "name":  "javax.crypto.IllegalBlockSizeException"},
+  { "name":  "javax.crypto.NoSuchPaddingException"},
+  { "name":  "java.security.NoSuchAlgorithmException"},
+  { "name":  "java.security.InvalidKeyException"},
+  { "name":  "java.security.InvalidAlgorithmParameterException"},
+
   { "name": "java.util.ArrayList" },
   { "name": "java.util.LinkedList" },
   { "name": "java.util.HashMap" },
