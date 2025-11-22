@@ -4,7 +4,9 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
@@ -16,16 +18,18 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.TreeMap;
 
 public final class JokeReader {
 
     private final ObjectMapper mapper;
+    private final ObjectMapper aadMapper;
 
     public JokeReader() {
         this.mapper = new ObjectMapper()
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        this.aadMapper = JsonMapper.builder()
+                .configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true)
+                .build();
     }
 
     public List<EncryptedValue> readAll(String jsonResourceName) throws IOException {
@@ -67,51 +71,11 @@ public final class JokeReader {
     }
 
     private byte[] buildAadBytes(Map<String, Object> header) {
-        Map<String, Object> sorted = new TreeMap<>(header);
-        StringBuilder builder = new StringBuilder();
-        builder.append('{');
-        boolean first = true;
-        for (Map.Entry<String, Object> entry : sorted.entrySet()) {
-            if (!first) {
-                builder.append(", ");
-            }
-            first = false;
-            builder.append('"')
-                    .append(escapeJson(entry.getKey()))
-                    .append('"')
-                    .append(": ")
-                    .append(renderJsonValue(entry.getValue()));
+        try {
+            return aadMapper.writeValueAsBytes(header);
+        } catch (IOException e) {
+            throw new RuntimeException("Cannot serialize AAD", e);
         }
-        builder.append('}');
-        return builder.toString().getBytes(StandardCharsets.UTF_8);
-    }
-
-    private String renderJsonValue(Object value) {
-        if (value == null) {
-            return "null";
-        }
-        if (value instanceof Number || value instanceof Boolean) {
-            return value.toString();
-        }
-        return "\"" + escapeJson(value.toString()) + "\"";
-    }
-
-    private String escapeJson(String value) {
-        StringBuilder escaped = new StringBuilder(value.length());
-        for (char c : value.toCharArray()) {
-            if (c == '"' || c == '\\') {
-                escaped.append('\\');
-            }
-            escaped.append(c);
-        }
-        return escaped.toString();
-    }
-
-    private long toLong(Object value) {
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        return Long.parseLong(Objects.toString(value));
     }
 
     // Tiny demo
