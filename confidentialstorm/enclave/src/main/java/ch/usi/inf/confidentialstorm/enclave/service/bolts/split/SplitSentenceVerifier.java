@@ -6,6 +6,7 @@ import ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceResponse;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveExceptionUtil;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
 
@@ -19,11 +20,15 @@ public abstract class SplitSentenceVerifier extends ConfidentialBoltService<Spli
 
     @Override
     public SplitSentenceResponse split(SplitSentenceRequest request) {
-        LOG.info("SplitSentenceVerifier: split called");
-        // verify the request
-        super.verify(request);
-        // call the implementation
-        return splitImpl(request);
+        try {
+            LOG.info("SplitSentenceVerifier: split called");
+            // verify the request
+            super.verify(request);
+            // call the implementation
+            return splitImpl(request);
+        } catch (Throwable t) {
+            throw EnclaveExceptionUtil.wrap("SplitSentenceService.split", t);
+        }
     }
 
     @Override
