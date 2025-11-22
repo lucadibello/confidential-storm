@@ -1,4 +1,4 @@
-package ch.usi.inf.confidentialstorm;
+package ch.usi.inf.confidentialstorm.host;
 
 import org.apache.storm.Config;
 import org.apache.storm.LocalCluster;

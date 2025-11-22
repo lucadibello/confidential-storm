@@ -33,7 +33,7 @@ Dataset source: <https://github.com/taivop/joke-dataset/blob/master/stupidstuff.
    ```bash
    cd confidentialstorm
    sudo storm local --local-ttl 120 host/target/confidentialstorm-topology.jar \
-     ch.usi.inf.confidentialstorm.WordCountTopology \
+     ch.usi.inf.confidentialstorm.host.WordCountTopology \
      -- --local
    ```
 
@@ -76,7 +76,7 @@ Tip: remove `data/histogram.txt` between runs if you prefer a clean snapshot.
 
    ```bash
    STORM_PROD=true storm jar confidentialstorm/host/target/confidentialstorm-topology.jar \
-     ch.usi.inf.confidentialstorm.WordCountTopology \
+     ch.usi.inf.confidentialstorm.host.WordCountTopology \
      ConfidentialWordCountTopology
    ```
 
