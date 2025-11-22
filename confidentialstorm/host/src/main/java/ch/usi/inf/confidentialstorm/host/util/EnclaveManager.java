@@ -49,8 +49,7 @@ public class EnclaveManager<S> {
         }
     }
 
-    // NOTE: we set the throws clause to enforce handling of the exception
-    public void destroy() throws EnclaveDestroyingException {
+    public void destroy() {
         if (enclave != null) {
             try {
                 enclave.destroy();
