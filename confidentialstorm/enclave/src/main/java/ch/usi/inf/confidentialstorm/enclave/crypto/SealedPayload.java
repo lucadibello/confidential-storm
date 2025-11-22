@@ -5,12 +5,12 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.common.crypto.model.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.common.crypto.util.AADUtils;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
@@ -23,7 +23,6 @@ import java.security.SecureRandom;
 import java.util.*;
 
 public final class SealedPayload {
-    private static final Logger LOG = LoggerFactory.getLogger(SealedPayload.class);
     // FIXME: This is just for development.
     private static final String STREAM_KEY_HEX =
             "a46bf317953bf1a8f71439f74f30cd889ec0aa318f8b6431789fb10d1053d932";
@@ -36,6 +35,8 @@ public final class SealedPayload {
     private static final ObjectMapper AAD_MAPPER = JsonMapper.builder()
             .configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true)
             .build();
+
+    private static final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SealedPayload.class);
 
     private SealedPayload() {
     }

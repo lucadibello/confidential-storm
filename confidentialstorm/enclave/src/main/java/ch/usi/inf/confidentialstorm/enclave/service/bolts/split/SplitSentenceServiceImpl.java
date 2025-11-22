@@ -8,6 +8,8 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord;
 import ch.usi.inf.confidentialstorm.common.crypto.model.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
 import com.google.auto.service.AutoService;
 
 import java.util.*;
@@ -15,16 +17,17 @@ import java.util.stream.Collectors;
 
 @AutoService(SplitSentenceService.class)
 public class SplitSentenceServiceImpl extends SplitSentenceVerifier {
+    private static final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SplitSentenceServiceImpl.class);
 
     @Override
     public SplitSentenceResponse splitImpl(SplitSentenceRequest request) {
-        System.out.println("SplitSentenceServiceImpl: validated request received.");
+        LOG.info("SplitSentenceServiceImpl: validated request received.");
 
         // decrypt the payload
         String body = SealedPayload.decryptToString(request.body());
 
-        System.out.println("HELLO FROM SPLIT SENTENCE SERVICE");
-        System.out.println("Received sentence: " + body);
+        LOG.debug("HELLO FROM SPLIT SENTENCE SERVICE");
+        LOG.info("Received sentence: {}", body);
 
         // compute sensitive operation
         //noinspection SimplifyStreamApiCallChains

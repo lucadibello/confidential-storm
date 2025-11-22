@@ -3,11 +3,14 @@ package ch.usi.inf.confidentialstorm.enclave.service.bolts;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
 
 import java.util.Collection;
 import java.util.Objects;
 
 public abstract class ConfidentialBoltService<T extends Record> {
+    private static final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(ConfidentialBoltService.class);
 
     public abstract TopologySpecification.Component expectedSourceComponent();
     public abstract TopologySpecification.Component expectedDestinationComponent();
@@ -27,15 +30,12 @@ public abstract class ConfidentialBoltService<T extends Record> {
             try {
                 // NOTE: if the source is null, it means that the value was created outside of ConfidentialStorm
                 // hence, verifyRoute would verify only the destination component
-                System.out.println("Verifying sealed value: " + sealedValue + " from " + expectedSource + " to " + destination);
+                LOG.info("Verifying sealed value: {} from {} to {}", sealedValue, expectedSource, destination);
                 SealedPayload.verifyRoute(sealedValue, expectedSource, destination);
             } catch (Exception e) {
-                System.err.println("Sealed value verification failed: " + e.getMessage());
-                System.err.println("Sealed value: " + sealedValue);
-                System.err.println("Expected source: " + expectedSource);
-                System.err.println("Expected destination: " + destination);
-                // print stack trace for debugging
-                e.printStackTrace();
+                LOG.error("Sealed value verification failed for source {} destination {} value {}: {}",
+                        expectedSource, destination, sealedValue, e.getMessage());
+                LOG.error("Sealed value verification exception", e);
                 throw new SecurityException("Sealed value verification failed", e);
             }
         }
