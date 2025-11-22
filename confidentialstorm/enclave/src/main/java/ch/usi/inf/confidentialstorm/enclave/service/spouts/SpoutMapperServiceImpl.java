@@ -28,7 +28,7 @@ public class SpoutMapperServiceImpl implements SpoutMapperService {
 
         // create new AAD with correct route names
         AADSpecification aad = AADSpecification.builder()
-                .sourceComponent(componentId)
+                .sourceComponent(component)
                 .destinationComponent(downstreamComponent)
                 .build();
 

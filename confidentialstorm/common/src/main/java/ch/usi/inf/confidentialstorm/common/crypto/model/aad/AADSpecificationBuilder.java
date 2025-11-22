@@ -1,7 +1,6 @@
 package ch.usi.inf.confidentialstorm.common.crypto.model.aad;
 
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
-import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -11,8 +10,8 @@ import java.util.Objects;
 public final class AADSpecificationBuilder {
     // NOTE: LinkedHashMap is used to preserve insertion order (necessary to generate consistent AAD byte representation)
     private final Map<String, Object> attributes = new LinkedHashMap<>();
-    private String sourceComponent;
-    private String destinationComponent;
+    private TopologySpecification.Component sourceComponent;
+    private TopologySpecification.Component destinationComponent;
 
     public AADSpecificationBuilder put(String key, Object value) {
         Objects.requireNonNull(key, "AAD key cannot be null");
@@ -31,34 +30,14 @@ public final class AADSpecificationBuilder {
         return this;
     }
 
-    public AADSpecificationBuilder sourceComponent(@NonNull  String componentName) {
-        this.sourceComponent = Objects.requireNonNull(componentName, "Component name cannot be null");
-        return this;
-    }
-
-    public AADSpecificationBuilder sourceComponent(@NonNull Class<?> componentType) {
-        Objects.requireNonNull(componentType, "Component type cannot be null");
-        return sourceComponent(componentType.getName());
-    }
-
     public AADSpecificationBuilder sourceComponent(TopologySpecification.Component component) {
-        Objects.requireNonNull(component, "Component cannot be null");
-        return sourceComponent(component.toString());
-    }
-
-    public AADSpecificationBuilder destinationComponent(@NonNull String componentName) {
-        this.destinationComponent = Objects.requireNonNull(componentName, "Component name cannot be null");
+        this.sourceComponent = Objects.requireNonNull(component, "Component cannot be null");
         return this;
-    }
-
-    public AADSpecificationBuilder destinationComponent(@NonNull Class<?> componentType) {
-        Objects.requireNonNull(componentType, "Component type cannot be null");
-        return destinationComponent(componentType.getName());
     }
 
     public AADSpecificationBuilder destinationComponent(TopologySpecification.Component component) {
-        Objects.requireNonNull(component, "Component cannot be null");
-        return destinationComponent(component.toString());
+        this.destinationComponent = Objects.requireNonNull(component, "Component cannot be null");
+        return this;
     }
 
     public AADSpecification build() {

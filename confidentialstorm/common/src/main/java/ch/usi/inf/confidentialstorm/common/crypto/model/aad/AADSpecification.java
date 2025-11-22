@@ -1,5 +1,7 @@
 package ch.usi.inf.confidentialstorm.common.crypto.model.aad;
 
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
+
 import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
@@ -9,12 +11,12 @@ public final class AADSpecification {
             new AADSpecification(Collections.emptyMap(), null, null);
 
     private final Map<String, Object> attributes;
-    private final String sourceComponent;
-    private final String destinationComponent;
+    private final TopologySpecification.Component sourceComponent;
+    private final TopologySpecification.Component destinationComponent;
 
     public AADSpecification(Map<String, Object> attributes,
-                            String sourceComponent,
-                            String destinationComponent) {
+                            TopologySpecification.Component sourceComponent,
+                            TopologySpecification.Component destinationComponent) {
         this.attributes = attributes;
         this.sourceComponent = sourceComponent;
         this.destinationComponent = destinationComponent;
@@ -29,11 +31,11 @@ public final class AADSpecification {
         return attributes;
     }
 
-    public Optional<String> sourceComponent() {
+    public Optional<TopologySpecification.Component> sourceComponent() {
         return Optional.ofNullable(sourceComponent);
     }
 
-    public Optional<String> destinationComponent() {
+    public Optional<TopologySpecification.Component> destinationComponent() {
         return Optional.ofNullable(destinationComponent);
     }
 
@@ -45,4 +47,3 @@ public final class AADSpecification {
         return new AADSpecificationBuilder();
     }
 }
-

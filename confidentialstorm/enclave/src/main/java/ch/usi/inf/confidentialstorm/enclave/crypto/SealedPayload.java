@@ -144,8 +144,10 @@ public final class SealedPayload {
             return EMPTY_AAD;
         }
         Map<String, Object> sorted = new TreeMap<>(aad.attributes());
-        aad.sourceComponent().ifPresent(name -> sorted.put("source", AADUtils.privatizeComponentName(name, nonce)));
-        aad.destinationComponent().ifPresent(name -> sorted.put("destination", AADUtils.privatizeComponentName(name, nonce)));
+        aad.sourceComponent().ifPresent(component ->
+                sorted.put("source", AADUtils.privatizeComponentName(component.toString(), nonce)));
+        aad.destinationComponent().ifPresent(component ->
+                sorted.put("destination", AADUtils.privatizeComponentName(component.toString(), nonce)));
         if (sorted.isEmpty()) {
             return EMPTY_AAD;
         }
