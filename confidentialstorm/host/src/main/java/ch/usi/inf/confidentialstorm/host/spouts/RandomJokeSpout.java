@@ -1,5 +1,6 @@
 package ch.usi.inf.confidentialstorm.host.spouts;
 
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.host.spouts.base.ConfidentialSpout;
 import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
@@ -47,7 +48,7 @@ public class RandomJokeSpout extends ConfidentialSpout {
     // generate the next random joke
     int idx = rand.nextInt(encryptedJokes.size());
     EncryptedValue currentJoke = encryptedJokes.get(idx);
-    EncryptedValue routedJoke = getMapperService().setupRoute(getComponentId(), currentJoke);
+    EncryptedValue routedJoke = getMapperService().setupRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
 
     LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJoke);
     getCollector().emit(new Values(routedJoke));

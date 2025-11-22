@@ -41,18 +41,18 @@ public final class TopologySpecification {
             Component.HISTOGRAM_GLOBAL, Collections.emptyList()
     );
 
-    public static List<Component> downstream(String componentId) {
-        Objects.requireNonNull(componentId, "componentId cannot be null");
-        return DOWNSTREAM.getOrDefault(componentId, Collections.emptyList());
+    public static List<Component> downstream(Component component) {
+        Objects.requireNonNull(component, "componentId cannot be null");
+        return DOWNSTREAM.getOrDefault(component, Collections.emptyList());
     }
 
-    public static Component requireSingleDownstream(String componentId) {
-        List<Component> downstream = downstream(componentId);
+    public static Component requireSingleDownstream(Component component) {
+        List<Component> downstream = downstream(component);
         if (downstream.isEmpty()) {
-            throw new IllegalArgumentException("No downstream component configured for " + componentId);
+            throw new IllegalArgumentException("No downstream component configured for " + component);
         }
         if (downstream.size() > 1) {
-            throw new IllegalStateException("Component " + componentId + " fan-out is ambiguous");
+            throw new IllegalStateException("Component " + component + " fan-out is ambiguous");
         }
         return downstream.get(0);
     }

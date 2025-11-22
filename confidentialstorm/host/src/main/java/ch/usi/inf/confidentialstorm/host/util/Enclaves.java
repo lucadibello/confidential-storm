@@ -2,8 +2,6 @@ package ch.usi.inf.confidentialstorm.host.util;
 
 import org.apache.teaclave.javasdk.host.Enclave;
 import org.apache.teaclave.javasdk.host.EnclaveType;
-import org.apache.teaclave.javasdk.host.exception.ServicesLoadingException;
-import org.apache.teaclave.javasdk.host.exception.EnclaveCreatingException;
 import org.apache.teaclave.javasdk.host.EnclaveFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

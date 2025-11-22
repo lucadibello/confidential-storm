@@ -13,8 +13,8 @@ import java.util.Objects;
 public class SpoutMapperServiceImpl implements SpoutMapperService {
 
     @Override
-    public EncryptedValue setupRoute(String componentId, EncryptedValue entry) {
-        Objects.requireNonNull(componentId, "componentId cannot be null");
+    public EncryptedValue setupRoute(TopologySpecification.Component component, EncryptedValue entry) {
+        Objects.requireNonNull(component, "component cannot be null");
         Objects.requireNonNull(entry, "Encrypted entry cannot be null");
         // we want to verify that the entry is correctly sealed
         SealedPayload.verifyRoute(entry,
@@ -24,7 +24,7 @@ public class SpoutMapperServiceImpl implements SpoutMapperService {
         // get string body
         byte[] body = SealedPayload.decrypt(entry);
 
-        TopologySpecification.Component downstreamComponent = TopologySpecification.requireSingleDownstream(componentId);
+        TopologySpecification.Component downstreamComponent = TopologySpecification.requireSingleDownstream(component);
 
         // create new AAD with correct route names
         AADSpecification aad = AADSpecification.builder()
