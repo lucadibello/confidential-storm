@@ -1,6 +1,7 @@
 package ch.usi.inf.confidentialstorm.common.crypto.model.aad;
 
 import ch.usi.inf.confidentialstorm.common.crypto.util.AADUtils;
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 
 import java.util.*;
 
@@ -43,39 +44,39 @@ public final class DecodedAAD {
         return Optional.ofNullable(destinationHash);
     }
 
-    public boolean matchesSource(String componentName, byte[] nonce) {
-        Objects.requireNonNull(componentName, "Component name cannot be null");
+    public boolean matchesSource(TopologySpecification.Component component, byte[] nonce) {
+        Objects.requireNonNull(component, "Component cannot be null");
         Objects.requireNonNull(nonce, "Nonce cannot be null");
         if (sourceHash == null) {
             return false;
         }
-        return sourceHash.equals(AADUtils.privatizeComponentName(componentName, nonce));
+        return sourceHash.equals(AADUtils.privatizeComponentName(component.getName(), nonce));
     }
 
-    public void requireSource(String componentName, byte[] nonce) {
+    public void requireSource(TopologySpecification.Component component, byte[] nonce) {
         if (sourceHash == null) {
             throw new IllegalArgumentException("AAD missing source component");
         }
-        if (!matchesSource(componentName, nonce)) {
-            throw new IllegalArgumentException("AAD source mismatch for " + componentName);
+        if (!matchesSource(component, nonce)) {
+            throw new IllegalArgumentException("AAD source mismatch for " + component.getName());
         }
     }
 
-    public boolean matchesDestination(String componentName, byte[] nonce) {
-        Objects.requireNonNull(componentName, "Component name cannot be null");
+    public boolean matchesDestination(TopologySpecification.Component component, byte[] nonce) {
+        Objects.requireNonNull(component, "Component cannot be null");
         Objects.requireNonNull(nonce, "Nonce cannot be null");
         if (destinationHash == null) {
             return false;
         }
-        return destinationHash.equals(AADUtils.privatizeComponentName(componentName, nonce));
+        return destinationHash.equals(AADUtils.privatizeComponentName(component.getName(), nonce));
     }
 
-    public void requireDestination(String componentName, byte[] nonce) {
+    public void requireDestination(TopologySpecification.Component component, byte[] nonce) {
         if (destinationHash == null) {
             throw new IllegalArgumentException("AAD missing destination component");
         }
-        if (!matchesDestination(componentName, nonce)) {
-            throw new IllegalArgumentException("AAD destination mismatch for " + componentName);
+        if (!matchesDestination(component, nonce)) {
+            throw new IllegalArgumentException("AAD destination mismatch for " + component.getName());
         }
     }
 

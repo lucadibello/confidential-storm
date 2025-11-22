@@ -9,6 +9,7 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException
 import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
+import ch.usi.inf.confidentialstorm.enclave.EnclaveConfig;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -26,11 +27,12 @@ import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.*;
 
+/**
+ * Utility class for sealing and unsealing payloads within the enclave.
+ * Uses ChaCha20-Poly1305 for encryption and HMAC-SHA256 for routing key derivation.
+ */
 public final class SealedPayload {
-    // FIXME: This is just for development.
-    private static final String STREAM_KEY_HEX =
-            "a46bf317953bf1a8f71439f74f30cd889ec0aa318f8b6431789fb10d1053d932";
-    private static final byte[] STREAM_KEY = HexFormat.of().parseHex(STREAM_KEY_HEX);
+    private static final byte[] STREAM_KEY = HexFormat.of().parseHex(EnclaveConfig.STREAM_KEY_HEX);
     private static final SecretKey ENCRYPTION_KEY = new SecretKeySpec(STREAM_KEY, "ChaCha20");
     private static final SecretKey MAC_KEY = new SecretKeySpec(STREAM_KEY, "HmacSHA256");
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -87,10 +89,10 @@ public final class SealedPayload {
     }
 
     public static void verifyRoute(EncryptedValue sealed,
-                                   String expectedSourceComponentName,
-                                   String expectedDestinationComponentName) {
+                                   TopologySpecification.Component expectedSourceComponent,
+                                   TopologySpecification.Component expectedDestinationComponent) {
         // NOTE: the source component can be null when the payload is created outside the enclave
-        Objects.requireNonNull(expectedDestinationComponentName, "Expected destination cannot be null");
+        Objects.requireNonNull(expectedDestinationComponent, "Expected destination cannot be null");
 
         // get decoded aad from sealed value
         DecodedAAD aad = DecodedAAD.fromBytes(sealed.associatedData());
@@ -99,27 +101,11 @@ public final class SealedPayload {
         LOG.debug("Decoded AAD: {}", aad);
 
         // source can be null if not expected
-        if (expectedSourceComponentName != null)
-            aad.requireSource(expectedSourceComponentName, sealed.nonce());
+        if (expectedSourceComponent != null)
+            aad.requireSource(expectedSourceComponent, sealed.nonce());
         // destination must match
-        aad.requireDestination(expectedDestinationComponentName, sealed.nonce());
+        aad.requireDestination(expectedDestinationComponent, sealed.nonce());
     }
-
-    public static void verifyRoute(EncryptedValue sealed, Class<?> expectedSourceComponent, Class<?> expectedDestinationComponent) {
-        verifyRoute(sealed, expectedSourceComponent.getName(), expectedDestinationComponent.getName());
-    }
-    public static void verifyRoute(EncryptedValue sealed, String expectedSourceComponentName, Class<?> expectedDestinationComponent) {
-        verifyRoute(sealed, expectedSourceComponentName, expectedDestinationComponent.getName());
-    }
-    public static void verifyRoute(EncryptedValue sealed, Class<?> expectedSourceComponent, String expectedDestinationComponentName) {
-        verifyRoute(sealed, expectedSourceComponent.getName(), expectedDestinationComponentName);
-    }
-    public static void verifyRoute(EncryptedValue sealed,
-                                   TopologySpecification.Component expectedSourceComponent,
-                                   TopologySpecification.Component expectedDestinationComponent) {
-        verifyRoute(sealed, expectedSourceComponent.toString(), expectedDestinationComponent.toString());
-    }
-
 
     private static Cipher initCipher(int mode, byte[] nonce, byte[] aad) {
         try {
