@@ -12,17 +12,14 @@ public class EnclaveServiceException extends RuntimeException implements Seriali
 
     private final String originalType;
     private final String originalMessage;
-    private final String originalStackTrace;
 
     public EnclaveServiceException(String operation,
                                    String originalType,
                                    String originalMessage,
-                                   String originalStackTrace,
                                    StackTraceElement[] enclaveStack) {
         super(buildMessage(operation, originalType, originalMessage));
         this.originalType = originalType;
         this.originalMessage = originalMessage;
-        this.originalStackTrace = originalStackTrace;
         if (enclaveStack != null && enclaveStack.length > 0) {
             // propagate enclave stack to host for better diagnostics
             setStackTrace(enclaveStack);
@@ -44,9 +41,5 @@ public class EnclaveServiceException extends RuntimeException implements Seriali
 
     public String getOriginalMessage() {
         return originalMessage;
-    }
-
-    public String getOriginalStackTrace() {
-        return originalStackTrace;
     }
 }
