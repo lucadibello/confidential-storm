@@ -15,7 +15,7 @@ public final class TopologySpecification {
     }
 
 
-    public enum Component {
+    public enum Component implements java.io.Serializable {
         DATASET("_DATASET"),
         MAPPER("_MAPPER"),
         RANDOM_JOKE_SPOUT("random-joke-spout"),
@@ -24,6 +24,7 @@ public final class TopologySpecification {
         HISTOGRAM_GLOBAL("histogram-global");
 
         private final String name;
+        private static final long serialVersionUID = 1L;
         Component(String name) {
             this.name = name;
         }
@@ -31,6 +32,18 @@ public final class TopologySpecification {
         @Override
         public String toString() {
             return name;
+        }
+
+        public static Component fromValue(String value) {
+            if (value == null) {
+                return null;
+            }
+            for (Component component : Component.values()) {
+                if (component.name.equals(value) || component.name().equalsIgnoreCase(value)) {
+                    return component;
+                }
+            }
+            throw new IllegalArgumentException("Unknown component: " + value);
         }
     }
 
