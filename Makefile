@@ -45,7 +45,7 @@ host:
 
 run-local:
 	@echo "Running Storm topology locally with debug logging (120 seconds)..."
-	@sudo storm local -c topology.debug=true --local-ttl 120 confidentialstorm/host/target/confidentialstorm-topology.jar ch.usi.inf.confidentialstorm.WordCountTopology -- --local
+	@sudo storm local -c topology.debug=true --local-ttl 120 confidentialstorm/host/target/confidentialstorm-topology.jar ch.usi.inf.confidentialstorm.host.WordCountTopology -- --local
 	@echo "Finished local run."
 
 run-local-java:
@@ -60,5 +60,5 @@ seal-dataset:
 
 submit:
 	@echo "Submitting Storm topology to cluster..."
-	@storm jar confidentialstorm/host/target/confidentialstorm-topology.jar ch.inf.usi.confidentialstorm.WordCountTopology -- --cluster
+	@storm jar confidentialstorm/host/target/confidentialstorm-topology.jar ch.inf.usi.confidentialstorm.host.WordCountTopology -- --cluster
 	@echo "Finished submission.";
