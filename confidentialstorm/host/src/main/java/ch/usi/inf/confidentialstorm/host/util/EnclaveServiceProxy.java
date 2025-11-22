@@ -17,6 +17,7 @@ import java.util.Objects;
 public final class EnclaveServiceProxy {
     private static final Logger LOG = org.slf4j.LoggerFactory.getLogger(EnclaveServiceProxy.class);
     private static final String TEACLAVE_PROXY_HANDLER = "org.apache.teaclave.javasdk.host.ProxyEnclaveInvocationHandler";
+    private static final boolean PROPAGATE_EXCEPTIONS = Boolean.parseBoolean(System.getProperty("confidentialstorm.debug.exceptions.enabled", "false"));
 
     private EnclaveServiceProxy() { }
 
@@ -109,21 +110,31 @@ public final class EnclaveServiceProxy {
                     throw ese;
                 }
 
-                // NOTE: Auto-wrap any enclave-side throwable to avoid per-service try/catch
+                // NOTE: for security purposes, we only propagate full exception details in debug mode
+                // otherwise we may leak sensitive enclave information via exception messages or stack traces
+                // in log files or error reports.
 
-                LOG.debug("Wrapping remote exception from enclave operation '{}': {}", operation, EnclaveErrorUtils.format(root));
-                // FIXME: maybe this can still be useful? Used for debugging purposes
-                // String stack = renderStackTrace(root);
-                EnclaveServiceException wrapped = new EnclaveServiceException(
-                        operation,
-                        root.getClass().getName(),
-                        root.getMessage(),
-                        root.getStackTrace()
-                );
-                // try to preserve the original cause if any
-                wrapped.initCause(root);
-                // rethrow the wrapped exception
-                throw wrapped;
+                if (PROPAGATE_EXCEPTIONS) {
+                    // Debug mode: propagate full exception details
+                    LOG.debug("Wrapping remote exception from enclave operation '{}' for propagation (debug mode): {}", operation, EnclaveErrorUtils.format(root));
+                    EnclaveServiceException wrapped = new EnclaveServiceException(
+                            operation,
+                            root.getClass().getName(),
+                            root.getMessage(),
+                            root.getStackTrace()
+                    );
+                    wrapped.initCause(root);
+                    throw wrapped;
+                } else {
+                    // Production mode: log details internally, throw a generic exception
+                    LOG.error("Enclave operation '{}' failed with an internal exception. Full exception details will not be propagated.", operation, root);
+                    throw new EnclaveServiceException(
+                            operation,
+                            "Internal enclave error", // Generic type
+                            "An internal error occurred within the enclave.", // Generic message
+                            null // NO stack trace
+                    );
+                }
             }
             // return the direct result if no exception occurred
             LOG.debug("Enclave operation '{}' completed successfully via direct invocation.", operation);

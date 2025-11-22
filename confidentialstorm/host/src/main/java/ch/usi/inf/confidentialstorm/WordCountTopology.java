@@ -77,6 +77,8 @@ public class WordCountTopology extends ConfigurableTopology {
             conf.put("confidentialstorm.enclave.type", "MOCK_IN_SVM");
             // Enable debug for local runs
             conf.setDebug(true);
+            // Enable verbose exception propagation for local/debug runs
+            System.setProperty("confidentialstorm.debug.exceptions.enabled", "true");
         }
         if (!isProd) {
             LOG.warn("Running in local mode");
