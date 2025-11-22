@@ -24,19 +24,7 @@ public final class EnclaveExceptionUtil {
     public static EnclaveServiceException wrap(String operation, Throwable cause) {
         String type = cause.getClass().getName();
         String message = cause.getMessage();
-        String stack = renderStackTrace(cause);
         StackTraceElement[] enclaveStack = cause.getStackTrace();
-        return new EnclaveServiceException(operation, type, message, stack, enclaveStack);
-    }
-
-    /**
-     * Renders the stack trace of a Throwable into a String
-     * @param throwable the Throwable whose stack trace is to be rendered
-     * @return a String representation of the stack trace
-     */
-    private static String renderStackTrace(Throwable throwable) {
-        StringWriter sw = new StringWriter();
-        throwable.printStackTrace(new PrintWriter(sw));
-        return sw.toString();
+        return new EnclaveServiceException(operation, type, message, enclaveStack);
     }
 }
