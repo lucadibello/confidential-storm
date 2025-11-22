@@ -14,14 +14,23 @@
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException"},
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException"},
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException"},
+  { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException"},
+  { "name": "java.lang.Throwable"},
+  { "name": "java.lang.Exception"},
+  { "name": "java.lang.RuntimeException"},
+  { "name": "java.lang.IllegalArgumentException"},
+  { "name": "java.lang.IllegalStateException"},
+  { "name": "java.lang.NullPointerException"},
+  { "name": "java.lang.SecurityException"},
+  { "name": "java.security.GeneralSecurityException"},
 
-  { "name":  "java.security.GeneralSecurityException"},
-  { "name":  "javax.crypto.BadPaddingException"},
-  { "name":  "javax.crypto.IllegalBlockSizeException"},
-  { "name":  "javax.crypto.NoSuchPaddingException"},
-  { "name":  "java.security.NoSuchAlgorithmException"},
-  { "name":  "java.security.InvalidKeyException"},
-  { "name":  "java.security.InvalidAlgorithmParameterException"},
+  { "name": "javax.crypto.BadPaddingException"},
+  { "name": "javax.crypto.IllegalBlockSizeException"},
+  { "name": "javax.crypto.NoSuchPaddingException"},
+  { "name": "java.security.NoSuchAlgorithmException"},
+  { "name": "java.security.InvalidKeyException"},
+  { "name": "java.security.InvalidAlgorithmParameterException"},
+  { "name": "javax.crypto.AEADBadTagException"},
 
   { "name": "java.util.ArrayList" },
   { "name": "java.util.LinkedList" },
@@ -54,5 +63,6 @@
   { "name": "java.util.ImmutableCollections$SetN" },
   { "name": "java.util.ImmutableCollections$MapN" },
 
-  { "name": "java.lang.Long" }
+  { "name": "java.lang.Long" },
+  { "name": "java.lang.StackTraceElement" }
 ]
