@@ -5,17 +5,23 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.crypto.model.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
 import com.google.auto.service.AutoService;
 
 import java.util.Objects;
 
 @AutoService(SpoutMapperService.class)
 public class SpoutMapperServiceImpl implements SpoutMapperService {
+    private static final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SpoutMapperServiceImpl.class);
 
     @Override
     public EncryptedValue setupRoute(TopologySpecification.Component component, EncryptedValue entry) {
+        LOG.info("SpoutMapperService.setupRoute called for component: " + component.toString());
+
         Objects.requireNonNull(component, "component cannot be null");
         Objects.requireNonNull(entry, "Encrypted entry cannot be null");
+
         // we want to verify that the entry is correctly sealed
         SealedPayload.verifyRoute(entry,
                 TopologySpecification.Component.DATASET,
