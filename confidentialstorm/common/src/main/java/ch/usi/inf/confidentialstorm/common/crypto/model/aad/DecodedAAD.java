@@ -89,4 +89,13 @@ public final class DecodedAAD {
         }
         throw new IllegalArgumentException("AAD field '" + fieldName + "' must be a string");
     }
+
+    @Override
+    public String toString() {
+        return "DecodedAAD{" +
+                "attributes=" + attributes +
+                ", sourceHash='" + sourceHash + '\'' +
+                ", destinationHash='" + destinationHash + '\'' +
+                '}';
+    }
 }

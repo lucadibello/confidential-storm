@@ -98,7 +98,9 @@ public final class SealedPayload {
         DecodedAAD aad = DecodedAAD.fromBytes(sealed.associatedData());
 
         // ensure that the source and destination match
-        LOG.debug("Decoded AAD: {}", aad);
+        LOG.debug("Decoded AAD: {}", aad, " using nonce: {}", HexFormat.of().formatHex(sealed.nonce()));
+        LOG.debug("Expected source: {}", expectedSourceComponent);
+        LOG.debug("Expected destination: {}", expectedDestinationComponent);
 
         // source can be null if not expected
         if (expectedSourceComponent != null)

@@ -17,8 +17,6 @@ public class SpoutMapperServiceImpl implements SpoutMapperService {
 
     @Override
     public EncryptedValue setupRoute(TopologySpecification.Component component, EncryptedValue entry) {
-        LOG.info("SpoutMapperService.setupRoute called for component: " + component.toString());
-
         Objects.requireNonNull(component, "component cannot be null");
         Objects.requireNonNull(entry, "Encrypted entry cannot be null");
 
