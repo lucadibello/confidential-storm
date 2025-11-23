@@ -1,8 +1,13 @@
 package ch.usi.inf.confidentialstorm.enclave.dp;
 
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
+
 public class TestBinaryTrees {
+    private static final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(TestBinaryTrees.class);
+
     public static void main(String[] args) {
-        System.out.println("Testing Binary Aggregation Trees...");
+        LOG.info("Testing Binary Aggregation Trees...");
 
         // initialize both trees
         int T = 1024; // number of leaf nodes in the tree
@@ -19,19 +24,19 @@ public class TestBinaryTrees {
         // fill both trees with the same data
         for (int i = 0; i < maxSize; i++) {
             double value = i + 1; // some deterministic data
-            System.out.println("Adding value " + value + " at index " + i);
+            LOG.info("Adding value {} at index {}", value, i);
 
             double theirOutput = theirs.addToTree(i, value);
-            System.out.println("  Theirs output: " + theirOutput);
+            LOG.debug("  Theirs output: {}", theirOutput);
 
             double mineOutput = mine.addToTree(i, value);
-            System.out.println("  Mine output: " + mineOutput);
+            LOG.debug("  Mine output: {}", mineOutput);
 
             // compare outputs
             if (Math.abs(mineOutput - theirOutput) > 1e-9)
                 throw new RuntimeException("Outputs differ at index " + i + ": mine=" + mineOutput + ", theirs=" + theirOutput);
         }
 
-        System.out.println("All outputs match!");
+        LOG.info("All outputs match!");
     }
 }

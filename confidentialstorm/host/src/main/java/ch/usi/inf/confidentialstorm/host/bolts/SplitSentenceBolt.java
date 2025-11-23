@@ -15,10 +15,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+import java.util.Objects;
 
 public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
     private int boltId;
-    private final Logger LOG = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(SplitSentenceBolt.class);
 
     public SplitSentenceBolt() {
         super(SplitSentenceService.class);
@@ -35,17 +36,19 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
     protected void processTuple(Tuple input, SplitSentenceService service) {
         // read encrypted body
         EncryptedValue encryptedBody = (EncryptedValue) input.getValueByField("body");
-        int jokeId = input.getIntegerByField("id");
 
         // request enclave to split the sentence
         SplitSentenceResponse response = service.split(new SplitSentenceRequest(encryptedBody));
-        LOG.info("[SplitSentenceBolt {}] Emitting {} encrypted words for joke {}", boltId, response.words().size(), jokeId);
+        LOG.info("[SplitSentenceBolt {}] Emitting {} encrypted words for encrypted joke {}", boltId, response.words().size(), encryptedBody);
+
+        // Ensure that the response contains words
+        Objects.requireNonNull(response, "SplitSentenceResponse is null. Enclave service has failed.");
 
         // send out each encrypted word
         for (EncryptedWord word : response.words()) {
-            collector.emit(input, new Values(word.routingKey(), word.payload()));
+            getCollector().emit(input, new Values(word.routingKey(), word.payload()));
         }
-        collector.ack(input);
+        getCollector().ack(input);
     }
 
     @Override

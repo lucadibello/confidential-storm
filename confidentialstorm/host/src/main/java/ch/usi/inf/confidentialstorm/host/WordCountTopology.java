@@ -1,13 +1,15 @@
-package ch.usi.inf.confidentialstorm;
+package ch.usi.inf.confidentialstorm.host;
 
 import org.apache.storm.Config;
 import org.apache.storm.LocalCluster;
+import org.apache.storm.generated.StormTopology;
 import org.apache.storm.topology.ConfigurableTopology;
 import org.apache.storm.topology.TopologyBuilder;
 import org.apache.storm.tuple.Fields;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.host.bolts.HistogramBolt;
 import ch.usi.inf.confidentialstorm.host.bolts.SplitSentenceBolt;
 import ch.usi.inf.confidentialstorm.host.bolts.WordCounterBolt;
@@ -29,13 +31,35 @@ public class WordCountTopology extends ConfigurableTopology {
         LOG.info("Starting WordCountTopology in {} mode", isProd ? "PROD" : "LOCAL");
 
         // WordSpout: stream of phrases from a book
-        builder.setSpout("random-joke-spout", new RandomJokeSpout(), 2);
+        builder.setSpout(
+                TopologySpecification.Component.RANDOM_JOKE_SPOUT.toString(),
+                new RandomJokeSpout(),
+                1
+        );
+
         // SplitSentenceBolt: splits each sentence into a stream of words
-        builder.setBolt("sentence-split", new SplitSentenceBolt(), 3).shuffleGrouping("random-joke-spout");
+        builder.setBolt(
+                TopologySpecification.Component.SENTENCE_SPLIT.toString(),
+                new SplitSentenceBolt(),
+                1
+        ).shuffleGrouping(TopologySpecification.Component.RANDOM_JOKE_SPOUT.toString());
+
         // WordCountBolt: counts the words that are emitted
-        builder.setBolt("word-count", new WordCounterBolt(), 3).fieldsGrouping("sentence-split", new Fields("wordKey"));
+        builder.setBolt(
+                TopologySpecification.Component.WORD_COUNT.toString(),
+                new WordCounterBolt(),
+                1
+        ).fieldsGrouping(
+                TopologySpecification.Component.SENTENCE_SPLIT.toString(),
+                new Fields("wordKey")
+        );
+
         // HistogramBolt: merges partial counters into a single (global) histogram
-        builder.setBolt("histogram-global", new HistogramBolt(), 1).globalGrouping("word-count");
+        builder.setBolt(
+                TopologySpecification.Component.HISTOGRAM_GLOBAL.toString(),
+                new HistogramBolt(),
+                1
+        ).globalGrouping(TopologySpecification.Component.WORD_COUNT.toString());
 
         // configure spout wait strategy to avoid starving other bolts
         // NOTE: learn more here https://storm.apache.org/releases/current/Performance.html
@@ -47,14 +71,26 @@ public class WordCountTopology extends ConfigurableTopology {
         // run the topology (locally if not production, otherwise submit to nimbus)
         conf.setDebug(false);
         if (!isProd) {
-            // conf.put("confidentialstorm.enclave.type", "MOCK_IN_SVM");
-            conf.put("confidentialstorm.enclave.type", "TEE_SDK");
+            // if not in production
+
+            // Mock enclaves - don't use in production
+            conf.put("confidentialstorm.enclave.type", "MOCK_IN_SVM");
+            // Enable debug for local runs
+            conf.setDebug(false);
+            // Enable verbose exception propagation for local/debug runs
+            System.setProperty("confidentialstorm.debug.exceptions.enabled", "true");
         }
         if (!isProd) {
             LOG.warn("Running in local mode");
             try (LocalCluster cluster = new LocalCluster()) {
                 // submit topology to local cluster
-                cluster.submitTopology("WordCountTopology", conf, builder.createTopology());
+                LOG.info("Building topology...");
+                StormTopology topo = builder.createTopology();
+                LOG.info("Topology built correctly! {}", topo.toString());
+
+                LOG.info("Submitting WordCountTopology to local cluster");
+                cluster.submitTopology("WordCountTopology", conf, topo);
+                LOG.info("WordCountTopology submitted to local cluster");
 
                 // set upper bound for local execution
                 // NOTE: this is needed to avoid local mode to exit immediately. Control the timeout using --local-ttl
@@ -67,9 +103,12 @@ public class WordCountTopology extends ConfigurableTopology {
                 }
 
                 // kill topology
+                LOG.info("Killing WordCountTopology");
                 cluster.killTopology("WordCountTopology");
+                LOG.info("WordCountTopology killed");
                 return 0;
             } catch (Exception e) {
+                LOG.error("Failed to run WordCountTopology in local mode", e);
                 return 1;
             }
         } else {

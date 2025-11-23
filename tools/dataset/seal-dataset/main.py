@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives.hashes import Hash, SHA256
 
 # Setup logger
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[logging.StreamHandler()],
 )
@@ -67,9 +67,9 @@ def main(dataset_path: str, output_path: str):
     encrypted_entries = []
 
     # Read each entry and prepare encryption
-    for entry in dataset_data:
+    for i, entry in enumerate(dataset_data):
         # serialize entire entry as json (plaintext)
-        entry_json = json.dumps(entry, ensure_ascii=False)
+        entry_json = json.dumps(entry, ensure_ascii=False, separators=(',', ':'))
 
         # random nonce (12 bytes) – included in ciphertext package
         nonce = os.urandom(12)
@@ -77,15 +77,26 @@ def main(dataset_path: str, output_path: str):
         # build header (this will later be AAD)
         # NOTE: this is empty at generation, but may be recomputed during
         header = {
-            "source": compute_private_source_name(SOURCE_NAME, nonce),
-            "destination": compute_private_source_name(DESTINATION_NAME, nonce),
+            "source": hash_component_name(SOURCE_NAME, nonce),
+            "destination": hash_component_name(DESTINATION_NAME, nonce),
         }
 
-        # serialize header as JSON and use as AAD
-        aad = json.dumps(header, sort_keys=True).encode("utf-8")
+        # serialize header as JSON
+        header = json.dumps(header, sort_keys=True, separators=(',', ':'))
 
         # ChaCha20-Poly1305: ct includes ciphertext + tag (aad)
-        ct = aead.encrypt(nonce, entry_json.encode("utf-8"), aad)
+        ct = aead.encrypt(nonce, entry_json.encode("utf-8"), header.encode("utf-8"))
+
+        # log every 1000 entries
+        if i % 1000 == 0:
+            # log json representation for comparison
+            logger.info(
+                f"Processed entry {i}: "
+                f"header={header}, "
+                f"plaintext_len={len(entry_json)}, "
+                f"ciphertext_len={len(ct)}"
+            )
+
 
         # store encoded values
         encrypted_entry = {
@@ -105,10 +116,10 @@ def main(dataset_path: str, output_path: str):
     )
 
 
-def compute_private_source_name(source_name: str, nounce: bytes) -> str:
+def hash_component_name(source_name: str, nonce: bytes) -> str:
     digest = Hash(SHA256())
     digest.update(source_name.encode("utf-8"))
-    digest.update(nounce)
+    digest.update(nonce)
     result_hash = digest.finalize()
 
     # base64 result to return a string

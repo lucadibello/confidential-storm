@@ -1,10 +1,11 @@
 package ch.usi.inf.confidentialstorm.host.util;
 
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
@@ -15,12 +16,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.TreeMap;
 
 public final class JokeReader {
 
+    private static final Logger LOG = LoggerFactory.getLogger(JokeReader.class);
     private final ObjectMapper mapper;
 
     public JokeReader() {
@@ -42,12 +41,10 @@ public final class JokeReader {
             List<EncryptedValue> encryptedJokes = new ArrayList<>();
             for (JsonNode entry : root) {
                 JsonNode headerNode = entry.get("header");
-                if (headerNode == null || !headerNode.isObject()) {
+                if (headerNode == null) {
                     continue;
                 }
-                Map<String, Object> header = mapper.convertValue(headerNode, new TypeReference<>() {
-                });
-                byte[] aad = buildAadBytes(header);
+                byte[] aad = buildAadBytes(headerNode);
                 byte[] nonce = decodeBase64(entry.get("nonce"));
                 byte[] ciphertext = decodeBase64(entry.get("ciphertext"));
 
@@ -66,52 +63,9 @@ public final class JokeReader {
         return Base64.getDecoder().decode(node.asText());
     }
 
-    private byte[] buildAadBytes(Map<String, Object> header) {
-        Map<String, Object> sorted = new TreeMap<>(header);
-        StringBuilder builder = new StringBuilder();
-        builder.append('{');
-        boolean first = true;
-        for (Map.Entry<String, Object> entry : sorted.entrySet()) {
-            if (!first) {
-                builder.append(", ");
-            }
-            first = false;
-            builder.append('"')
-                    .append(escapeJson(entry.getKey()))
-                    .append('"')
-                    .append(": ")
-                    .append(renderJsonValue(entry.getValue()));
-        }
-        builder.append('}');
-        return builder.toString().getBytes(StandardCharsets.UTF_8);
-    }
-
-    private String renderJsonValue(Object value) {
-        if (value == null) {
-            return "null";
-        }
-        if (value instanceof Number || value instanceof Boolean) {
-            return value.toString();
-        }
-        return "\"" + escapeJson(value.toString()) + "\"";
-    }
-
-    private String escapeJson(String value) {
-        StringBuilder escaped = new StringBuilder(value.length());
-        for (char c : value.toCharArray()) {
-            if (c == '"' || c == '\\') {
-                escaped.append('\\');
-            }
-            escaped.append(c);
-        }
-        return escaped.toString();
-    }
-
-    private long toLong(Object value) {
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        return Long.parseLong(Objects.toString(value));
+    private byte[] buildAadBytes(JsonNode headerNode) {
+        String headerJson = headerNode.asText();
+        return headerJson.getBytes(StandardCharsets.UTF_8);
     }
 
     // Tiny demo
