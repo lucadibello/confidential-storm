@@ -1,12 +1,11 @@
 package ch.usi.inf.confidentialstorm.host.util;
 
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
@@ -17,19 +16,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 
 public final class JokeReader {
 
+    private static final Logger LOG = LoggerFactory.getLogger(JokeReader.class);
     private final ObjectMapper mapper;
-    private final ObjectMapper aadMapper;
 
     public JokeReader() {
         this.mapper = new ObjectMapper()
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        this.aadMapper = JsonMapper.builder()
-                .configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true)
-                .build();
     }
 
     public List<EncryptedValue> readAll(String jsonResourceName) throws IOException {
@@ -46,12 +41,10 @@ public final class JokeReader {
             List<EncryptedValue> encryptedJokes = new ArrayList<>();
             for (JsonNode entry : root) {
                 JsonNode headerNode = entry.get("header");
-                if (headerNode == null || !headerNode.isObject()) {
+                if (headerNode == null) {
                     continue;
                 }
-                Map<String, Object> header = mapper.convertValue(headerNode, new TypeReference<>() {
-                });
-                byte[] aad = buildAadBytes(header);
+                byte[] aad = buildAadBytes(headerNode);
                 byte[] nonce = decodeBase64(entry.get("nonce"));
                 byte[] ciphertext = decodeBase64(entry.get("ciphertext"));
 
@@ -70,12 +63,9 @@ public final class JokeReader {
         return Base64.getDecoder().decode(node.asText());
     }
 
-    private byte[] buildAadBytes(Map<String, Object> header) {
-        try {
-            return aadMapper.writeValueAsBytes(header);
-        } catch (IOException e) {
-            throw new RuntimeException("Cannot serialize AAD", e);
-        }
+    private byte[] buildAadBytes(JsonNode headerNode) {
+        String headerJson = headerNode.asText();
+        return headerJson.getBytes(StandardCharsets.UTF_8);
     }
 
     // Tiny demo
