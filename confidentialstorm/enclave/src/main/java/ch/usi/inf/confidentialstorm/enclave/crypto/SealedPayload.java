@@ -71,7 +71,7 @@ public final class SealedPayload {
         Objects.requireNonNull(plaintext, "Plaintext cannot be null");
         byte[] nonce = new byte[12];
         RANDOM.nextBytes(nonce);
-        byte[] aad = encodeAad(aadSpec, nonce);
+        byte[] aad = encodeAad(aadSpec);
         Cipher cipher = initCipher(Cipher.ENCRYPT_MODE, nonce, aad);
         byte[] ciphertext = doFinal(cipher, plaintext);
         return new EncryptedValue(aad, nonce, ciphertext);
@@ -131,15 +131,15 @@ public final class SealedPayload {
         }
     }
 
-    private static byte[] encodeAad(AADSpecification aad, byte[] nonce) {
+    private static byte[] encodeAad(AADSpecification aad) {
         if (aad == null || aad.isEmpty()) {
             return EMPTY_AAD;
         }
         Map<String, Object> sorted = new TreeMap<>(aad.attributes());
         aad.sourceComponent().ifPresent(component ->
-                sorted.put("source", AADUtils.privatizeComponentName(component.toString(), nonce)));
+                sorted.put("source", component.toString()));
         aad.destinationComponent().ifPresent(component ->
-                sorted.put("destination", AADUtils.privatizeComponentName(component.toString(), nonce)));
+                sorted.put("destination", component.toString()));
         if (sorted.isEmpty()) {
             return EMPTY_AAD;
         }
