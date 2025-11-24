@@ -7,22 +7,25 @@ import java.util.*;
 
 public final class DecodedAAD {
     private static final DecodedAAD EMPTY =
-            new DecodedAAD(Collections.emptyMap(), null, null, null);
+            new DecodedAAD(Collections.emptyMap(), null, null, null, null);
 
     private final Map<String, Object> attributes;
     private final String sourceName;
     private final String destinationName;
-    private final Integer sequenceName;
+    private final Long sequenceNumber;
+    private final String producerId;
 
     private DecodedAAD(Map<String, Object> attributes,
                        String sourceName,
                        String destinationName,
-                       Integer sequenceNumber
+                       Long sequenceNumber,
+                       String producerId
     ) {
         this.attributes = attributes;
         this.sourceName = sourceName;
         this.destinationName = destinationName;
-        this.sequenceName = sequenceNumber;
+        this.sequenceNumber = sequenceNumber;
+        this.producerId = producerId;
     }
 
     public static DecodedAAD fromBytes(byte[] aadBytes) {
@@ -32,15 +35,20 @@ public final class DecodedAAD {
         Map<String, Object> parsed = AADUtils.parseAadJson(aadBytes);
         Object source = parsed.remove("source");
         Object destination = parsed.remove("destination");
+        Object producerId = parsed.remove("producer_id");
         // optional: remove sequence number if present
-        Object sequenceNumber = parsed.remove("sequence_number");
+        Object sequenceNumber = parsed.remove("seq");
+        if (sequenceNumber == null) {
+            sequenceNumber = parsed.remove("sequence_number"); // backward compatibility
+        }
         Map<String, Object> attrs = Collections.unmodifiableMap(new LinkedHashMap<>(parsed));
 
         // construct DecodedAAD instance
         return new DecodedAAD(attrs,
                 toStringValue(source, "source"),
                 toStringValue(destination, "destination"),
-                toIntegerValue(sequenceNumber, "sequence_number"));
+                toLongValue(sequenceNumber, "sequence_number"),
+                toStringValue(producerId, "producer_id"));
     }
 
     public Map<String, Object> attributes() {
@@ -53,6 +61,14 @@ public final class DecodedAAD {
 
     public Optional<String> destinationHash() {
         return Optional.ofNullable(destinationName);
+    }
+
+    public Optional<Long> sequenceNumber() {
+        return Optional.ofNullable(sequenceNumber);
+    }
+
+    public Optional<String> producerId() {
+        return Optional.ofNullable(producerId);
     }
 
     public boolean matchesSource(TopologySpecification.Component component) {
@@ -89,13 +105,13 @@ public final class DecodedAAD {
         }
     }
 
-    public void requireSequenceNumber(int expectedSequenceNumber) {
-        if (sequenceName == null) {
+    public void requireSequenceNumber(long expectedSequenceNumber) {
+        if (sequenceNumber == null) {
             throw new IllegalArgumentException("AAD missing sequence number");
         }
-        if (!sequenceName.equals(expectedSequenceNumber)) {
+        if (!sequenceNumber.equals(expectedSequenceNumber)) {
             throw new IllegalArgumentException("AAD sequence number mismatch: expected "
-                    + expectedSequenceNumber + ", got " + sequenceName);
+                    + expectedSequenceNumber + ", got " + sequenceNumber);
         }
     }
 
@@ -109,14 +125,17 @@ public final class DecodedAAD {
         throw new IllegalArgumentException("AAD field '" + fieldName + "' must be a string");
     }
 
-    private static Integer toIntegerValue(Object value, String fieldName) {
+    private static Long toLongValue(Object value, String fieldName) {
         if (value == null) {
             return null;
         }
         if (value instanceof Integer integer) {
-            return integer;
+            return integer.longValue();
         }
-        throw new IllegalArgumentException("AAD field '" + fieldName + "' must be an integer");
+        if (value instanceof Long l) {
+            return l;
+        }
+        throw new IllegalArgumentException("AAD field '" + fieldName + "' must be a number");
     }
 
     @Override
@@ -125,6 +144,8 @@ public final class DecodedAAD {
                 "attributes=" + attributes +
                 ", sourceHash='" + sourceName + '\'' +
                 ", destinationHash='" + destinationName + '\'' +
+                ", sequenceNumber=" + sequenceNumber +
+                ", producerId='" + producerId + '\'' +
                 '}';
     }
 }

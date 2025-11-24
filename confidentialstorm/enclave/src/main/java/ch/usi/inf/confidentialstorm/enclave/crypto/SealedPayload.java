@@ -87,28 +87,20 @@ public final class SealedPayload {
         }
     }
 
-    public static void verify(EncryptedValue sealed,
-                              TopologySpecification.Component expectedSourceComponent,
-                              TopologySpecification.Component expectedDestinationComponent,
-                              int expectedSequenceNumber) {
-        // NOTE: the source component can be null when the payload is created outside the enclave
+    public static void verifyRoute(EncryptedValue sealed,
+                                   TopologySpecification.Component expectedSourceComponent,
+                                   TopologySpecification.Component expectedDestinationComponent) {
         Objects.requireNonNull(expectedDestinationComponent, "Expected destination cannot be null");
 
-        // get decoded aad from sealed value
         DecodedAAD aad = DecodedAAD.fromBytes(sealed.associatedData());
-
-        // ensure that the source and destination match
         LOG.debug("Decoded AAD: {}", aad, " using nonce: {}", HexFormat.of().formatHex(sealed.nonce()));
         LOG.debug("Expected source: {}", expectedSourceComponent);
         LOG.debug("Expected destination: {}", expectedDestinationComponent);
 
-        // source can be null if not expected
-        if (expectedSourceComponent != null)
+        if (expectedSourceComponent != null) {
             aad.requireSource(expectedSourceComponent);
-        // destination must match
+        }
         aad.requireDestination(expectedDestinationComponent);
-        // ensure that the sequence number matches
-        aad.requireSequenceNumber(expectedSequenceNumber);
     }
 
     private static Cipher initCipher(int mode, byte[] nonce, byte[] aad) {
