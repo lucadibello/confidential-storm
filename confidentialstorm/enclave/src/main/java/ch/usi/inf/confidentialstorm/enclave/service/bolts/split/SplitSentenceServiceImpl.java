@@ -14,10 +14,13 @@ import com.google.auto.service.AutoService;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicLong;
 
 @AutoService(SplitSentenceService.class)
 public class SplitSentenceServiceImpl extends SplitSentenceVerifier {
     private static final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SplitSentenceServiceImpl.class);
+    private final AtomicLong sequenceCounter = new AtomicLong(0);
+    private final String producerId = UUID.randomUUID().toString();
 
     @Override
     public SplitSentenceResponse splitImpl(SplitSentenceRequest request) {
@@ -44,10 +47,13 @@ public class SplitSentenceServiceImpl extends SplitSentenceVerifier {
             String routingKey = SealedPayload.deriveRoutingKey(plainWord);
 
             // Create new AAD specification (custom for each word)
+            long sequence = sequenceCounter.getAndIncrement();
             AADSpecification aad = AADSpecification.builder()
                     // NOTE: specify source and destination components for verification purposes
                     .sourceComponent(TopologySpecification.Component.SENTENCE_SPLIT)
                     .destinationComponent(TopologySpecification.Component.WORD_COUNT)
+                    .put("producer_id", producerId)
+                    .put("seq", sequence)
                     .build();
 
             // encrypt the word with its AAD

@@ -10,12 +10,14 @@ import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
 import com.google.auto.service.AutoService;
 
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 @AutoService(SpoutMapperService.class)
 public class SpoutMapperServiceImpl implements SpoutMapperService {
     private static final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SpoutMapperServiceImpl.class);
-    private final AtomicInteger COUNTER = new AtomicInteger(0);
+    private final AtomicLong sequenceCounter = new AtomicLong(0);
+    private final String producerId = UUID.randomUUID().toString();
 
     @Override
     public EncryptedValue setupRoute(TopologySpecification.Component component, EncryptedValue entry) {
@@ -23,10 +25,9 @@ public class SpoutMapperServiceImpl implements SpoutMapperService {
         Objects.requireNonNull(entry, "Encrypted entry cannot be null");
 
         // we want to verify that the entry is correctly sealed
-        SealedPayload.verify(entry,
+        SealedPayload.verifyRoute(entry,
                 TopologySpecification.Component.DATASET,
-                TopologySpecification.Component.MAPPER,
-                this.COUNTER.getAndIncrement()
+                TopologySpecification.Component.MAPPER
         );
 
         // get string body
@@ -34,11 +35,13 @@ public class SpoutMapperServiceImpl implements SpoutMapperService {
 
         TopologySpecification.Component downstreamComponent = TopologySpecification.requireSingleDownstream(component);
 
+        long sequence = sequenceCounter.getAndIncrement();
         // create new AAD with correct route names
         AADSpecification aad = AADSpecification.builder()
                 .sourceComponent(component)
                 .destinationComponent(downstreamComponent)
-                .put("seq", COUNTER.getAndIncrement())
+                .put("producer_id", producerId)
+                .put("seq", sequence)
                 .build();
 
         // seal again with new AAD routing information + return sealed entry

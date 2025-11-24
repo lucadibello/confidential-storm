@@ -11,10 +11,14 @@ import com.google.auto.service.AutoService;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 @AutoService(WordCountService.class)
 public class WordCountServiceImpl extends WordCountVerifier {
     private final Map<String, Long> counter = new HashMap<>();
+    private final AtomicLong sequenceCounter = new AtomicLong(0);
+    private final String producerId = UUID.randomUUID().toString();
 
     @Override
     public WordCountResponse countImpl(WordCountRequest request) {
@@ -30,9 +34,12 @@ public class WordCountServiceImpl extends WordCountVerifier {
         long newCount = counter.merge(word, 1L, Long::sum);
 
         // Create AAD for both sealed values
+        long sequence = sequenceCounter.getAndIncrement();
         AADSpecification aad = AADSpecification.builder()
                 .sourceComponent(TopologySpecification.Component.WORD_COUNT)
                 .destinationComponent(TopologySpecification.Component.HISTOGRAM_GLOBAL)
+                .put("producer_id", producerId)
+                .put("seq", sequence)
                 .build();
 
         // Seal the word and the new count
