@@ -7,18 +7,22 @@ import java.util.*;
 
 public final class DecodedAAD {
     private static final DecodedAAD EMPTY =
-            new DecodedAAD(Collections.emptyMap(), null, null);
+            new DecodedAAD(Collections.emptyMap(), null, null, null);
 
     private final Map<String, Object> attributes;
-    private final String sourceHash;
-    private final String destinationHash;
+    private final String sourceName;
+    private final String destinationName;
+    private final Integer sequenceName;
 
     private DecodedAAD(Map<String, Object> attributes,
-                       String sourceHash,
-                       String destinationHash) {
+                       String sourceName,
+                       String destinationName,
+                       Integer sequenceNumber
+    ) {
         this.attributes = attributes;
-        this.sourceHash = sourceHash;
-        this.destinationHash = destinationHash;
+        this.sourceName = sourceName;
+        this.destinationName = destinationName;
+        this.sequenceName = sequenceNumber;
     }
 
     public static DecodedAAD fromBytes(byte[] aadBytes) {
@@ -28,8 +32,15 @@ public final class DecodedAAD {
         Map<String, Object> parsed = AADUtils.parseAadJson(aadBytes);
         Object source = parsed.remove("source");
         Object destination = parsed.remove("destination");
+        // optional: remove sequence number if present
+        Object sequenceNumber = parsed.remove("sequence_number");
         Map<String, Object> attrs = Collections.unmodifiableMap(new LinkedHashMap<>(parsed));
-        return new DecodedAAD(attrs, toStringValue(source, "source"), toStringValue(destination, "destination"));
+
+        // construct DecodedAAD instance
+        return new DecodedAAD(attrs,
+                toStringValue(source, "source"),
+                toStringValue(destination, "destination"),
+                toIntegerValue(sequenceNumber, "sequence_number"));
     }
 
     public Map<String, Object> attributes() {
@@ -37,46 +48,54 @@ public final class DecodedAAD {
     }
 
     public Optional<String> sourceHash() {
-        return Optional.ofNullable(sourceHash);
+        return Optional.ofNullable(sourceName);
     }
 
     public Optional<String> destinationHash() {
-        return Optional.ofNullable(destinationHash);
+        return Optional.ofNullable(destinationName);
     }
 
-    public boolean matchesSource(TopologySpecification.Component component, byte[] nonce) {
+    public boolean matchesSource(TopologySpecification.Component component) {
         Objects.requireNonNull(component, "Component cannot be null");
-        Objects.requireNonNull(nonce, "Nonce cannot be null");
-        if (sourceHash == null) {
+        if (sourceName == null) {
             return false;
         }
-        return sourceHash.equals(component.getName());
+        return sourceName.equals(component.getName());
     }
 
-    public void requireSource(TopologySpecification.Component component, byte[] nonce) {
-        if (sourceHash == null) {
+    public void requireSource(TopologySpecification.Component component) {
+        if (sourceName == null) {
             throw new IllegalArgumentException("AAD missing source component");
         }
-        if (!matchesSource(component, nonce)) {
+        if (!matchesSource(component)) {
             throw new IllegalArgumentException("AAD source mismatch for " + component.getName());
         }
     }
 
-    public boolean matchesDestination(TopologySpecification.Component component, byte[] nonce) {
+    public boolean matchesDestination(TopologySpecification.Component component) {
         Objects.requireNonNull(component, "Component cannot be null");
-        Objects.requireNonNull(nonce, "Nonce cannot be null");
-        if (destinationHash == null) {
+        if (destinationName == null) {
             return false;
         }
-        return destinationHash.equals(component.getName());
+        return destinationName.equals(component.getName());
     }
 
-    public void requireDestination(TopologySpecification.Component component, byte[] nonce) {
-        if (destinationHash == null) {
+    public void requireDestination(TopologySpecification.Component component) {
+        if (destinationName == null) {
             throw new IllegalArgumentException("AAD missing destination component");
         }
-        if (!matchesDestination(component, nonce)) {
+        if (!matchesDestination(component)) {
             throw new IllegalArgumentException("AAD destination mismatch for " + component.getName());
+        }
+    }
+
+    public void requireSequenceNumber(int expectedSequenceNumber) {
+        if (sequenceName == null) {
+            throw new IllegalArgumentException("AAD missing sequence number");
+        }
+        if (!sequenceName.equals(expectedSequenceNumber)) {
+            throw new IllegalArgumentException("AAD sequence number mismatch: expected "
+                    + expectedSequenceNumber + ", got " + sequenceName);
         }
     }
 
@@ -90,12 +109,22 @@ public final class DecodedAAD {
         throw new IllegalArgumentException("AAD field '" + fieldName + "' must be a string");
     }
 
+    private static Integer toIntegerValue(Object value, String fieldName) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Integer integer) {
+            return integer;
+        }
+        throw new IllegalArgumentException("AAD field '" + fieldName + "' must be an integer");
+    }
+
     @Override
     public String toString() {
         return "DecodedAAD{" +
                 "attributes=" + attributes +
-                ", sourceHash='" + sourceHash + '\'' +
-                ", destinationHash='" + destinationHash + '\'' +
+                ", sourceHash='" + sourceName + '\'' +
+                ", destinationHash='" + destinationName + '\'' +
                 '}';
     }
 }

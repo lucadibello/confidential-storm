@@ -8,9 +8,11 @@ import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
 
 import java.util.Collection;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public abstract class ConfidentialBoltService<T extends Record> {
     private static final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(ConfidentialBoltService.class);
+    private final AtomicInteger COUNTER = new AtomicInteger(0);
 
     public abstract TopologySpecification.Component expectedSourceComponent();
     public abstract TopologySpecification.Component expectedDestinationComponent();
@@ -31,7 +33,7 @@ public abstract class ConfidentialBoltService<T extends Record> {
                 // NOTE: if the source is null, it means that the value was created outside of ConfidentialStorm
                 // hence, verifyRoute would verify only the destination component
                 LOG.info("Verifying sealed value: {} from {} to {}", sealedValue, expectedSource, destination);
-                SealedPayload.verifyRoute(sealedValue, expectedSource, destination);
+                SealedPayload.verify(sealedValue, expectedSource, destination);
             } catch (Exception e) {
                 LOG.error("Sealed value verification failed for source {} destination {} value {}: {}",
                         expectedSource, destination, sealedValue, e.getMessage());

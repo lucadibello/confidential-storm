@@ -3,7 +3,6 @@ package ch.usi.inf.confidentialstorm.enclave.crypto;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.crypto.model.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.common.crypto.model.aad.DecodedAAD;
-import ch.usi.inf.confidentialstorm.common.crypto.util.AADUtils;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
@@ -88,9 +87,10 @@ public final class SealedPayload {
         }
     }
 
-    public static void verifyRoute(EncryptedValue sealed,
-                                   TopologySpecification.Component expectedSourceComponent,
-                                   TopologySpecification.Component expectedDestinationComponent) {
+    public static void verify(EncryptedValue sealed,
+                              TopologySpecification.Component expectedSourceComponent,
+                              TopologySpecification.Component expectedDestinationComponent,
+                              int expectedSequenceNumber) {
         // NOTE: the source component can be null when the payload is created outside the enclave
         Objects.requireNonNull(expectedDestinationComponent, "Expected destination cannot be null");
 
@@ -104,9 +104,11 @@ public final class SealedPayload {
 
         // source can be null if not expected
         if (expectedSourceComponent != null)
-            aad.requireSource(expectedSourceComponent, sealed.nonce());
+            aad.requireSource(expectedSourceComponent);
         // destination must match
-        aad.requireDestination(expectedDestinationComponent, sealed.nonce());
+        aad.requireDestination(expectedDestinationComponent);
+        // ensure that the sequence number matches
+        aad.requireSequenceNumber(expectedSequenceNumber);
     }
 
     private static Cipher initCipher(int mode, byte[] nonce, byte[] aad) {

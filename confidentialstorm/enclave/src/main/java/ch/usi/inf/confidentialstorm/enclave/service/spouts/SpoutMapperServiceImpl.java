@@ -10,10 +10,12 @@ import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
 import com.google.auto.service.AutoService;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @AutoService(SpoutMapperService.class)
 public class SpoutMapperServiceImpl implements SpoutMapperService {
     private static final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SpoutMapperServiceImpl.class);
+    private final AtomicInteger COUNTER = new AtomicInteger(0);
 
     @Override
     public EncryptedValue setupRoute(TopologySpecification.Component component, EncryptedValue entry) {
@@ -21,9 +23,11 @@ public class SpoutMapperServiceImpl implements SpoutMapperService {
         Objects.requireNonNull(entry, "Encrypted entry cannot be null");
 
         // we want to verify that the entry is correctly sealed
-        SealedPayload.verifyRoute(entry,
+        SealedPayload.verify(entry,
                 TopologySpecification.Component.DATASET,
-                TopologySpecification.Component.MAPPER);
+                TopologySpecification.Component.MAPPER,
+                this.COUNTER.getAndIncrement()
+        );
 
         // get string body
         byte[] body = SealedPayload.decrypt(entry);
@@ -34,6 +38,7 @@ public class SpoutMapperServiceImpl implements SpoutMapperService {
         AADSpecification aad = AADSpecification.builder()
                 .sourceComponent(component)
                 .destinationComponent(downstreamComponent)
+                .put("seq", COUNTER.getAndIncrement())
                 .build();
 
         // seal again with new AAD routing information + return sealed entry
