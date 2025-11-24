@@ -77,8 +77,8 @@ def main(dataset_path: str, output_path: str):
         # build header (this will later be AAD)
         # NOTE: this is empty at generation, but may be recomputed during
         header = {
-            "source": hash_component_name(SOURCE_NAME, nonce),
-            "destination": hash_component_name(DESTINATION_NAME, nonce),
+            "source": SOURCE_NAME,
+            "destination": DESTINATION_NAME,
         }
 
         # serialize header as JSON
@@ -114,16 +114,6 @@ def main(dataset_path: str, output_path: str):
         f"Encrypted dataset written to '{output_path}' "
         f"({len(encrypted_entries)} entries)."
     )
-
-
-def hash_component_name(source_name: str, nonce: bytes) -> str:
-    digest = Hash(SHA256())
-    digest.update(source_name.encode("utf-8"))
-    digest.update(nonce)
-    result_hash = digest.finalize()
-
-    # base64 result to return a string
-    return base64.b64encode(result_hash).decode("ascii")
 
 
 if __name__ == "__main__":

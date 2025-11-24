@@ -34,6 +34,6 @@ public abstract class HistogramServiceVerifier extends ConfidentialBoltService<H
 
     @Override
     public Collection<EncryptedValue> valuesToVerify(HistogramUpdateRequest request) {
-        return List.of();
+        return List.of(request.word(), request.count());
     }
 }

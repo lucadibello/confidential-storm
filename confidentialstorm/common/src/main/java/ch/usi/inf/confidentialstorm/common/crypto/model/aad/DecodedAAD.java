@@ -50,7 +50,7 @@ public final class DecodedAAD {
         if (sourceHash == null) {
             return false;
         }
-        return sourceHash.equals(AADUtils.privatizeComponentName(component.getName(), nonce));
+        return sourceHash.equals(component.getName());
     }
 
     public void requireSource(TopologySpecification.Component component, byte[] nonce) {
@@ -68,7 +68,7 @@ public final class DecodedAAD {
         if (destinationHash == null) {
             return false;
         }
-        return destinationHash.equals(AADUtils.privatizeComponentName(component.getName(), nonce));
+        return destinationHash.equals(component.getName());
     }
 
     public void requireDestination(TopologySpecification.Component component, byte[] nonce) {
