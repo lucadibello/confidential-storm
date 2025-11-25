@@ -14,7 +14,7 @@ import java.util.Objects;
  * Dynamic proxy that wraps enclave services to enforce null checks and
  * unwrap/propagate enclave exceptions automatically for all service interfaces.
  */
-public final class EnclaveServiceProxy {
+final class EnclaveServiceProxy {
     private static final Logger LOG = org.slf4j.LoggerFactory.getLogger(EnclaveServiceProxy.class);
     private static final String TEACLAVE_PROXY_HANDLER = "org.apache.teaclave.javasdk.host.ProxyEnclaveInvocationHandler";
     private static final boolean PROPAGATE_EXCEPTIONS = Boolean.parseBoolean(System.getProperty("confidentialstorm.debug.exceptions.enabled", "false"));

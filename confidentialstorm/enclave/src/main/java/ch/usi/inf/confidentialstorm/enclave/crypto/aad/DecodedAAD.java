@@ -1,14 +1,11 @@
-package ch.usi.inf.confidentialstorm.common.crypto.model.aad;
+package ch.usi.inf.confidentialstorm.enclave.crypto.aad;
 
-import ch.usi.inf.confidentialstorm.common.crypto.util.AADUtils;
+import ch.usi.inf.confidentialstorm.enclave.crypto.util.AADUtils;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 
 import java.util.*;
 
 public final class DecodedAAD {
-    private static final DecodedAAD EMPTY =
-            new DecodedAAD(Collections.emptyMap(), null, null, null, null);
-
     private final Map<String, Object> attributes;
     private final String sourceName;
     private final String destinationName;
@@ -30,7 +27,8 @@ public final class DecodedAAD {
 
     public static DecodedAAD fromBytes(byte[] aadBytes) {
         if (aadBytes == null || aadBytes.length == 0) {
-            return EMPTY;
+            // empty
+            return new DecodedAAD(Collections.emptyMap(), null, null, null, null);
         }
         Map<String, Object> parsed = AADUtils.parseAadJson(aadBytes);
         Object source = parsed.remove("source");
@@ -119,23 +117,25 @@ public final class DecodedAAD {
         if (value == null) {
             return null;
         }
-        if (value instanceof String str) {
-            return str;
-        }
-        throw new IllegalArgumentException("AAD field '" + fieldName + "' must be a string");
+        // Be permissive: coerce to string to avoid deserialization issues when types differ.
+        return String.valueOf(value);
     }
 
     private static Long toLongValue(Object value, String fieldName) {
         if (value == null) {
             return null;
         }
-        if (value instanceof Integer integer) {
-            return integer.longValue();
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
         }
-        if (value instanceof Long l) {
-            return l;
+        if (value instanceof String) {
+            try {
+                return Long.parseLong((String) value);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
         }
-        throw new IllegalArgumentException("AAD field '" + fieldName + "' must be a number");
+        return null;
     }
 
     @Override

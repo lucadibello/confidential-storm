@@ -3,6 +3,7 @@ package ch.usi.inf.confidentialstorm.host.bolts;
 import ch.usi.inf.confidentialstorm.common.api.WordCountService;
 import ch.usi.inf.confidentialstorm.common.api.model.WordCountRequest;
 import ch.usi.inf.confidentialstorm.common.api.model.WordCountResponse;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.host.bolts.base.ConfidentialBolt;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
@@ -32,10 +33,11 @@ public class WordCounterBolt extends ConfidentialBolt<WordCountService> {
     }
 
     @Override
-    protected void processTuple(Tuple input, WordCountService service) {
+    protected void processTuple(Tuple input, WordCountService service) throws EnclaveServiceException {
         // extract routing key and encrypted word from the input tuple
         String routingKey = input.getStringByField("wordKey");
         EncryptedValue word = (EncryptedValue) input.getValueByField("encryptedWord");
+        LOG.debug("[WordCounterBolt {}] Received tuple with routingKey {}", boltId, routingKey);
 
         // confidentially count the occurrences of the word
         WordCountRequest req = new WordCountRequest(routingKey, word);

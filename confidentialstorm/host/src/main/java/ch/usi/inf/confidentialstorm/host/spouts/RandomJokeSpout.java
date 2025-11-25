@@ -1,5 +1,8 @@
 package ch.usi.inf.confidentialstorm.host.spouts;
 
+import ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.host.spouts.base.ConfidentialSpout;
 import org.apache.storm.spout.SpoutOutputCollector;
@@ -30,7 +33,9 @@ public class RandomJokeSpout extends ConfidentialSpout {
     JokeReader jokeReader = new JokeReader();
     try {
       encryptedJokes = jokeReader.readAll("jokes.enc.json");
+      LOG.info("[RandomJokeSpout {}] Loaded {} jokes from encrypted dataset", this.state.getTaskId(), encryptedJokes.size());
     } catch (IOException e) {
+      LOG.error("[RandomJokeSpout {}] Failed to load jokes dataset", this.state.getTaskId(), e);
       throw new RuntimeException(e);
     }
     // save the collector for emitting tuples <Joke, String>
@@ -48,9 +53,30 @@ public class RandomJokeSpout extends ConfidentialSpout {
     // generate the next random joke
     int idx = rand.nextInt(encryptedJokes.size());
     EncryptedValue currentJoke = encryptedJokes.get(idx);
-    EncryptedValue routedJoke = getMapperService().setupRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
 
-    LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJoke);
+    // make test call to check what's crashing
+    LOG.debug("[RandomJokeSpout {}] Testing route for joke index {}", this.state.getTaskId(), idx);
+      EncryptedValue test = null;
+      try {
+          test = getMapperService().testRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
+      } catch (SealedPayloadProcessingException | CipherInitializationException e) {
+          LOG.error("[RandomJokeSpout {}] Route test failed", this.state.getTaskId(), e);
+          throw new RuntimeException(e);
+      }
+      LOG.debug("[RandomJokeSpout {}] Route test produced {}", this.state.getTaskId(), test);
+
+      EncryptedValue routedJoke = null;
+      try {
+          routedJoke = getMapperService().setupRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
+      } catch (SealedPayloadProcessingException e) {
+          throw new RuntimeException(e);
+      } catch (CipherInitializationException e) {
+          throw new RuntimeException(e);
+      } catch (AADEncodingException e) {
+          throw new RuntimeException(e);
+      }
+
+      LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJoke);
     getCollector().emit(new Values(routedJoke));
 
     // sleep for a while to avoid starving the topology
