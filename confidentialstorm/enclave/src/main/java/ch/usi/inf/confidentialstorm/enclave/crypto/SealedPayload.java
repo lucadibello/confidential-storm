@@ -6,15 +6,11 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitialization
 import ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.enclave.EnclaveConfig;
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
-import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.MapperFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
@@ -24,7 +20,10 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
-import java.util.*;
+import java.util.HexFormat;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
 
 /**
  * Utility class for sealing and unsealing payloads within the enclave.
@@ -36,7 +35,6 @@ public final class SealedPayload {
     private final SecretKey encryptionKey;
     private final SecretKey macKey;
     private final SecureRandom random;
-    private final ObjectMapper aadMapper;
     private final byte[] emptyAad = new byte[0];
 
     private SealedPayload(byte[] streamKey) {
@@ -45,9 +43,7 @@ public final class SealedPayload {
         this.encryptionKey = new SecretKeySpec(streamKey, "ChaCha20");
         this.macKey = new SecretKeySpec(streamKey, "HmacSHA256");
         this.random = new SecureRandom();
-        this.aadMapper = JsonMapper.builder()
-                .configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true)
-                .build();
+        this.log.info("SealedPayload initialized successfully");
     }
 
     public static SealedPayload fromConfig() {
@@ -146,10 +142,43 @@ public final class SealedPayload {
         if (sorted.isEmpty()) {
             return emptyAad;
         }
+        return serializeAad(sorted);
+    }
+
+    private byte[] serializeAad(Map<String, Object> fields) throws AADEncodingException {
         try {
-            return aadMapper.writeValueAsBytes(sorted);
-        } catch (JsonProcessingException e) {
+            StringBuilder sb = new StringBuilder();
+            sb.append('{');
+            boolean first = true;
+            for (Map.Entry<String, Object> entry : fields.entrySet()) {
+                if (!first) {
+                    sb.append(',');
+                }
+                first = false;
+                sb.append('"').append(escapeJson(entry.getKey())).append("\":");
+                Object value = entry.getValue();
+                if (value instanceof Number || value instanceof Boolean) {
+                    sb.append(value.toString());
+                } else {
+                    sb.append('"').append(escapeJson(String.valueOf(value))).append('"');
+                }
+            }
+            sb.append('}');
+            return sb.toString().getBytes(StandardCharsets.UTF_8);
+        } catch (Exception e) {
             throw new AADEncodingException("Unable to encode AAD", e);
         }
+    }
+
+    private String escapeJson(String input) {
+        StringBuilder sb = new StringBuilder(input.length());
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            if (c == '"' || c == '\\') {
+                sb.append('\\');
+            }
+            sb.append(c);
+        }
+        return sb.toString();
     }
 }
