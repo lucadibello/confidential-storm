@@ -1,6 +1,7 @@
 package ch.usi.inf.confidentialstorm.host.spouts.base;
 
 import ch.usi.inf.confidentialstorm.common.api.SpoutMapperService;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.host.base.ConfidentialComponentState;
 import ch.usi.inf.confidentialstorm.host.util.EnclaveErrorUtils;
 import org.apache.storm.spout.SpoutOutputCollector;
@@ -109,5 +110,5 @@ public abstract class ConfidentialSpout extends BaseRichSpout {
         return Map.of();
     }
 
-    protected abstract void executeNextTuple();
+    protected abstract void executeNextTuple() throws EnclaveServiceException;
 }
