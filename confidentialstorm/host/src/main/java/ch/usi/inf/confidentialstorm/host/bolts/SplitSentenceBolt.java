@@ -37,6 +37,7 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
     protected void processTuple(Tuple input, SplitSentenceService service) throws EnclaveServiceException {
         // read encrypted body
         EncryptedValue encryptedBody = (EncryptedValue) input.getValueByField("body");
+        LOG.debug("[SplitSentenceBolt {}] Received encrypted joke payload {}", boltId, encryptedBody);
 
         // request enclave to split the sentence
         SplitSentenceResponse response = service.split(new SplitSentenceRequest(encryptedBody));
@@ -50,6 +51,7 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
             getCollector().emit(input, new Values(word.routingKey(), word.payload()));
         }
         getCollector().ack(input);
+        LOG.debug("[SplitSentenceBolt {}] Acked encrypted joke {}", boltId, encryptedBody);
     }
 
     @Override

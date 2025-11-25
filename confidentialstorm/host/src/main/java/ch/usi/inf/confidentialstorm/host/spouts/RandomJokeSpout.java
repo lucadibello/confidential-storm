@@ -33,7 +33,9 @@ public class RandomJokeSpout extends ConfidentialSpout {
     JokeReader jokeReader = new JokeReader();
     try {
       encryptedJokes = jokeReader.readAll("jokes.enc.json");
+      LOG.info("[RandomJokeSpout {}] Loaded {} jokes from encrypted dataset", this.state.getTaskId(), encryptedJokes.size());
     } catch (IOException e) {
+      LOG.error("[RandomJokeSpout {}] Failed to load jokes dataset", this.state.getTaskId(), e);
       throw new RuntimeException(e);
     }
     // save the collector for emitting tuples <Joke, String>
@@ -53,14 +55,15 @@ public class RandomJokeSpout extends ConfidentialSpout {
     EncryptedValue currentJoke = encryptedJokes.get(idx);
 
     // make test call to check what's crashing
-    System.out.println("Testing route for joke: " + currentJoke);
+    LOG.debug("[RandomJokeSpout {}] Testing route for joke index {}", this.state.getTaskId(), idx);
       EncryptedValue test = null;
       try {
           test = getMapperService().testRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
       } catch (SealedPayloadProcessingException | CipherInitializationException e) {
+          LOG.error("[RandomJokeSpout {}] Route test failed", this.state.getTaskId(), e);
           throw new RuntimeException(e);
       }
-      System.out.println("Test route output: " + test);
+      LOG.debug("[RandomJokeSpout {}] Route test produced {}", this.state.getTaskId(), test);
 
       EncryptedValue routedJoke = null;
       try {

@@ -28,6 +28,7 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
     private static final Logger LOG = LoggerFactory.getLogger(HistogramBolt.class);
     private final String OUTPUT_FILE = "data/histogram.txt";
     private ExecutorService io;
+    private int boltId;
 
     public HistogramBolt() {
         super(HistogramService.class);
@@ -36,8 +37,9 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
     @Override
     protected void afterPrepare(Map<String, Object> topoConf, TopologyContext context) {
         super.afterPrepare(topoConf, context);
+        this.boltId = context.getThisTaskId();
         this.io = Executors.newSingleThreadExecutor();
-        LOG.info("[HistogramBolt {}] Prepared. Snapshot output: {}", context.getThisTaskId(), OUTPUT_FILE);
+        LOG.info("[HistogramBolt {}] Prepared. Snapshot output: {}", boltId, OUTPUT_FILE);
     }
 
     @Override
@@ -89,7 +91,7 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
     protected void processTuple(Tuple input, HistogramService service) throws EnclaveServiceException {
         // if tick tuple -> export histogram to file
         if (isTickTuple(input)) {
-            LOG.info("[HistogramBolt] Received tick tuple. Exporting histogram snapshot...");
+            LOG.info("[HistogramBolt {}] Received tick tuple. Exporting histogram snapshot...", boltId);
             HistogramSnapshotResponse snapshot = service.snapshot();
 
             Map<String, Long> snap = snapshot.counts();
@@ -99,18 +101,19 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
                 // export snapshot to file
                 writeSnapshot(snap);
             }
-            LOG.info("[HistogramBolt] Received tick tuple. Exporting histogram snapshot with {} entries.", snapshot.counts().size());
+            LOG.info("[HistogramBolt {}] Exported histogram snapshot with {} entries.", boltId, snapshot.counts().size());
             return;
         }
 
         // in any case -> update the histogram with the new values
         EncryptedValue word = (EncryptedValue) input.getValueByField("word");
         EncryptedValue newCount = (EncryptedValue) input.getValueByField("count");
-        LOG.info("[HistogramBolt] Updating histogram with encrypted tuple");
+        LOG.info("[HistogramBolt {}] Updating histogram with encrypted tuple", boltId);
         service.update(new HistogramUpdateRequest(word, newCount));
 
         // acknowledge the tuple
         getCollector().ack(input);
+        LOG.debug("[HistogramBolt {}] Acked histogram update", boltId);
     }
 
     @Override

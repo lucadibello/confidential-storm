@@ -37,6 +37,7 @@ public class WordCounterBolt extends ConfidentialBolt<WordCountService> {
         // extract routing key and encrypted word from the input tuple
         String routingKey = input.getStringByField("wordKey");
         EncryptedValue word = (EncryptedValue) input.getValueByField("encryptedWord");
+        LOG.debug("[WordCounterBolt {}] Received tuple with routingKey {}", boltId, routingKey);
 
         // confidentially count the occurrences of the word
         WordCountRequest req = new WordCountRequest(routingKey, word);
