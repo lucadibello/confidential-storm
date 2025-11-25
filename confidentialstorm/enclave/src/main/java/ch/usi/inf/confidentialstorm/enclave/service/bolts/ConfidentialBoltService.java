@@ -1,7 +1,7 @@
 package ch.usi.inf.confidentialstorm.enclave.service.bolts;
 
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
-import ch.usi.inf.confidentialstorm.common.crypto.model.aad.DecodedAAD;
+import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
@@ -17,18 +17,27 @@ public abstract class ConfidentialBoltService<T extends Record> {
     /**
      * Zero-depencency logger for the enclave services.
      */
-    private static final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(ConfidentialBoltService.class);
+    private final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(ConfidentialBoltService.class);
 
     /**
      * Size of the replay window for sequence number tracking (should be large enough to accommodate out-of-order messages).
      */
-    private static final int REPLAY_WINDOW_SIZE = 128;
+    private final int REPLAY_WINDOW_SIZE = 128;
 
     /**
      * Map of producer IDs to their corresponding replay windows for replay attack prevention.
      * NOTE: we use a map of replay windows as one bolt could ingest data streams from multiple different producers.
      */
     private final Map<String, ReplayWindow> replayWindows = new ConcurrentHashMap<>();
+    protected final SealedPayload sealedPayload;
+
+    protected ConfidentialBoltService() {
+        this(SealedPayload.fromConfig());
+    }
+
+    protected ConfidentialBoltService(SealedPayload sealedPayload) {
+        this.sealedPayload = Objects.requireNonNull(sealedPayload, "sealedPayload cannot be null");
+    }
 
     /**
      * Get the expected source component for the sealed values in the request.
@@ -72,7 +81,7 @@ public abstract class ConfidentialBoltService<T extends Record> {
                 // NOTE: if the source is null, it means that the value was created outside of ConfidentialStorm
                 // hence, verifyRoute would verify only the destination component
                 LOG.info("Verifying sealed value: {} from {} to {}", sealedValue, expectedSource, destination);
-                SealedPayload.verifyRoute(sealedValue, expectedSource, destination);
+                sealedPayload.verifyRoute(sealedValue, expectedSource, destination);
 
                 // extract AAD and check producer/sequence consistency
                 DecodedAAD aad = DecodedAAD.fromBytes(sealedValue.associatedData());

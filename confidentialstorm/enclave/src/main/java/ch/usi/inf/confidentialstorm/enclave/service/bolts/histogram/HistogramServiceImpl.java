@@ -3,7 +3,8 @@ package ch.usi.inf.confidentialstorm.enclave.service.bolts.histogram;
 import ch.usi.inf.confidentialstorm.common.api.HistogramService;
 import ch.usi.inf.confidentialstorm.common.api.model.HistogramSnapshotResponse;
 import ch.usi.inf.confidentialstorm.common.api.model.HistogramUpdateRequest;
-import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import com.google.auto.service.AutoService;
 
 import java.util.HashMap;
@@ -14,9 +15,9 @@ public class HistogramServiceImpl extends HistogramServiceVerifier {
     private final Map<String, Long> histogram = new HashMap<>();
 
     @Override
-    public void updateImpl(HistogramUpdateRequest update) {
-        String word = SealedPayload.decryptToString(update.word());
-        long count = Long.parseLong(SealedPayload.decryptToString(update.count()));
+    public void updateImpl(HistogramUpdateRequest update) throws SealedPayloadProcessingException, CipherInitializationException {
+        String word = sealedPayload.decryptToString(update.word());
+        long count = Long.parseLong(sealedPayload.decryptToString(update.count()));
         histogram.put(word, count);
     }
 

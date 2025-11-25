@@ -1,4 +1,4 @@
-package ch.usi.inf.confidentialstorm.common.crypto.model.aad;
+package ch.usi.inf.confidentialstorm.enclave.crypto.aad;
 
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 
@@ -7,9 +7,6 @@ import java.util.Map;
 import java.util.Optional;
 
 public final class AADSpecification {
-    private static final AADSpecification EMPTY =
-            new AADSpecification(Collections.emptyMap(), null, null);
-
     private final Map<String, Object> attributes;
     private final TopologySpecification.Component sourceComponent;
     private final TopologySpecification.Component destinationComponent;
@@ -24,7 +21,7 @@ public final class AADSpecification {
 
     // singleton empty instance to avoid unnecessary allocations
     public static AADSpecification empty() {
-        return EMPTY;
+        return new AADSpecification(Collections.emptyMap(), null, null);
     }
 
     public Map<String, Object> attributes() {

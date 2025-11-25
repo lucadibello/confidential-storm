@@ -73,6 +73,7 @@
                                         <buildArg>--no-fallback</buildArg>
                                         <buildArg>-H:-AllowVMInternalThreads</buildArg>
                                         <buildArg>-H:+RunInEnclave</buildArg>
+                                        <buildArg>-H:+TraceSecurityServices</buildArg>
                                         <buildArg>-H:Path=${project.build.directory}/svm-output</buildArg>
                                         <buildArg>-o ${project.build.directory}/svm-output/lib_tee_sdk_svm_load</buildArg>
                                     </buildArgs>
@@ -164,6 +165,11 @@
         <dependency>
             <groupId>ch.usi.inf.confidentialstorm</groupId>
             <artifactId>common</artifactId>
+        </dependency>
+        <!-- Jackson for JSON processing -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
         </dependency>
         <dependency>
             <groupId>com.google.auto.service</groupId>

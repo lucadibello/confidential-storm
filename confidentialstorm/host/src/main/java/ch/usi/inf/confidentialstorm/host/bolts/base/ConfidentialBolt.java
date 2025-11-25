@@ -1,5 +1,6 @@
 package ch.usi.inf.confidentialstorm.host.bolts.base;
 
+import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.host.base.ConfidentialComponentState;
 import ch.usi.inf.confidentialstorm.host.util.EnclaveErrorUtils;
 import org.apache.storm.task.OutputCollector;
@@ -96,7 +97,7 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
         // hook for subclasses
     }
 
-    protected abstract void processTuple(Tuple input, S service);
+    protected abstract void processTuple(Tuple input, S service) throws EnclaveServiceException;
 
     protected OutputCollector getCollector() {
         return state.getCollector();

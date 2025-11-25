@@ -39,7 +39,8 @@ public class EnclaveManager<S> {
 
         try {
             this.enclave = Enclaves.createEnclave(activeEnclaveType);
-            this.service = EnclaveServiceProxy.wrap(this.serviceClass, Enclaves.loadService(this.enclave, this.serviceClass));
+            // this.service = EnclaveServiceProxy.wrap(this.serviceClass, Enclaves.loadService(this.enclave, this.serviceClass));
+            this.service = Enclaves.loadService(this.enclave, this.serviceClass);
             LOG.info("Confidential service {} initialized in enclave of type {}", serviceClass.getName(),
                     activeEnclaveType);
         } catch (Throwable e) {

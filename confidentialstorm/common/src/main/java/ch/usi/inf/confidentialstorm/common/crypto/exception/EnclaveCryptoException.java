@@ -5,7 +5,7 @@ import java.io.Serializable;
 /**
  * Base class for enclave cryptographic errors.
  */
-public class EnclaveCryptoException extends RuntimeException implements Serializable {
+public class EnclaveCryptoException extends Exception implements Serializable {
     private static final long serialVersionUID = 1L;
 
     public EnclaveCryptoException(String message) {

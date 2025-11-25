@@ -1,4 +1,4 @@
-package ch.usi.inf.confidentialstorm.common.crypto.model.aad;
+package ch.usi.inf.confidentialstorm.enclave.crypto.aad;
 
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 
