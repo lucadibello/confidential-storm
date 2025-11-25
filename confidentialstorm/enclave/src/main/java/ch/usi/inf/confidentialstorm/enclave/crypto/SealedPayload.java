@@ -1,14 +1,14 @@
 package ch.usi.inf.confidentialstorm.enclave.crypto;
 
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
-import ch.usi.inf.confidentialstorm.common.crypto.model.aad.AADSpecification;
-import ch.usi.inf.confidentialstorm.common.crypto.model.aad.DecodedAAD;
-import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.enclave.EnclaveConfig;
+import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
+import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -31,55 +31,63 @@ import java.util.*;
  * Uses ChaCha20-Poly1305 for encryption and HMAC-SHA256 for routing key derivation.
  */
 public final class SealedPayload {
-    private static final byte[] STREAM_KEY = HexFormat.of().parseHex(EnclaveConfig.STREAM_KEY_HEX);
-    private static final SecretKey ENCRYPTION_KEY = new SecretKeySpec(STREAM_KEY, "ChaCha20");
-    private static final SecretKey MAC_KEY = new SecretKeySpec(STREAM_KEY, "HmacSHA256");
-    private static final SecureRandom RANDOM = new SecureRandom();
-    private static final byte[] EMPTY_AAD = new byte[0];
 
-    private static final ObjectMapper AAD_MAPPER = JsonMapper.builder()
-            .configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true)
-            .build();
+    private final EnclaveLogger log;
+    private final SecretKey encryptionKey;
+    private final SecretKey macKey;
+    private final SecureRandom random;
+    private final ObjectMapper aadMapper;
+    private final byte[] emptyAad = new byte[0];
 
-    private static final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SealedPayload.class);
-
-    private SealedPayload() {
+    private SealedPayload(byte[] streamKey) {
+        this.log = EnclaveLoggerFactory.getLogger(SealedPayload.class);
+        this.log.info("Initializing SealedPayload");
+        this.encryptionKey = new SecretKeySpec(streamKey, "ChaCha20");
+        this.macKey = new SecretKeySpec(streamKey, "HmacSHA256");
+        this.random = new SecureRandom();
+        this.aadMapper = JsonMapper.builder()
+                .configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true)
+                .build();
     }
 
-    public static byte[] decrypt(EncryptedValue sealed) {
+    public static SealedPayload fromConfig() {
+        return new SealedPayload(HexFormat.of().parseHex(EnclaveConfig.STREAM_KEY_HEX));
+    }
+
+    public byte[] decrypt(EncryptedValue sealed) throws SealedPayloadProcessingException, CipherInitializationException {
         Objects.requireNonNull(sealed, "Encrypted payload cannot be null");
         Cipher cipher = initCipher(Cipher.DECRYPT_MODE, sealed.nonce(), sealed.associatedData());
         return doFinal(cipher, sealed.ciphertext());
     }
 
-    public static String decryptToString(EncryptedValue sealed) {
+    public String decryptToString(EncryptedValue sealed) throws SealedPayloadProcessingException, CipherInitializationException {
         byte[] plaintext = decrypt(sealed);
         return new String(plaintext, StandardCharsets.UTF_8);
     }
 
-    public static EncryptedValue encryptString(String plaintext, AADSpecification aadSpec) {
+    public EncryptedValue encryptString(String plaintext, AADSpecification aadSpec) throws SealedPayloadProcessingException, AADEncodingException, CipherInitializationException {
         byte[] data = plaintext.getBytes(StandardCharsets.UTF_8);
         return encrypt(data, aadSpec);
     }
 
-    public static EncryptedValue encrypt(byte[] plaintext, Map<String, Object> aadFields) {
+    public EncryptedValue encrypt(byte[] plaintext, Map<String, Object> aadFields) throws SealedPayloadProcessingException, AADEncodingException, CipherInitializationException {
         return encrypt(plaintext, AADSpecification.builder().putAll(aadFields).build());
     }
 
-    public static EncryptedValue encrypt(byte[] plaintext, AADSpecification aadSpec) {
+    public EncryptedValue encrypt(byte[] plaintext, AADSpecification aadSpec) throws AADEncodingException, CipherInitializationException, SealedPayloadProcessingException {
         Objects.requireNonNull(plaintext, "Plaintext cannot be null");
         byte[] nonce = new byte[12];
-        RANDOM.nextBytes(nonce);
+        random.nextBytes(nonce);
         byte[] aad = encodeAad(aadSpec);
         Cipher cipher = initCipher(Cipher.ENCRYPT_MODE, nonce, aad);
         byte[] ciphertext = doFinal(cipher, plaintext);
         return new EncryptedValue(aad, nonce, ciphertext);
     }
 
-    public static String deriveRoutingKey(String value) {
+    public String deriveRoutingKey(String value) throws RoutingKeyDerivationException {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(MAC_KEY);
+            mac.init(macKey);
             byte[] digest = mac.doFinal(value.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest);
         } catch (GeneralSecurityException e) {
@@ -87,15 +95,16 @@ public final class SealedPayload {
         }
     }
 
-    public static void verifyRoute(EncryptedValue sealed,
-                                   TopologySpecification.Component expectedSourceComponent,
-                                   TopologySpecification.Component expectedDestinationComponent) {
+    public void verifyRoute(EncryptedValue sealed,
+                            TopologySpecification.Component expectedSourceComponent,
+                            TopologySpecification.Component expectedDestinationComponent) {
         Objects.requireNonNull(expectedDestinationComponent, "Expected destination cannot be null");
 
+        log.debug("Decoding AAD for route verification");
         DecodedAAD aad = DecodedAAD.fromBytes(sealed.associatedData());
-        LOG.debug("Decoded AAD: {}", aad, " using nonce: {}", HexFormat.of().formatHex(sealed.nonce()));
-        LOG.debug("Expected source: {}", expectedSourceComponent);
-        LOG.debug("Expected destination: {}", expectedDestinationComponent);
+        log.debug("Decoded AAD: {} using nonce: {}", aad, HexFormat.of().formatHex(sealed.nonce()));
+        log.debug("Expected source: {}", expectedSourceComponent);
+        log.debug("Expected destination: {}", expectedDestinationComponent);
 
         if (expectedSourceComponent != null) {
             aad.requireSource(expectedSourceComponent);
@@ -103,11 +112,11 @@ public final class SealedPayload {
         aad.requireDestination(expectedDestinationComponent);
     }
 
-    private static Cipher initCipher(int mode, byte[] nonce, byte[] aad) {
+    private Cipher initCipher(int mode, byte[] nonce, byte[] aad) throws CipherInitializationException {
         try {
             Cipher cipher = Cipher.getInstance("ChaCha20-Poly1305");
             IvParameterSpec ivSpec = new IvParameterSpec(nonce);
-            cipher.init(mode, ENCRYPTION_KEY, ivSpec);
+            cipher.init(mode, encryptionKey, ivSpec);
             if (aad.length > 0) {
                 cipher.updateAAD(aad);
             }
@@ -117,7 +126,7 @@ public final class SealedPayload {
         }
     }
 
-    private static byte[] doFinal(Cipher cipher, byte[] input) {
+    private byte[] doFinal(Cipher cipher, byte[] input) throws SealedPayloadProcessingException {
         try {
             return cipher.doFinal(input);
         } catch (GeneralSecurityException e) {
@@ -125,9 +134,9 @@ public final class SealedPayload {
         }
     }
 
-    private static byte[] encodeAad(AADSpecification aad) {
+    private byte[] encodeAad(AADSpecification aad) throws AADEncodingException {
         if (aad == null || aad.isEmpty()) {
-            return EMPTY_AAD;
+            return emptyAad;
         }
         Map<String, Object> sorted = new TreeMap<>(aad.attributes());
         aad.sourceComponent().ifPresent(component ->
@@ -135,10 +144,10 @@ public final class SealedPayload {
         aad.destinationComponent().ifPresent(component ->
                 sorted.put("destination", component.toString()));
         if (sorted.isEmpty()) {
-            return EMPTY_AAD;
+            return emptyAad;
         }
         try {
-            return AAD_MAPPER.writeValueAsBytes(sorted);
+            return aadMapper.writeValueAsBytes(sorted);
         } catch (JsonProcessingException e) {
             throw new AADEncodingException("Unable to encode AAD", e);
         }

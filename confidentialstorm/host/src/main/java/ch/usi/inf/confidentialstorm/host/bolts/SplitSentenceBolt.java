@@ -2,6 +2,7 @@ package ch.usi.inf.confidentialstorm.host.bolts;
 
 import ch.usi.inf.confidentialstorm.common.api.SplitSentenceService;
 import ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceRequest;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord;
 import ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceResponse;
@@ -33,7 +34,7 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
     }
 
     @Override
-    protected void processTuple(Tuple input, SplitSentenceService service) {
+    protected void processTuple(Tuple input, SplitSentenceService service) throws EnclaveServiceException {
         // read encrypted body
         EncryptedValue encryptedBody = (EncryptedValue) input.getValueByField("body");
 

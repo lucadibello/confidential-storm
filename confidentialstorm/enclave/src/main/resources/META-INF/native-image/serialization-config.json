@@ -15,6 +15,9 @@
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException"},
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException"},
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException"},
+
+  { "name": "java.lang.Long" },
+
   { "name": "java.lang.Throwable"},
   { "name": "java.lang.Exception"},
   { "name": "java.lang.RuntimeException"},
@@ -61,8 +64,5 @@
 
   { "name": "java.util.ImmutableCollections$ListN" },
   { "name": "java.util.ImmutableCollections$SetN" },
-  { "name": "java.util.ImmutableCollections$MapN" },
-
-  { "name": "java.lang.Long" },
-  { "name": "java.lang.StackTraceElement" }
+  { "name": "java.util.ImmutableCollections$MapN" }
 ]

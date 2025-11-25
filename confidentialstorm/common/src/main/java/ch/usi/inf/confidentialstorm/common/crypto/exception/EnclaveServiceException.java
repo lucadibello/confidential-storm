@@ -7,7 +7,7 @@ import java.io.Serializable;
  *
  * The exception extracts the original exception type, message, and stack trace for better diagnostics.
  */
-public class EnclaveServiceException extends RuntimeException implements Serializable {
+public class EnclaveServiceException extends Exception implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private final String originalType;

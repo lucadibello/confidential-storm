@@ -3,6 +3,7 @@ package ch.usi.inf.confidentialstorm.enclave.service.bolts.wordcount;
 import ch.usi.inf.confidentialstorm.common.api.WordCountService;
 import ch.usi.inf.confidentialstorm.common.api.model.WordCountRequest;
 import ch.usi.inf.confidentialstorm.common.api.model.WordCountResponse;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.*;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
@@ -14,7 +15,7 @@ import java.util.List;
 public abstract class WordCountVerifier extends ConfidentialBoltService<WordCountRequest> implements WordCountService {
 
     @Override
-    public WordCountResponse count(WordCountRequest request) {
+    public WordCountResponse count(WordCountRequest request) throws EnclaveServiceException {
         try {
             super.verify(request);
             return countImpl(request);
@@ -22,7 +23,7 @@ public abstract class WordCountVerifier extends ConfidentialBoltService<WordCoun
             throw EnclaveExceptionUtil.wrap("WordCountService.count", t);
         }
     }
-    public abstract WordCountResponse countImpl(WordCountRequest request);
+    public abstract WordCountResponse countImpl(WordCountRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException;
 
     @Override
     public TopologySpecification.Component expectedSourceComponent() {

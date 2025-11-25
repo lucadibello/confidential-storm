@@ -1,6 +1,7 @@
 package ch.usi.inf.confidentialstorm.host.bolts;
 
 import ch.usi.inf.confidentialstorm.common.api.HistogramService;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.api.model.HistogramSnapshotResponse;
 import ch.usi.inf.confidentialstorm.common.api.model.HistogramUpdateRequest;
@@ -85,7 +86,7 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
     }
 
     @Override
-    protected void processTuple(Tuple input, HistogramService service) {
+    protected void processTuple(Tuple input, HistogramService service) throws EnclaveServiceException {
         // if tick tuple -> export histogram to file
         if (isTickTuple(input)) {
             LOG.info("[HistogramBolt] Received tick tuple. Exporting histogram snapshot...");

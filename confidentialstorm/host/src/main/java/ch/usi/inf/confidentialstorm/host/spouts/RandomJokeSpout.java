@@ -1,5 +1,8 @@
 package ch.usi.inf.confidentialstorm.host.spouts;
 
+import ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.host.spouts.base.ConfidentialSpout;
 import org.apache.storm.spout.SpoutOutputCollector;
@@ -48,9 +51,29 @@ public class RandomJokeSpout extends ConfidentialSpout {
     // generate the next random joke
     int idx = rand.nextInt(encryptedJokes.size());
     EncryptedValue currentJoke = encryptedJokes.get(idx);
-    EncryptedValue routedJoke = getMapperService().setupRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
 
-    LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJoke);
+    // make test call to check what's crashing
+    System.out.println("Testing route for joke: " + currentJoke);
+      EncryptedValue test = null;
+      try {
+          test = getMapperService().testRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
+      } catch (SealedPayloadProcessingException | CipherInitializationException e) {
+          throw new RuntimeException(e);
+      }
+      System.out.println("Test route output: " + test);
+
+      EncryptedValue routedJoke = null;
+      try {
+          routedJoke = getMapperService().setupRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
+      } catch (SealedPayloadProcessingException e) {
+          throw new RuntimeException(e);
+      } catch (CipherInitializationException e) {
+          throw new RuntimeException(e);
+      } catch (AADEncodingException e) {
+          throw new RuntimeException(e);
+      }
+
+      LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJoke);
     getCollector().emit(new Values(routedJoke));
 
     // sleep for a while to avoid starving the topology
