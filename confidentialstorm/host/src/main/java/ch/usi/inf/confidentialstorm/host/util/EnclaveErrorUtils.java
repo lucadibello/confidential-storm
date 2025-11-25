@@ -12,9 +12,6 @@ public final class EnclaveErrorUtils {
 
     /**
     * Unwrap common proxy/reflection wrappers to get to the underlying enclave error.
-     *
-     * This is useful when dealing with errors intercepted through the implemented dynamic proxy mechanism,
-     * which wraps the original enclave exceptions intercepted by {@link EnclaveServiceProxy}.
     */
     public static Throwable unwrap(Throwable throwable) {
         Throwable current = throwable;
