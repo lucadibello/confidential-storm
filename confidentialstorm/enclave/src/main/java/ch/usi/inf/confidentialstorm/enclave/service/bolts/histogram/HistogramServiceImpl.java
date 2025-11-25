@@ -7,8 +7,8 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitialization
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import com.google.auto.service.AutoService;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @AutoService(HistogramService.class)
 public class HistogramServiceImpl extends HistogramServiceVerifier {
@@ -23,8 +23,24 @@ public class HistogramServiceImpl extends HistogramServiceVerifier {
 
     @Override
     public HistogramSnapshotResponse snapshot() {
+        // Get the entries from the current histogram + sort them by value (bigger first)
+        List<Map.Entry<String, Long>> sortedEntries =
+                this.histogram.entrySet()
+                        .stream()
+                        .sorted((a, b) -> {
+                            int cmp = Long.compare(b.getValue(), a.getValue());
+                            return cmp != 0 ? cmp : a.getKey().compareTo(b.getKey());
+                        })
+                        .collect(Collectors.toList());
+
+        // Reconstruct a sorted histogram as LinkedHashMap to preserve order
+        Map<String, Long> sortedHistogram = new LinkedHashMap<>();
+        for (Map.Entry<String, Long> entry : sortedEntries) {
+            sortedHistogram.put(entry.getKey(), entry.getValue());
+        }
+
         // return a copy to avoid external modification
         // NOTE: made immutable by the HistogramSnapshot constructor to avoid serialization issues
-        return new HistogramSnapshotResponse(histogram);
+        return new HistogramSnapshotResponse(sortedHistogram);
     }
 }

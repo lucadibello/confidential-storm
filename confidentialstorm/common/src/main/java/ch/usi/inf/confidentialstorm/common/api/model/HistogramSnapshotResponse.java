@@ -3,7 +3,7 @@ package ch.usi.inf.confidentialstorm.common.api.model;
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public record HistogramSnapshotResponse(Map<String, Long> counts) implements Serializable {
@@ -14,6 +14,6 @@ public record HistogramSnapshotResponse(Map<String, Long> counts) implements Ser
         if (counts == null) {
             throw new IllegalArgumentException("Counts cannot be null");
         }
-        counts = Collections.unmodifiableMap(new HashMap<>(counts));
+        counts = Collections.unmodifiableMap(new LinkedHashMap<>(counts));
     }
 }
