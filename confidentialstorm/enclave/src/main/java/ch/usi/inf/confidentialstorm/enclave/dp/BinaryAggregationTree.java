@@ -1,8 +1,8 @@
 package ch.usi.inf.confidentialstorm.enclave.dp;
 
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.ArrayList;
-import java.util.Random;
 
 /**
  * A binary aggregation tree for differential privacy.
@@ -140,7 +140,7 @@ public final class BinaryAggregationTree {
         List<Double> tree = new ArrayList<>(2 * num_leaves - 1);
 
         // fill the tree with Gaussian noise
-        Random rnd = new Random();
+        SecureRandom rnd = new SecureRandom();
         for (int i = 0; i < 2 * num_leaves - 1; i++) {
             double noise = rnd.nextGaussian() * sigma;
             tree.add(noise);
