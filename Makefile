@@ -40,6 +40,9 @@ common:
 enclave:
 	$(MVN) -f $(ROOT_POM) -pl enclave -am $(MAVEN_FLAGS) $(ENCLAVE_PROFILE) $(MAVEN_GOALS)
 
+test-enclave:
+	$(MVN) -f $(ROOT_POM) -pl enclave $(ENCLAVE_PROFILE) test
+
 host:
 	$(MVN) -f $(ROOT_POM) -pl host -am $(MAVEN_FLAGS) $(MAVEN_GOALS)
 
