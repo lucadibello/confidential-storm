@@ -7,11 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -25,6 +21,16 @@ public final class JokeReader {
     public JokeReader() {
         this.mapper = new ObjectMapper()
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    }
+
+    // Tiny demo
+    public static void main(String[] args) throws Exception {
+        JokeReader reader = new JokeReader();
+        List<EncryptedValue> jokes = reader.readAll("jokes.enc.json");
+        System.out.println("Loaded " + jokes.size() + " jokes");
+        if (!jokes.isEmpty()) {
+            System.out.println(jokes.get(0));
+        }
     }
 
     public List<EncryptedValue> readAll(String jsonResourceName) throws IOException {
@@ -66,15 +72,5 @@ public final class JokeReader {
     private byte[] buildAadBytes(JsonNode headerNode) {
         String headerJson = headerNode.asText();
         return headerJson.getBytes(StandardCharsets.UTF_8);
-    }
-
-    // Tiny demo
-    public static void main(String[] args) throws Exception {
-        JokeReader reader = new JokeReader();
-        List<EncryptedValue> jokes = reader.readAll("jokes.enc.json");
-        System.out.println("Loaded " + jokes.size() + " jokes");
-        if (!jokes.isEmpty()) {
-            System.out.println(jokes.get(0));
-        }
     }
 }

@@ -2,10 +2,10 @@ package ch.usi.inf.confidentialstorm.host.bolts;
 
 import ch.usi.inf.confidentialstorm.common.api.SplitSentenceService;
 import ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceRequest;
+import ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceResponse;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord;
-import ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceResponse;
 import ch.usi.inf.confidentialstorm.host.bolts.base.ConfidentialBolt;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
@@ -19,8 +19,8 @@ import java.util.Map;
 import java.util.Objects;
 
 public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
-    private int boltId;
     private static final Logger LOG = LoggerFactory.getLogger(SplitSentenceBolt.class);
+    private int boltId;
 
     public SplitSentenceBolt() {
         super(SplitSentenceService.class);

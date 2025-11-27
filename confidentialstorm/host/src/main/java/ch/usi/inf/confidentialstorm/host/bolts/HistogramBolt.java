@@ -1,10 +1,10 @@
 package ch.usi.inf.confidentialstorm.host.bolts;
 
 import ch.usi.inf.confidentialstorm.common.api.HistogramService;
-import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
-import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.api.model.HistogramSnapshotResponse;
 import ch.usi.inf.confidentialstorm.common.api.model.HistogramUpdateRequest;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
+import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.base.ConfidentialBolt;
 import org.apache.storm.Config;
 import org.apache.storm.Constants;

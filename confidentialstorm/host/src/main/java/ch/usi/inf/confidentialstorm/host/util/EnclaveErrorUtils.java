@@ -8,11 +8,12 @@ import java.lang.reflect.UndeclaredThrowableException;
 import java.util.Objects;
 
 public final class EnclaveErrorUtils {
-    private EnclaveErrorUtils() { }
+    private EnclaveErrorUtils() {
+    }
 
     /**
-    * Unwrap common proxy/reflection wrappers to get to the underlying enclave error.
-    */
+     * Unwrap common proxy/reflection wrappers to get to the underlying enclave error.
+     */
     public static Throwable unwrap(Throwable throwable) {
         Throwable current = throwable;
         while (current != null) {
@@ -35,8 +36,8 @@ public final class EnclaveErrorUtils {
     }
 
     /**
-    * Return string representation of the given throwable representing an exception from the enclave service.
-    */
+     * Return string representation of the given throwable representing an exception from the enclave service.
+     */
     public static String format(Throwable throwable) {
         Throwable root = unwrap(throwable);
         StringBuilder sb = new StringBuilder();

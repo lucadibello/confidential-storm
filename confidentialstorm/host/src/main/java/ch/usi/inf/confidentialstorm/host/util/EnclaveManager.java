@@ -2,7 +2,6 @@ package ch.usi.inf.confidentialstorm.host.util;
 
 import org.apache.teaclave.javasdk.host.Enclave;
 import org.apache.teaclave.javasdk.host.EnclaveType;
-
 import org.apache.teaclave.javasdk.host.exception.EnclaveDestroyingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,10 +10,9 @@ import java.util.Map;
 import java.util.Objects;
 
 public class EnclaveManager<S> {
+    private static final Logger LOG = LoggerFactory.getLogger(EnclaveManager.class);
     private final Class<S> serviceClass;
     private final EnclaveType defaultEnclaveType;
-    private static final Logger LOG = LoggerFactory.getLogger(EnclaveManager.class);
-
     private Enclave enclave;
     // This is done to allow developers to specify the enclave type at runtime via a
     // system property

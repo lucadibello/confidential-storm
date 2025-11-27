@@ -11,52 +11,16 @@ import java.util.Objects;
  */
 public final class TopologySpecification {
 
-    private TopologySpecification() {
-    }
-
-
-    public enum Component implements java.io.Serializable {
-        DATASET("_DATASET"),
-        MAPPER("_MAPPER"),
-        RANDOM_JOKE_SPOUT("random-joke-spout"),
-        SENTENCE_SPLIT("sentence-split"),
-        WORD_COUNT("word-count"),
-        HISTOGRAM_GLOBAL("histogram-global");
-
-        private final String name;
-        private static final long serialVersionUID = 1L;
-        Component(String name) {
-            this.name = name;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        @Override
-        public String toString() {
-            return name;
-        }
-
-        public static Component fromValue(String value) {
-            if (value == null) {
-                return null;
-            }
-            for (Component component : Component.values()) {
-                if (component.name.equals(value) || component.name().equalsIgnoreCase(value)) {
-                    return component;
-                }
-            }
-            throw new IllegalArgumentException("Unknown component: " + value);
-        }
-    }
-
     private static final Map<Component, List<Component>> DOWNSTREAM = Map.of(
             Component.RANDOM_JOKE_SPOUT, List.of(Component.SENTENCE_SPLIT),
             Component.SENTENCE_SPLIT, List.of(Component.WORD_COUNT),
             Component.WORD_COUNT, List.of(Component.HISTOGRAM_GLOBAL),
             Component.HISTOGRAM_GLOBAL, Collections.emptyList()
     );
+
+
+    private TopologySpecification() {
+    }
 
     public static List<Component> downstream(Component component) {
         Objects.requireNonNull(component, "componentId cannot be null");
@@ -72,5 +36,42 @@ public final class TopologySpecification {
             throw new IllegalStateException("Component " + component + " fan-out is ambiguous");
         }
         return downstream.get(0);
+    }
+
+    public enum Component implements java.io.Serializable {
+        DATASET("_DATASET"),
+        MAPPER("_MAPPER"),
+        RANDOM_JOKE_SPOUT("random-joke-spout"),
+        SENTENCE_SPLIT("sentence-split"),
+        WORD_COUNT("word-count"),
+        HISTOGRAM_GLOBAL("histogram-global");
+
+        private static final long serialVersionUID = 1L;
+        private final String name;
+
+        Component(String name) {
+            this.name = name;
+        }
+
+        public static Component fromValue(String value) {
+            if (value == null) {
+                return null;
+            }
+            for (Component component : Component.values()) {
+                if (component.name.equals(value) || component.name().equalsIgnoreCase(value)) {
+                    return component;
+                }
+            }
+            throw new IllegalArgumentException("Unknown component: " + value);
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
     }
 }

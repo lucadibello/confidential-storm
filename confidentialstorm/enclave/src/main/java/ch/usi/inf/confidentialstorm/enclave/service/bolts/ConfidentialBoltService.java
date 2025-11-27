@@ -18,24 +18,23 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public abstract class ConfidentialBoltService<T extends IServiceMessage> {
+    protected final EnclaveExceptionContext exceptionCtx = EnclaveExceptionContext.getInstance();
+    protected final SealedPayload sealedPayload;
     /**
-     * Zero-depencency logger for the enclave services.
+     * The logger for this class.
      */
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(ConfidentialBoltService.class);
-
-    protected final EnclaveExceptionContext exceptionCtx = EnclaveExceptionContext.getInstance();
-
     /**
      * Size of the replay window for sequence number tracking (should be large enough to accommodate out-of-order messages).
+     * <p>
+     * FIXME: is it really possible to have out-of-order messages in Storm? If not, we could reduce this to 1.
      */
     private final int REPLAY_WINDOW_SIZE = 128;
-
     /**
      * Map of producer IDs to their corresponding replay windows for replay attack prevention.
      * NOTE: we use a map of replay windows as one bolt could ingest data streams from multiple different producers.
      */
     private final Map<String, ReplayWindow> replayWindows = new ConcurrentHashMap<>();
-    protected final SealedPayload sealedPayload;
 
     protected ConfidentialBoltService() {
         this(SealedPayload.fromConfig());
@@ -47,26 +46,30 @@ public abstract class ConfidentialBoltService<T extends IServiceMessage> {
 
     /**
      * Get the expected source component for the sealed values in the request.
+     *
      * @return the expected source component
      */
     public abstract TopologySpecification.Component expectedSourceComponent();
 
     /**
      * Get the expected destination component for the sealed values in the request.
+     *
      * @return the expected destination component
      */
     public abstract TopologySpecification.Component expectedDestinationComponent();
 
     /**
      * Extract all sealed/encrypted values from the request that need to be verified.
+     *
      * @param request the request containing the sealed values
      * @return a collection of sealed/encrypted values to verify
      */
     public abstract Collection<EncryptedValue> valuesToVerify(T request);
 
     /**
-     * Verify that all sealed values in the request are valid, come from the expected source to the expected destination,
-     * and that their sequence numbers are within the replay window.
+     * Verifies that all sealed values in the request are valid, come from the expected source
+     * and go to the expected destination, and that their sequence numbers are within the replay window.
+     *
      * @param request the request containing the sealed values to verify
      * @throws EnclaveServiceException if any verification step fails
      */

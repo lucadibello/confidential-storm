@@ -4,7 +4,7 @@ import java.io.Serializable;
 
 /**
  * Serializable exception that wraps exceptions thrown inside an enclave to propagate them to the host application.
- *
+ * <p>
  * The exception extracts the original exception type, message, and stack trace for better diagnostics.
  */
 public class EnclaveServiceException extends Exception implements Serializable {

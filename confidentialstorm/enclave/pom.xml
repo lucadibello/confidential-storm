@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
@@ -75,7 +75,8 @@
                                         <buildArg>-H:+RunInEnclave</buildArg>
                                         <buildArg>-H:+TraceSecurityServices</buildArg>
                                         <buildArg>-H:Path=${project.build.directory}/svm-output</buildArg>
-                                        <buildArg>-o ${project.build.directory}/svm-output/lib_tee_sdk_svm_load</buildArg>
+                                        <buildArg>-o ${project.build.directory}/svm-output/lib_tee_sdk_svm_load
+                                        </buildArg>
                                     </buildArgs>
                                 </configuration>
                                 <phase>package</phase>
@@ -100,7 +101,9 @@
                                 <configuration>
                                     <executable>bash</executable>
                                     <arguments>
-                                        <argument>/workspaces/confidential-storm-starter/tools/javaenclave/build_app/make.sh</argument>
+                                        <argument>
+                                            /workspaces/confidential-storm-starter/tools/javaenclave/build_app/make.sh
+                                        </argument>
                                         <argument>${project.basedir}</argument>
                                         <argument>${org.apache.teaclave.javasdk.platform}</argument>
                                         <argument>${org.apache.teaclave.javasdk.enclave.privatePem.path}</argument>

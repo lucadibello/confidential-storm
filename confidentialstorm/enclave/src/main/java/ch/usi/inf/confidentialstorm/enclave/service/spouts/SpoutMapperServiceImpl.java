@@ -3,9 +3,9 @@ package ch.usi.inf.confidentialstorm.enclave.service.spouts;
 import ch.usi.inf.confidentialstorm.common.api.SpoutMapperService;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
-import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
+import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.exception.EnclaveExceptionContext;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
@@ -17,10 +17,10 @@ import java.util.UUID;
 @AutoService(SpoutMapperService.class)
 public class SpoutMapperServiceImpl implements SpoutMapperService {
     private final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SpoutMapperServiceImpl.class);
-    private long sequenceCounter = 0L;
     private final EnclaveExceptionContext exceptionCtx = EnclaveExceptionContext.getInstance();
     private final String producerId = UUID.randomUUID().toString();
     private final SealedPayload sealedPayload;
+    private long sequenceCounter = 0L;
 
     public SpoutMapperServiceImpl() {
         this(SealedPayload.fromConfig());

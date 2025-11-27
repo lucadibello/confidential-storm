@@ -5,12 +5,9 @@ import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 
 /**
- * This exception strategy segregates the exceptions occurring within the enclave from affecting the main application flow.
- * <p>
- * This ensures that any exceptions thrown inside the enclave do not propagate to the outer application,
- * thereby maintaining the stability and integrity of the main application.
+ * This exception strategy segregates the exceptions occurring within the enclave from affecting the host.
  */
-public class IsolateEnclaveExceptionStrategy implements IEnclaveExceptionStrategy  {
+public class IsolateEnclaveExceptionStrategy implements IEnclaveExceptionStrategy {
 
     /**
      * Logger instance for this class.

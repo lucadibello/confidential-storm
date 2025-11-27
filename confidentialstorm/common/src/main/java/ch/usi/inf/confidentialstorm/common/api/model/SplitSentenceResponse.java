@@ -1,14 +1,13 @@
 package ch.usi.inf.confidentialstorm.common.api.model;
 
+import ch.usi.inf.confidentialstorm.common.api.model.base.IServiceMessage;
+import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord;
+
 import java.io.Serial;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-
-import ch.usi.inf.confidentialstorm.common.api.model.base.IServiceMessage;
-import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord;
 
 public record SplitSentenceResponse(List<EncryptedWord> words) implements IServiceMessage {
     @Serial

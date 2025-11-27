@@ -1,11 +1,10 @@
 package ch.usi.inf.confidentialstorm.host.spouts;
 
-import ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException;
-import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
-import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
+import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.host.spouts.base.ConfidentialSpout;
+import ch.usi.inf.confidentialstorm.host.util.JokeReader;
 import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
@@ -14,9 +13,6 @@ import org.apache.storm.tuple.Values;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
-import ch.usi.inf.confidentialstorm.host.util.JokeReader;
-
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -24,9 +20,9 @@ import java.util.Random;
 
 public class RandomJokeSpout extends ConfidentialSpout {
     private static final long EMIT_DELAY_MS = 250;
+    private static final Logger LOG = LoggerFactory.getLogger(RandomJokeSpout.class);
     private List<EncryptedValue> encryptedJokes;
     private Random rand;
-    private static final Logger LOG = LoggerFactory.getLogger(RandomJokeSpout.class);
 
     @Override
     protected void afterOpen(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector) {

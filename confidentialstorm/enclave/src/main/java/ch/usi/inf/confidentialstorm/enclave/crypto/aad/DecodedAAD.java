@@ -1,7 +1,7 @@
 package ch.usi.inf.confidentialstorm.enclave.crypto.aad;
 
-import ch.usi.inf.confidentialstorm.enclave.crypto.util.AADUtils;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
+import ch.usi.inf.confidentialstorm.enclave.crypto.util.AADUtils;
 
 import java.util.*;
 
@@ -47,6 +47,31 @@ public final class DecodedAAD {
                 toStringValue(destination, "destination"),
                 toLongValue(sequenceNumber, "sequence_number"),
                 toStringValue(producerId, "producer_id"));
+    }
+
+    private static String toStringValue(Object value, String fieldName) {
+        if (value == null) {
+            return null;
+        }
+        // Be permissive: coerce to string to avoid deserialization issues when types differ.
+        return String.valueOf(value);
+    }
+
+    private static Long toLongValue(Object value, String fieldName) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        if (value instanceof String) {
+            try {
+                return Long.parseLong((String) value);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     public Map<String, Object> attributes() {
@@ -111,31 +136,6 @@ public final class DecodedAAD {
             throw new IllegalArgumentException("AAD sequence number mismatch: expected "
                     + expectedSequenceNumber + ", got " + sequenceNumber);
         }
-    }
-
-    private static String toStringValue(Object value, String fieldName) {
-        if (value == null) {
-            return null;
-        }
-        // Be permissive: coerce to string to avoid deserialization issues when types differ.
-        return String.valueOf(value);
-    }
-
-    private static Long toLongValue(Object value, String fieldName) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof Number) {
-            return ((Number) value).longValue();
-        }
-        if (value instanceof String) {
-            try {
-                return Long.parseLong((String) value);
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
-        }
-        return null;
     }
 
     @Override

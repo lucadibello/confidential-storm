@@ -5,15 +5,15 @@ import org.apache.teaclave.javasdk.host.EnclaveType;
 import org.apache.teaclave.javasdk.host.exception.EnclaveDestroyingException;
 
 public final class ConfidentialComponentState<C, S> {
+    private final Class<S> serviceClass;
+    private final EnclaveType enclaveType;
     private C collector;
     private String componentId;
     private int taskId;
     private EnclaveManager<S> enclaveManager;
-    private final Class<S> serviceClass;
-    private final EnclaveType enclaveType;
 
 
-    public ConfidentialComponentState(Class<S> serviceClass, EnclaveType enclaveType)  {
+    public ConfidentialComponentState(Class<S> serviceClass, EnclaveType enclaveType) {
         this.serviceClass = serviceClass;
         this.enclaveType = enclaveType;
     }

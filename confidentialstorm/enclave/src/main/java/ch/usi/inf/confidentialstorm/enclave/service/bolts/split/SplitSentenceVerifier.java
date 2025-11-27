@@ -14,18 +14,18 @@ import java.util.Collection;
 import java.util.List;
 
 public abstract class SplitSentenceVerifier extends ConfidentialBoltService<SplitSentenceRequest> implements SplitSentenceService {
-    private final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SplitSentenceVerifier.class);
+    private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(SplitSentenceVerifier.class);
 
     abstract public SplitSentenceResponse splitImpl(SplitSentenceRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException;
 
     @Override
     public SplitSentenceResponse split(SplitSentenceRequest request) throws EnclaveServiceException {
         try {
-            LOG.info("SplitSentenceVerifier: split called");
+            log.info("SplitSentenceVerifier: split called");
 
             // throw an exception with small probability to test error handling
             if (Math.random() < 0.01) {
-                LOG.error("Simulated random failure in SplitSentenceServiceImpl");
+                log.error("Simulated random failure in SplitSentenceServiceImpl");
                 throw new RuntimeException();
             }
 

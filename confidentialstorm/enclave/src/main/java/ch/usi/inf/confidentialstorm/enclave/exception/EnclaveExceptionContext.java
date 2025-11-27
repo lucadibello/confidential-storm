@@ -7,8 +7,8 @@ import ch.usi.inf.confidentialstorm.enclave.exception.strategies.PassthroughEncl
 import ch.usi.inf.confidentialstorm.enclave.exception.strategies.base.IEnclaveExceptionStrategy;
 
 public class EnclaveExceptionContext {
-    private IEnclaveExceptionStrategy strategy;
     private static EnclaveExceptionContext instance = null;
+    private IEnclaveExceptionStrategy strategy;
 
     private EnclaveExceptionContext() {
         // Default strategy can be set here

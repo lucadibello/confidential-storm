@@ -9,15 +9,15 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivation
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord;
-import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
+import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import com.google.auto.service.AutoService;
 
 import java.util.*;
-import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 @AutoService(SplitSentenceService.class)
 public class SplitSentenceServiceImpl extends SplitSentenceVerifier {
@@ -32,7 +32,6 @@ public class SplitSentenceServiceImpl extends SplitSentenceVerifier {
         // decrypt the payload
         String body = sealedPayload.decryptToString(request.body());
 
-        LOG.debug("HELLO FROM SPLIT SENTENCE SERVICE");
         LOG.info("Received sentence: {}", body);
 
         // compute sensitive operation

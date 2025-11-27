@@ -4,6 +4,7 @@ import ch.usi.inf.confidentialstorm.common.api.WordCountService;
 import ch.usi.inf.confidentialstorm.common.api.model.WordCountRequest;
 import ch.usi.inf.confidentialstorm.common.api.model.WordCountResponse;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
+import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.base.ConfidentialBolt;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
@@ -12,8 +13,6 @@ import org.apache.storm.tuple.Tuple;
 import org.apache.storm.tuple.Values;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 
 import java.util.Map;
 

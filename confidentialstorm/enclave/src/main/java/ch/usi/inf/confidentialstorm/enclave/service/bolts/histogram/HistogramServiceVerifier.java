@@ -22,6 +22,7 @@ public abstract class HistogramServiceVerifier extends ConfidentialBoltService<H
             super.exceptionCtx.handleException(t);
         }
     }
+
     public abstract void updateImpl(HistogramUpdateRequest update) throws SealedPayloadProcessingException, CipherInitializationException;
 
     @Override

@@ -1,10 +1,10 @@
 package ch.usi.inf.confidentialstorm.common.api.model;
 
-import java.io.Serial;
-import java.util.Objects;
-
 import ch.usi.inf.confidentialstorm.common.api.model.base.IServiceMessage;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+
+import java.io.Serial;
+import java.util.Objects;
 
 public record WordCountResponse(String routingKey, EncryptedValue word, EncryptedValue count)
         implements IServiceMessage {

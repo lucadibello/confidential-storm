@@ -23,6 +23,7 @@ public abstract class WordCountVerifier extends ConfidentialBoltService<WordCoun
             return null;
         }
     }
+
     public abstract WordCountResponse countImpl(WordCountRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException;
 
     @Override

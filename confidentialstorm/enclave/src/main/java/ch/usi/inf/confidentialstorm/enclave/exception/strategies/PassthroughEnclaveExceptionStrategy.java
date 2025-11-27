@@ -5,9 +5,9 @@ import ch.usi.inf.confidentialstorm.enclave.exception.strategies.base.IEnclaveEx
 
 /**
  * This exception handling strategy wraps any throwable in a serializable EnclaveServiceException
- * in order to let exceptions reach the untrusted applicat
+ * in order to let exceptions reach the untrusted application
  */
-public class PassthroughEnclaveExceptionStrategy implements IEnclaveExceptionStrategy  {
+public class PassthroughEnclaveExceptionStrategy implements IEnclaveExceptionStrategy {
 
     @Override
     public void handleException(Throwable t) throws EnclaveServiceException {

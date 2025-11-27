@@ -8,8 +8,8 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitialization
 import ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
-import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
+import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import com.google.auto.service.AutoService;
 
 import java.util.HashMap;
@@ -19,8 +19,8 @@ import java.util.UUID;
 @AutoService(WordCountService.class)
 public class WordCountServiceImpl extends WordCountVerifier {
     private final Map<String, Long> counter = new HashMap<>();
-    private long sequenceCounter = 0L;
     private final String producerId = UUID.randomUUID().toString();
+    private long sequenceCounter = 0L;
 
     @Override
     public WordCountResponse countImpl(WordCountRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException {
