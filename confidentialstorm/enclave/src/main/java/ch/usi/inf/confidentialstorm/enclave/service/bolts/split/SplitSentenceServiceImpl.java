@@ -11,8 +11,8 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import com.google.auto.service.AutoService;
 
 import java.util.*;

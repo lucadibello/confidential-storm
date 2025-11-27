@@ -9,8 +9,8 @@ import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.enclave.exception.EnclaveExceptionContext;
 import ch.usi.inf.confidentialstorm.enclave.service.model.ReplayWindow;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 
 import java.util.Collection;
 import java.util.Map;

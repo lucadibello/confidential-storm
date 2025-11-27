@@ -7,8 +7,8 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.*;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 
 import java.util.Collection;
 import java.util.List;
@@ -22,6 +22,13 @@ public abstract class SplitSentenceVerifier extends ConfidentialBoltService<Spli
     public SplitSentenceResponse split(SplitSentenceRequest request) throws EnclaveServiceException {
         try {
             LOG.info("SplitSentenceVerifier: split called");
+
+            // throw an exception with small probability to test error handling
+            if (Math.random() < 0.01) {
+                LOG.error("Simulated random failure in SplitSentenceServiceImpl");
+                throw new RuntimeException();
+            }
+
             // verify the request
             super.verify(request);
             // call the implementation

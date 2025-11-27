@@ -1,4 +1,4 @@
-package ch.usi.inf.confidentialstorm.enclave.util;
+package ch.usi.inf.confidentialstorm.enclave.util.logger;
 
 /**
  * Minimal logger API for enclave code (API similar to SFL4J)

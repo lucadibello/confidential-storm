@@ -1,4 +1,4 @@
-package ch.usi.inf.confidentialstorm.enclave.util;
+package ch.usi.inf.confidentialstorm.enclave.util.logger;
 
 public enum LogLevel {
     DEBUG(0),

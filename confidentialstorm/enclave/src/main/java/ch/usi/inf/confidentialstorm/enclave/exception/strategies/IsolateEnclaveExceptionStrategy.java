@@ -1,9 +1,8 @@
 package ch.usi.inf.confidentialstorm.enclave.exception.strategies;
 
-import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.enclave.exception.strategies.base.IEnclaveExceptionStrategy;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 
 /**
  * This exception strategy segregates the exceptions occurring within the enclave from affecting the main application flow.

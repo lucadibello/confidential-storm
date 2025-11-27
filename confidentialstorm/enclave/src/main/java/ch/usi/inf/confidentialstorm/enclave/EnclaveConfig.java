@@ -1,6 +1,6 @@
 package ch.usi.inf.confidentialstorm.enclave;
 
-import ch.usi.inf.confidentialstorm.enclave.util.LogLevel;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.LogLevel;
 
 /**
  * Configuration parameters for the secure enclave.
@@ -29,7 +29,7 @@ public final class EnclaveConfig {
      * If true, exceptions will be isolated to prevent information leakage.
      * If false, exceptions may propagate normally to the untrusted application.
      */
-    public static final boolean ENABLE_EXCEPTION_ISOLATION = true;
+    public static final boolean ENABLE_EXCEPTION_ISOLATION = false;
 
     // Various feature toggles - can be enabled/disabled as needed
 

@@ -1,4 +1,4 @@
-package ch.usi.inf.confidentialstorm.enclave.util;
+package ch.usi.inf.confidentialstorm.enclave.util.logger;
 
 import ch.usi.inf.confidentialstorm.enclave.EnclaveConfig;
 
