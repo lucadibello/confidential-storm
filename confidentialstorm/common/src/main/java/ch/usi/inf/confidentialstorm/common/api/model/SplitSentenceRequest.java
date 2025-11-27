@@ -4,9 +4,10 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
+import ch.usi.inf.confidentialstorm.common.api.model.base.IServiceMessage;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 
-public record SplitSentenceRequest(EncryptedValue body) implements Serializable {
+public record SplitSentenceRequest(EncryptedValue body) implements IServiceMessage {
     @Serial
     private static final long serialVersionUID = 1L;
 

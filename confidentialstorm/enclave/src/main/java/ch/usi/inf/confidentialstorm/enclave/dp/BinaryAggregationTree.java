@@ -149,4 +149,8 @@ public final class BinaryAggregationTree {
         // return the initialized tree
         return tree;
     }
+
+    public List<Double> getTree() {
+        return tree;
+    }
 }
