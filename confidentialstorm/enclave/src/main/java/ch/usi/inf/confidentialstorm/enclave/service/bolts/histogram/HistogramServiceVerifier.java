@@ -8,7 +8,6 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcess
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveExceptionUtil;
 
 import java.util.Collection;
 import java.util.List;
@@ -20,7 +19,7 @@ public abstract class HistogramServiceVerifier extends ConfidentialBoltService<H
             super.verify(update);
             updateImpl(update);
         } catch (Throwable t) {
-            throw EnclaveExceptionUtil.wrap("HistogramService.update", t);
+            super.exceptionCtx.handleException(t);
         }
     }
     public abstract void updateImpl(HistogramUpdateRequest update) throws SealedPayloadProcessingException, CipherInitializationException;

@@ -7,7 +7,6 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.*;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveExceptionUtil;
 
 import java.util.Collection;
 import java.util.List;
@@ -20,7 +19,8 @@ public abstract class WordCountVerifier extends ConfidentialBoltService<WordCoun
             super.verify(request);
             return countImpl(request);
         } catch (Throwable t) {
-            throw EnclaveExceptionUtil.wrap("WordCountService.count", t);
+            super.exceptionCtx.handleException(t);
+            return null;
         }
     }
     public abstract WordCountResponse countImpl(WordCountRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException;

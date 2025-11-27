@@ -6,7 +6,7 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveExceptionUtil;
+import ch.usi.inf.confidentialstorm.enclave.exception.EnclaveExceptionContext;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
 import com.google.auto.service.AutoService;
@@ -18,7 +18,8 @@ import java.util.concurrent.atomic.AtomicLong;
 @AutoService(SpoutMapperService.class)
 public class SpoutMapperServiceImpl implements SpoutMapperService {
     private final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SpoutMapperServiceImpl.class);
-    private final AtomicLong sequenceCounter = new AtomicLong(0);
+    private long sequenceCounter = 0L;
+    private final EnclaveExceptionContext exceptionCtx = EnclaveExceptionContext.getInstance();
     private final String producerId = UUID.randomUUID().toString();
     private final SealedPayload sealedPayload;
 
@@ -48,7 +49,7 @@ public class SpoutMapperServiceImpl implements SpoutMapperService {
 
             TopologySpecification.Component downstreamComponent = TopologySpecification.requireSingleDownstream(component);
 
-            long sequence = sequenceCounter.getAndIncrement();
+            long sequence = sequenceCounter++;
             // create new AAD with correct route names
             AADSpecification aad = AADSpecification.builder()
                     .sourceComponent(component)
@@ -59,8 +60,9 @@ public class SpoutMapperServiceImpl implements SpoutMapperService {
 
             // seal again with new AAD routing information + return sealed entry
             return sealedPayload.encrypt(body, aad);
-        } catch (Throwable e) {
-            throw EnclaveExceptionUtil.wrap("SpoutMapperService.setupRoute", e);
+        } catch (Throwable t) {
+            exceptionCtx.handleException(t);
+            return null;
         }
     }
 }
