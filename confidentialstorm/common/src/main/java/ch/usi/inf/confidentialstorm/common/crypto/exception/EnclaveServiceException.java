@@ -4,7 +4,7 @@ import java.io.Serializable;
 
 /**
  * Serializable exception that wraps exceptions thrown inside an enclave to propagate them to the host application.
- *
+ * <p>
  * The exception extracts the original exception type, message, and stack trace for better diagnostics.
  */
 public class EnclaveServiceException extends Exception implements Serializable {
@@ -24,6 +24,12 @@ public class EnclaveServiceException extends Exception implements Serializable {
             // propagate enclave stack to host for better diagnostics
             setStackTrace(enclaveStack);
         }
+    }
+
+    public EnclaveServiceException(String originalType, String message) {
+        super(message);
+        this.originalType = originalType;
+        this.originalMessage = message;
     }
 
     private static String buildMessage(String operation, String type, String msg) {

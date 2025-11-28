@@ -1,8 +1,8 @@
 package ch.usi.inf.confidentialstorm.enclave.dp;
 
 import java.security.SecureRandom;
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A binary aggregation tree for differential privacy.
@@ -30,7 +30,7 @@ public final class BinaryAggregationTree {
     /**
      * Constructs a binary aggregation tree for differential privacy.
      *
-     * @param T the number of time steps or data points to process
+     * @param T     the number of time steps or data points to process
      * @param sigma the standard deviation of the Gaussian noise to be added to each node
      */
     public BinaryAggregationTree(int T, double sigma) {
@@ -44,6 +44,7 @@ public final class BinaryAggregationTree {
 
     /**
      * Adds a value c to all the nodes on the path from leaf i to the root of the tree and computes the DP prefix sum S_i^priv.
+     *
      * @param i the index of the leaf
      * @param c the value to add
      */
@@ -87,7 +88,7 @@ public final class BinaryAggregationTree {
         //    - NOTE: this requires to pad i with leading zeros to have TREE_HEIGHT bits. As we use shifts, this is done automatically.
         // - iterate through the path from root to leaf i:
         //    - at each level l, if b_l == 1, add the value in the left sibling of the current node node_j to S_i^priv
-        int indexBinary = i+1; // convert from 0-based to 1-based index -> Zhang et al. use 1-based indexing
+        int indexBinary = i + 1; // convert from 0-based to 1-based index -> Zhang et al. use 1-based indexing
 
         int nodeIndex = 0; // current node index, starting from the root
         double sPriv = 0f;
@@ -147,6 +148,10 @@ public final class BinaryAggregationTree {
         }
 
         // return the initialized tree
+        return tree;
+    }
+
+    public List<Double> getTree() {
         return tree;
     }
 }

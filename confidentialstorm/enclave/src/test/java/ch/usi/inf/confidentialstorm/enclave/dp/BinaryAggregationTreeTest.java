@@ -1,7 +1,7 @@
 package ch.usi.inf.confidentialstorm.enclave.dp;
 
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLogger;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveLoggerFactory;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -67,9 +67,9 @@ class BinaryAggregationTreeTest {
     }
 
     private static class BinaryAggregationTreeOriginal {
-        private Double curPrivateSum = 0.00;
-        private final ArrayList<Double> tree;
         private static int height = 0;
+        private final ArrayList<Double> tree;
+        private Double curPrivateSum = 0.00;
 
         public BinaryAggregationTreeOriginal(int n, double sigma) {
             tree = initializeTree(n, sigma);

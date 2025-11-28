@@ -24,6 +24,10 @@ public final class AADSpecification {
         return new AADSpecification(Collections.emptyMap(), null, null);
     }
 
+    public static AADSpecificationBuilder builder() {
+        return new AADSpecificationBuilder();
+    }
+
     public Map<String, Object> attributes() {
         return attributes;
     }
@@ -38,9 +42,5 @@ public final class AADSpecification {
 
     public boolean isEmpty() {
         return attributes.isEmpty() && sourceComponent == null && destinationComponent == null;
-    }
-
-    public static AADSpecificationBuilder builder() {
-        return new AADSpecificationBuilder();
     }
 }
