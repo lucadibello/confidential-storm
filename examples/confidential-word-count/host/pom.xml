@@ -14,7 +14,7 @@
     <packaging>jar</packaging>
 
     <properties>
-        <topology.mainClass>ch.usi.inf.confidentialstorm.host.WordCountTopology</topology.mainClass>
+        <topology.mainClass>ch.usi.inf.examples.confidential_word_count.host.WordCountTopology</topology.mainClass>
         <topology.outputFile>${project.build.directory}/confidential-word-count-topology.jar</topology.outputFile>
     </properties>
 
@@ -107,10 +107,12 @@
         <dependency>
             <groupId>ch.usi.inf.examples</groupId>
             <artifactId>confidential-word-count-common</artifactId>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>ch.usi.inf.examples</groupId>
             <artifactId>confidential-word-count-enclave</artifactId>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>ch.usi.inf.confidentialstorm</groupId>
