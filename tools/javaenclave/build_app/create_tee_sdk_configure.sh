@@ -20,9 +20,13 @@
 TEE_SDK_CONFIG_FILE_PATH=$1
 TEE_SDK_BUILD_WORKSPACE=$2
 
+# Determine the project root directory (3 levels up from this script)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+PROJECT_ROOT=$(cd "${SCRIPT_DIR}/../../.." &> /dev/null && pwd)
+
 # prepare for TeeSDK.conf
-cp /workspaces/confidential-storm-starter/tools/javaenclave/config/template/TeeSDK.conf "${TEE_SDK_BUILD_WORKSPACE}"
-user_tee_sdk_enclave_config_file=/workspaces/confidential-storm-starter/tools/javaenclave/config/template/java_enclave_configure.json
+cp "${PROJECT_ROOT}/tools/javaenclave/config/template/TeeSDK.conf" "${TEE_SDK_BUILD_WORKSPACE}"
+user_tee_sdk_enclave_config_file="${PROJECT_ROOT}/tools/javaenclave/config/template/java_enclave_configure.json"
 if [[ -f "${TEE_SDK_CONFIG_FILE_PATH}/java_enclave_configure.json" ]]; then
     user_tee_sdk_enclave_config_file=${TEE_SDK_CONFIG_FILE_PATH}/java_enclave_configure.json
 fi

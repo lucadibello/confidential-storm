@@ -31,7 +31,7 @@
     "127.0.0.1:6666:6666"
   ],
   "overrideCommand": false,
-  "workspaceFolder": "/workspaces/confidential-storm-starter",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "forwardPorts": [2222],
   "mounts": ["source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind"],
   "containerEnv": {

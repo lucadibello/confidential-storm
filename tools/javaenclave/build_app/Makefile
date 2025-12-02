@@ -15,8 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
-include /workspaces/confidential-storm-starter/tools/javaenclave/config/config.mk
-include /workspaces/confidential-storm-starter/tools/javaenclave/config/platform/tee_sdk_svm/jni/config.mk
+include ../../config/config.mk
+include ../../config/platform/tee_sdk_svm/jni/config.mk
 
 # additional settings for stubs
 XATTR_STUB_SRC := ${ENCLAVE_BASE_DIR}/src/main/stubs/xattr_stubs.c
