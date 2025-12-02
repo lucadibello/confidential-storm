@@ -155,6 +155,7 @@
         <dependency>
             <groupId>ch.usi.inf.examples</groupId>
             <artifactId>confidential-word-count-common</artifactId>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>ch.usi.inf.confidentialstorm</groupId>
@@ -183,12 +184,6 @@
             <version>1.0-rc6</version>
             <optional>true</optional>
             <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>ch.usi.inf.examples</groupId>
-            <artifactId>confidential-word-count-common</artifactId>
-            <version>1.0-SNAPSHOT</version>
-            <scope>compile</scope>
         </dependency>
     </dependencies>
 </project>
