@@ -13,7 +13,8 @@ public final class TopologySpecification {
 
     private static final Map<Component, List<Component>> DOWNSTREAM = Map.of(
             Component.RANDOM_JOKE_SPOUT, List.of(Component.SENTENCE_SPLIT),
-            Component.SENTENCE_SPLIT, List.of(Component.WORD_COUNT),
+            Component.SENTENCE_SPLIT, List.of(Component.USER_CONTRIBUTION_BOUNDING),
+            Component.USER_CONTRIBUTION_BOUNDING, List.of(Component.WORD_COUNT),
             Component.WORD_COUNT, List.of(Component.HISTOGRAM_GLOBAL),
             Component.HISTOGRAM_GLOBAL, Collections.emptyList()
     );
@@ -43,6 +44,7 @@ public final class TopologySpecification {
         MAPPER("_MAPPER"),
         RANDOM_JOKE_SPOUT("random-joke-spout"),
         SENTENCE_SPLIT("sentence-split"),
+        USER_CONTRIBUTION_BOUNDING("user-contribution-bounding"),
         WORD_COUNT("word-count"),
         HISTOGRAM_GLOBAL("histogram-global");
 
