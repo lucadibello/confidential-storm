@@ -4,12 +4,12 @@ ROOT_POM := $(WORKDIR)/pom.xml
 RUNNER_SCRIPT := $(WORKDIR)/run-local.sh
 
 MVN ?= mvn
-MAVEN_GOALS ?= package
+MAVEN_GOALS ?= install
 MAVEN_FLAGS ?= -DskipTests
 # Toggle native profile (requires SGX-enabled env) via `make ENCLAVE_PROFILE= enclave`.
 ENCLAVE_PROFILE ?= -Pnative
 
-.PHONY: all build help clean common enclave host submit run-local seal-dataset
+.PHONY: all build help clean common enclave host
 
 all: build
 
@@ -45,23 +45,3 @@ test-enclave:
 
 host:
 	$(MVN) -f $(ROOT_POM) -pl host -am $(MAVEN_FLAGS) $(MAVEN_GOALS)
-
-run-local:
-	@echo "Running Storm topology locally with debug logging (120 seconds)..."
-	@sudo storm local -c topology.debug=true --local-ttl 120 confidentialstorm/host/target/confidentialstorm-topology.jar ch.usi.inf.confidentialstorm.host.WordCountTopology -- --local
-	@echo "Finished local run."
-
-run-local-java:
-	@echo "Running Storm topology locally with bare java command..."
-	@$(RUNNER_SCRIPT)
-	@echo "Finished local run."
-
-seal-dataset:
-	@echo "Sealing dataset (encrypting jokes.json to jokes.enc.json)..."
-	@dotenv -e .env -- python3 tools/seal-dataset/main.py confidentialstorm/host/src/main/resources/jokes.json confidentialstorm/host/src/main/resources/jokes.enc.json
-	@echo "Finished encryption."
-
-submit:
-	@echo "Submitting Storm topology to cluster..."
-	@storm jar confidentialstorm/host/target/confidentialstorm-topology.jar ch.inf.usi.confidentialstorm.host.WordCountTopology -- --cluster
-	@echo "Finished submission.";

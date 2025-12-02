@@ -1,0 +1,11 @@
+# Common Makefile logic for Confidential Storm examples
+
+FRAMEWORK_ROOT ?= ../..
+
+.PHONY: install-framework
+
+# This target ensures the base library is installed in the local maven repo
+install-framework:
+	@echo "[INFO] Ensuring Confidential Storm framework is installed..."
+	$(MAKE) -C $(FRAMEWORK_ROOT) build MAVEN_FLAGS="-DskipTests -q"
+	@echo "[INFO] Framework ready."
