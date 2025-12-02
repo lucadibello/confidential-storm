@@ -1,13 +1,12 @@
 package ch.usi.inf.examples.confidential_word_count.common.api.model;
 
-import ch.usi.inf.confidentialstorm.common.api.IServiceMessage;
-
 import java.io.Serial;
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public record HistogramSnapshotResponse(Map<String, Long> counts) implements IServiceMessage {
+public record HistogramSnapshotResponse(Map<String, Long> counts) implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 

@@ -1,15 +1,15 @@
 package ch.usi.inf.examples.confidential_word_count.common.api.model;
 
-import ch.usi.inf.confidentialstorm.common.api.IServiceMessage;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord;
 
 import java.io.Serial;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-public record SplitSentenceResponse(List<EncryptedWord> words) implements IServiceMessage {
+public record SplitSentenceResponse(List<EncryptedWord> words) implements Serializable {
     @Serial
     private static final long serialVersionUID = 2L;
 
