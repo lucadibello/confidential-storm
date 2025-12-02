@@ -40,7 +40,7 @@ def main(dataset_path: str, output_path: str):
             logger.error(f"Entry at index {i} is not a JSON object, got: {type(joke)}")
             sys.exit(1)
 
-        joke["userId"] = random.randint(MIN_USER_ID, MAX_USER_ID)
+        joke["user_id"] = random.randint(MIN_USER_ID, MAX_USER_ID)
 
     # write updated dataset
     with open(output_path, "w", encoding="utf-8") as f:
