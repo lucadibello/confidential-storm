@@ -1,6 +1,5 @@
 package ch.usi.inf.confidentialstorm.enclave.service.bolts;
 
-import ch.usi.inf.confidentialstorm.common.api.IServiceMessage;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
@@ -17,7 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
-public abstract class ConfidentialBoltService<T extends IServiceMessage> {
+public abstract class ConfidentialBoltService<T> {
     protected final EnclaveExceptionContext exceptionCtx = EnclaveExceptionContext.getInstance();
     protected final SealedPayload sealedPayload;
     /**
