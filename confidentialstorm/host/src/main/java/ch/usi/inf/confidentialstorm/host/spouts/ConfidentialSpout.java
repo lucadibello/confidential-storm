@@ -3,7 +3,7 @@ package ch.usi.inf.confidentialstorm.host.spouts;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.host.base.ConfidentialComponentState;
 import ch.usi.inf.confidentialstorm.host.util.EnclaveErrorUtils;
-import ch.usi.inf.examples.confidential_word_count.common.api.SpoutMapperService;
+import ch.usi.inf.confidentialstorm.common.api.SpoutMapperService;
 import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.base.BaseRichSpout;

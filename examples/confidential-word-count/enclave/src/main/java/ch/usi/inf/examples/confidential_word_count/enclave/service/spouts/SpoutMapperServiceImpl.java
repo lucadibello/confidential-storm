@@ -8,7 +8,7 @@ import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.exception.EnclaveExceptionContext;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
-import ch.usi.inf.examples.confidential_word_count.common.api.SpoutMapperService;
+import ch.usi.inf.confidentialstorm.common.api.SpoutMapperService;
 import com.google.auto.service.AutoService;
 
 import java.util.Objects;
