@@ -23,12 +23,6 @@ public abstract class SplitSentenceVerifier extends ConfidentialBoltService<Spli
         try {
             log.info("SplitSentenceVerifier: split called");
 
-            // throw an exception with small probability to test error handling
-            if (Math.random() < 0.01) {
-                log.error("Simulated random failure in SplitSentenceServiceImpl");
-                throw new RuntimeException();
-            }
-
             // verify the request
             super.verify(request);
             // call the implementation
