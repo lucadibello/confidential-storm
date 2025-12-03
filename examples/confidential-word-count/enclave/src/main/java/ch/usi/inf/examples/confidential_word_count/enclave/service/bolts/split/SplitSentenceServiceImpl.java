@@ -33,7 +33,7 @@ public class SplitSentenceServiceImpl extends SplitSentenceVerifier {
 
         // decrypt the payload
         String body = sealedPayload.decryptToString(request.body());
-        
+
         // extract user_id from input AAD
         DecodedAAD inputAad = DecodedAAD.fromBytes(request.body().associatedData());
         Object userId = inputAad.attributes().get("user_id");
