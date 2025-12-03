@@ -1,21 +1,4 @@
 [
-  { "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord" },
-  { "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue" },
-
-  { "name": "ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceRequest" },
-  { "name": "ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceResponse" },
-  { "name": "ch.usi.inf.confidentialstorm.common.api.model.WordCountRequest" },
-  { "name": "ch.usi.inf.confidentialstorm.common.api.model.WordCountResponse" },
-  { "name": "ch.usi.inf.confidentialstorm.common.api.model.HistogramSnapshotResponse" },
-  { "name": "ch.usi.inf.confidentialstorm.common.api.model.HistogramUpdateRequest" },
-
-  { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveCryptoException"},
-  { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException"},
-  { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException"},
-  { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException"},
-  { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException"},
-  { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException"},
-
   { "name": "java.lang.Long" },
 
   { "name": "java.lang.Throwable"},
