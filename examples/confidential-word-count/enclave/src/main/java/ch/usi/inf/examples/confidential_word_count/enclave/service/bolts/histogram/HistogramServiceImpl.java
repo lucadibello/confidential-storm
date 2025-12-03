@@ -7,6 +7,7 @@ import ch.usi.inf.confidentialstorm.enclave.util.DPUtil;
 import ch.usi.inf.examples.confidential_word_count.common.api.HistogramService;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramSnapshotResponse;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramUpdateRequest;
+import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
 import com.google.auto.service.AutoService;
 
 import java.util.HashMap;
@@ -17,11 +18,6 @@ import java.util.stream.Collectors;
 
 @AutoService(HistogramService.class)
 public class HistogramServiceImpl extends HistogramServiceVerifier {
-    private static final int T = 2048;
-    private static final double EPS = 1.0;
-    private static final double DELTA = 1e-5;
-    private static final double L = 1.0;
-
     private final Map<String, BinaryAggregationTree> forest = new HashMap<>();
     private final Map<String, Integer> indices = new HashMap<>();
     private final Map<String, Double> currentSums = new HashMap<>();
@@ -29,8 +25,10 @@ public class HistogramServiceImpl extends HistogramServiceVerifier {
     private final double sigma;
 
     public HistogramServiceImpl() {
-        double rho = DPUtil.cdpRho(EPS, DELTA);
-        this.sigma = DPUtil.calculateSigma(rho, T, L);
+        // Calibrate noise with user-level sensitivity C * L_m (refer to section 3.2 of the paper)
+        double rho = DPUtil.cdpRho(DPConfig.EPSILON, DPConfig.DELTA);
+        double l1Sensitivity = DPConfig.l1Sensitivity();
+        this.sigma = DPUtil.calculateSigma(rho, DPConfig.MAX_TIME_STEPS, l1Sensitivity);
     }
 
     @Override
@@ -38,10 +36,13 @@ public class HistogramServiceImpl extends HistogramServiceVerifier {
         String word = sealedPayload.decryptToString(update.word());
         double count = Double.parseDouble(sealedPayload.decryptToString(update.count()));
 
-        BinaryAggregationTree tree = forest.computeIfAbsent(word, k -> new BinaryAggregationTree(T, sigma));
+        BinaryAggregationTree tree = forest.computeIfAbsent(
+                word,
+                k -> new BinaryAggregationTree(DPConfig.MAX_TIME_STEPS, sigma)
+        );
         int index = indices.getOrDefault(word, 0);
 
-        if (index < T) {
+        if (index < DPConfig.MAX_TIME_STEPS) {
             double noisySum = tree.addToTree(index, count);
             currentSums.put(word, noisySum);
             indices.put(word, index + 1);

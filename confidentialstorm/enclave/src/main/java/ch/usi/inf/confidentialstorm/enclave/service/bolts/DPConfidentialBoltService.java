@@ -7,6 +7,6 @@ public abstract class DPConfidentialBoltService<T> extends ConfidentialBoltServi
     protected final BinaryAggregationForest aggregationForest;
 
     public DPConfidentialBoltService(int nKeys, int numTriggers, Double L, Double eps, Double delta) {
-        this.aggregationForest = new BinaryAggregationForest(nKeys, numTriggers, L, eps, delta);
+        this.aggregationForest = new BinaryAggregationForest(nKeys, numTriggers, eps, delta, L);
     }
 }

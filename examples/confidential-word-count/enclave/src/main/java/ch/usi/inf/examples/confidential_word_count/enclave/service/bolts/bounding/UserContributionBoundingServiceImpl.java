@@ -12,6 +12,7 @@ import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.bounding.UserContributionBoundingVerifier;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
+import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
 import com.google.auto.service.AutoService;
 
 import java.util.HashMap;
@@ -25,7 +26,7 @@ public class UserContributionBoundingServiceImpl extends UserContributionBoundin
     private final Map<Object, Long> userCounts = new HashMap<>();
     private final String producerId = UUID.randomUUID().toString();
     private final AtomicLong sequenceCounter = new AtomicLong(0);
-    private static final long MAX_CONTRIBUTIONS = 10;
+    private static final long MAX_CONTRIBUTIONS = DPConfig.MAX_CONTRIBUTIONS_PER_USER;
 
     @Override
     public UserContributionBoundingResponse checkImpl(UserContributionBoundingRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException {
