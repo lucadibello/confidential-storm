@@ -32,7 +32,7 @@ help:
 	@echo "  MAVEN_FLAGS='<flags>'     Extra flags (default: $(MAVEN_FLAGS))"
 	@echo "  ENCLAVE_PROFILE='<flags>' Profile(s) to pass while building enclave"
 
-build: common enclave host
+build: clean common enclave host
 
 clean:
 	$(MVN) -f $(ROOT_POM) clean
