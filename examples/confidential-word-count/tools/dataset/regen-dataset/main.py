@@ -5,9 +5,10 @@ import logging
 import json
 import random
 
-# Config: range of possible user IDs [MIN_USER_ID, MAX_USER_ID]
-MIN_USER_ID = 1
-MAX_USER_ID = 100  # NOTE: for bigger dataset, we might set a bigger user id range
+# Config: moderate heavy-tail user sampling via lognormal weights
+NUM_USERS = 500
+LOGNORMAL_MU = 0.0
+LOGNORMAL_SIGMA = 1.0  # higher -> heavier tail
 
 # Setup logger
 logging.basicConfig(
@@ -31,16 +32,20 @@ def main(dataset_path: str, output_path: str):
         sys.exit(1)
 
     logger.info(
-        f"Assigning userIds in range [{MIN_USER_ID}, {MAX_USER_ID}] "
+        f"Assigning ~{NUM_USERS} userIds with lognormal skew (mu={LOGNORMAL_MU}, sigma={LOGNORMAL_SIGMA}) "
         f"to {len(dataset_data)} jokes"
     )
+
+    users = list(range(1, NUM_USERS + 1))
+    weights = [random.lognormvariate(LOGNORMAL_MU, LOGNORMAL_SIGMA) for _ in users]
 
     for i, joke in enumerate(dataset_data):
         if not isinstance(joke, dict):
             logger.error(f"Entry at index {i} is not a JSON object, got: {type(joke)}")
             sys.exit(1)
 
-        joke["user_id"] = random.randint(MIN_USER_ID, MAX_USER_ID)
+        # weighted random choice to mimic heavy-tailed user activity
+        joke["user_id"] = random.choices(users, weights=weights, k=1)[0]
 
     # write updated dataset
     with open(output_path, "w", encoding="utf-8") as f:
