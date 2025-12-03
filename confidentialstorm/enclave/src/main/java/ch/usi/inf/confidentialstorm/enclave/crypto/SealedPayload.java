@@ -157,8 +157,10 @@ public final class SealedPayload {
                 first = false;
                 sb.append('"').append(escapeJson(entry.getKey())).append("\":");
                 Object value = entry.getValue();
-                if (value instanceof Number || value instanceof Boolean) {
-                    sb.append(value.toString());
+                if (value == null) {
+                    sb.append("null");
+                } else if (value instanceof Number || value instanceof Boolean) {
+                    sb.append(value);
                 } else {
                     sb.append('"').append(escapeJson(String.valueOf(value))).append('"');
                 }
@@ -171,13 +173,44 @@ public final class SealedPayload {
     }
 
     private String escapeJson(String input) {
+        if (input == null) {
+            return "";
+        }
         StringBuilder sb = new StringBuilder(input.length());
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
-            if (c == '"' || c == '\\') {
-                sb.append('\\');
+            switch (c) {
+                case '"':
+                    sb.append("\\\"");
+                    break;
+                case '\\':
+                    sb.append("\\\\");
+                    break;
+                case '\b':
+                    sb.append("\\b");
+                    break;
+                case '\f':
+                    sb.append("\\f");
+                    break;
+                case '\n':
+                    sb.append("\\n");
+                    break;
+                case '\r':
+                    sb.append("\\r");
+                    break;
+                case '\t':
+                    sb.append("\\t");
+                    break;
+                default:
+                    if (c < ' ' || c >= 0x7F) {
+                        String hex = Integer.toHexString(c);
+                        sb.append("\\u");
+                        sb.append("0".repeat(4 - hex.length()));
+                        sb.append(hex);
+                    } else {
+                        sb.append(c);
+                    }
             }
-            sb.append(c);
         }
         return sb.toString();
     }
