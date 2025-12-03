@@ -98,14 +98,55 @@ public class AADUtils {
 
     private static String unescape(String s) {
         StringBuilder sb = new StringBuilder(s.length());
-        boolean escaping = false;
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
-            if (escaping) {
-                sb.append(c);
-                escaping = false;
-            } else if (c == '\\') {
-                escaping = true;
+            if (c == '\\') {
+                i++;
+                if (i >= s.length()) {
+                    throw new IllegalArgumentException("Invalid JSON string: trailing backslash");
+                }
+                char next = s.charAt(i);
+                switch (next) {
+                    case '"':
+                        sb.append('"');
+                        break;
+                    case '\\':
+                        sb.append('\\');
+                        break;
+                    case '/':
+                        sb.append('/');
+                        break;
+                    case 'b':
+                        sb.append('\b');
+                        break;
+                    case 'f':
+                        sb.append('\f');
+                        break;
+                    case 'n':
+                        sb.append('\n');
+                        break;
+                    case 'r':
+                        sb.append('\r');
+                        break;
+                    case 't':
+                        sb.append('\t');
+                        break;
+                    case 'u':
+                        if (i + 4 >= s.length()) {
+                            throw new IllegalArgumentException("Invalid JSON string: incomplete unicode escape");
+                        }
+                        String hex = s.substring(i + 1, i + 5);
+                        try {
+                            sb.append((char) Integer.parseInt(hex, 16));
+                        } catch (NumberFormatException e) {
+                            throw new IllegalArgumentException("Invalid JSON string: invalid unicode escape " + hex);
+                        }
+                        i += 4;
+                        break;
+                    default:
+                        sb.append(next);
+                        break;
+                }
             } else {
                 sb.append(c);
             }
@@ -116,6 +157,15 @@ public class AADUtils {
     private static Object parseScalar(String raw) {
         if (raw == null || raw.isEmpty()) {
             return "";
+        }
+        if ("null".equals(raw)) {
+            return null;
+        }
+        if ("true".equals(raw)) {
+            return Boolean.TRUE;
+        }
+        if ("false".equals(raw)) {
+            return Boolean.FALSE;
         }
         // try long
         try {
