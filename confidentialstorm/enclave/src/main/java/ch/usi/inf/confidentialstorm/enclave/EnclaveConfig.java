@@ -1,5 +1,6 @@
 package ch.usi.inf.confidentialstorm.enclave;
 
+import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.LogLevel;
 
 import java.util.ServiceLoader;
@@ -18,38 +19,16 @@ public final class EnclaveConfig {
             found = config;
             break; // Use the first one found
         }
-        
+
         if (found == null) {
-            // Default fallback configuration
-            provider = new EnclaveConfiguration() {
-                @Override
-                public String getStreamKeyHex() {
-                    return "a46bf317953bf1a8f71439f74f30cd889ec0aa318f8b6431789fb10d1053d932";
-                }
-
-                @Override
-                public LogLevel getLogLevel() {
-                    return LogLevel.DEBUG;
-                }
-
-                @Override
-                public boolean isExceptionIsolationEnabled() {
-                    return false;
-                }
-
-                @Override
-                public boolean isRouteValidationEnabled() {
-                    return true;
-                }
-
-                @Override
-                public boolean isReplayProtectionEnabled() {
-                    return true;
-                }
-            };
-        } else {
-            provider = found;
+            EnclaveServiceException exception = new EnclaveServiceException(
+                    "EnclaveConfiguration",
+                    "No EnclaveConfiguration provider found. Ensure a configuration service is registered via ServiceLoader."
+            );
+            throw new RuntimeException(exception);
         }
+
+        provider = found;
     }
 
     /**
