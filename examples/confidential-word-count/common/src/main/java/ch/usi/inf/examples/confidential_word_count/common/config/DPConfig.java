@@ -36,6 +36,12 @@ public final class DPConfig {
     public static final double PER_RECORD_CLAMP = 1.0;
 
     /**
+     * Feature toggle: when true enforce user-level DP (bounding + AAD propagation of user_id);
+     * when false operate in event-level mode without requiring user identifiers.
+     */
+    public static final boolean ENABLE_USER_LEVEL_PRIVACY = true;
+
+    /**
      * Returns the user-level L1 sensitivity C * L_m, used by the DP tree to
      * calibrate Gaussian noise.
      */
