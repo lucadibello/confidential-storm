@@ -19,7 +19,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
-                <version>3.0.0</version>
+                <version>3.4.0</version>
                 <configuration>
                     <attach>true</attach>
                 </configuration>
@@ -45,22 +45,16 @@
         <dependency>
             <groupId>com.google.auto.service</groupId>
             <artifactId>auto-service-annotations</artifactId>
-            <version>1.0-rc6</version>
+            <version>1.1.1</version>
             <optional>true</optional>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.google.auto.service</groupId>
             <artifactId>auto-service</artifactId>
-            <version>1.0-rc6</version>
+            <version>1.1.1</version>
             <optional>true</optional>
             <scope>provided</scope>
-        </dependency>
-
-        <!-- Jackson for JSON processing -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
         </dependency>
     </dependencies>
 </project>

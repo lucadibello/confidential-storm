@@ -1,9 +1,11 @@
 package ch.usi.inf.confidentialstorm.enclave.util.logger;
 
+import java.io.Serializable;
+
 /**
  * Minimal logger API for enclave code (API similar to SFL4J)
  */
-public interface EnclaveLogger {
+public interface EnclaveLogger extends Serializable {
     void info(String message);
 
     void info(String message, Object... args);

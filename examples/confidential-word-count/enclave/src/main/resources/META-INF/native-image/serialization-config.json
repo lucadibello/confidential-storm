@@ -1,4 +1,9 @@
 [
+  { "name": "org.apache.teaclave.javasdk.common.EnclaveInvocationContext" },
+  { "name": "org.apache.teaclave.javasdk.common.EnclaveInvocationResult" },
+  { "name": "org.apache.teaclave.javasdk.common.ServiceHandler" },
+  { "name": "[Lorg.apache.teaclave.javasdk.common.ServiceHandler;" },
+
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord" },
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue" },
 
@@ -16,14 +21,23 @@
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException"},
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException"},
 
+  { "name": "java.lang.String" },
+  { "name": "java.lang.Number" },
   { "name": "java.lang.Long" },
 
-  { "name": "java.lang.Throwable"},
-  { "name": "java.lang.Exception"},
+  { "name": "java.lang.Throwable" },
+  { "name": "java.lang.Error" },
+  { "name": "java.lang.Exception" },
   { "name": "java.lang.RuntimeException"},
+  { "name": "java.io.IOException" },
+  { "name": "java.io.ObjectStreamException" },
+  { "name": "java.io.NotSerializableException" },
+  { "name": "java.io.StreamCorruptedException" },
+  { "name": "java.lang.ClassCastException" },
+  { "name": "java.lang.reflect.InvocationTargetException" },
+  { "name": "java.lang.NullPointerException" },
   { "name": "java.lang.IllegalArgumentException"},
   { "name": "java.lang.IllegalStateException"},
-  { "name": "java.lang.NullPointerException"},
   { "name": "java.lang.SecurityException"},
   { "name": "java.security.GeneralSecurityException"},
 
@@ -34,6 +48,9 @@
   { "name": "java.security.InvalidKeyException"},
   { "name": "java.security.InvalidAlgorithmParameterException"},
   { "name": "javax.crypto.AEADBadTagException"},
+
+  { "name": "java.lang.StackTraceElement" },
+  { "name": "[Ljava.lang.StackTraceElement;" },
 
   { "name": "java.util.ArrayList" },
   { "name": "java.util.LinkedList" },
@@ -57,7 +74,6 @@
   { "name": "java.util.Collections$UnmodifiableCollection" },
   { "name": "java.util.Collections$UnmodifiableList" },
   { "name": "java.util.Collections$UnmodifiableRandomAccessList" },
-
   { "name": "java.util.Collections$UnmodifiableSet" },
   { "name": "java.util.Collections$UnmodifiableMap" },
   { "name": "java.util.Collections$UnmodifiableMap$UnmodifiableEntrySet" },

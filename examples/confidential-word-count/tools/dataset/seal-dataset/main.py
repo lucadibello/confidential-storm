@@ -74,11 +74,16 @@ def main(dataset_path: str, output_path: str):
         # random nonce (12 bytes) – included in ciphertext package
         nonce = os.urandom(12)
 
+        # ensure we have a user id for AAD
+        if "user_id" not in entry:
+            raise ValueError(f"Entry {i} missing required 'user_id' field for AAD.")
+
         # build header (this will later be AAD)
         # NOTE: this is empty at generation, but may be recomputed during
         header = {
             "source": SOURCE_NAME,
             "destination": DESTINATION_NAME,
+            "user_id": entry["user_id"],
         }
 
         # serialize header as JSON

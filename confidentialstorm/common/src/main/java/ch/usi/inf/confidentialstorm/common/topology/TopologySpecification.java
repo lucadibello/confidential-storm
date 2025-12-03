@@ -1,9 +1,10 @@
 package ch.usi.inf.confidentialstorm.common.topology;
 
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.ServiceLoader;
 
 /**
  * Declarative description of the WordCount topology used to derive routing
@@ -11,20 +12,26 @@ import java.util.Objects;
  */
 public final class TopologySpecification {
 
-    private static final Map<Component, List<Component>> DOWNSTREAM = Map.of(
-            Component.RANDOM_JOKE_SPOUT, List.of(Component.SENTENCE_SPLIT),
-            Component.SENTENCE_SPLIT, List.of(Component.WORD_COUNT),
-            Component.WORD_COUNT, List.of(Component.HISTOGRAM_GLOBAL),
-            Component.HISTOGRAM_GLOBAL, Collections.emptyList()
-    );
+    private static final TopologyProvider provider;
 
+    static {
+        ServiceLoader<TopologyProvider> loader = ServiceLoader.load(TopologyProvider.class);
+        TopologyProvider found = null;
+        for (TopologyProvider p : loader) {
+            found = p;
+            break;
+        }
+
+        // Default fallback: empty topology
+        provider = Objects.requireNonNullElseGet(found, () -> component -> Collections.emptyList());
+    }
 
     private TopologySpecification() {
     }
 
     public static List<Component> downstream(Component component) {
         Objects.requireNonNull(component, "componentId cannot be null");
-        return DOWNSTREAM.getOrDefault(component, Collections.emptyList());
+        return provider.getDownstream(component);
     }
 
     public static Component requireSingleDownstream(Component component) {
@@ -38,11 +45,12 @@ public final class TopologySpecification {
         return downstream.get(0);
     }
 
-    public enum Component implements java.io.Serializable {
+    public enum Component implements Serializable {
         DATASET("_DATASET"),
         MAPPER("_MAPPER"),
         RANDOM_JOKE_SPOUT("random-joke-spout"),
         SENTENCE_SPLIT("sentence-split"),
+        USER_CONTRIBUTION_BOUNDING("user-contribution-bounding"),
         WORD_COUNT("word-count"),
         HISTOGRAM_GLOBAL("histogram-global");
 

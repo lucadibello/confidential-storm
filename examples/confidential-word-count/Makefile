@@ -1,5 +1,9 @@
 ROOT_POM := pom.xml
-TOOLS_DIR := ../../tools
+TOOLS_DIR := ./tools
+DATASET_DIR := $(TOOLS_DIR)/dataset
+DATASET_RAW := $(DATASET_DIR)/jokes.json
+DATASET_WITH_USERS := $(DATASET_DIR)/out/jokes.with_user_ids.json
+MAX_CONTRIB_TOOL := $(TOOLS_DIR)/max-contribution-estimation/main.py
 
 include ../Makefile.common
 
@@ -28,7 +32,7 @@ help:
 	@echo "  MAVEN_FLAGS='<flags>'     Extra flags (default: $(MAVEN_FLAGS))"
 	@echo "  ENCLAVE_PROFILE='<flags>' Profile(s) to pass while building enclave"
 
-build: common enclave host
+build: clean common enclave host
 
 clean:
 	$(MVN) -f $(ROOT_POM) clean
@@ -52,9 +56,22 @@ run-local:
 
 seal-dataset:
 	@echo "Sealing dataset (encrypting jokes.json to jokes.enc.json)..."
-	@# Note: You might need to set up .env or environment variables for the sealing script.
-	@python3 $(TOOLS_DIR)/seal-dataset/main.py $(TOOLS_DIR)/dataset/jokes.json host/src/main/resources/jokes.enc.json
+	$(MAKE) dataset-with-users
+	@STREAM_KEY_HEX=$$(cat $(DATASET_DIR)/stream_key_hex) \
+		python3 $(DATASET_DIR)/seal-dataset/main.py $(DATASET_WITH_USERS) host/src/main/resources/jokes.enc.json
 	@echo "Finished encryption."
+
+percentile:
+	@echo "Computing per-user word-count percentile (default p=0.99)..."
+	$(MAKE) dataset-with-users
+	@python3 $(MAX_CONTRIB_TOOL) $(DATASET_WITH_USERS)
+	@echo "Done."
+
+dataset-with-users:
+	@echo "Generating dataset with user_id annotations..."
+	@mkdir -p $(dir $(DATASET_WITH_USERS))
+	@python3 $(DATASET_DIR)/regen-dataset/main.py $(DATASET_RAW) $(DATASET_WITH_USERS)
+	@echo "Dataset with user_ids written to $(DATASET_WITH_USERS)"
 
 submit:
 	@echo "Submitting Storm topology to cluster..."

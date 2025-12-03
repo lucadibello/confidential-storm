@@ -1,5 +1,6 @@
 package ch.usi.inf.examples.confidential_word_count.host;
 
+import ch.usi.inf.confidentialstorm.host.bolts.UserContributionBoundingBolt;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.SplitSentenceBolt;
@@ -43,13 +44,20 @@ public class WordCountTopology extends ConfigurableTopology {
                 1
         ).shuffleGrouping(TopologySpecification.Component.RANDOM_JOKE_SPOUT.toString());
 
-        // WordCountBolt: counts the words that are emitted
+        // UserContributionBoundingBolt: filters words based on per-user contribution limits
+        builder.setBolt(
+                TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING.toString(),
+                new UserContributionBoundingBolt(),
+                1
+        ).shuffleGrouping(TopologySpecification.Component.SENTENCE_SPLIT.toString());
+
+        // WordCountBolt: counts the words that are emitted (now stateless forwarding for DP)
         builder.setBolt(
                 TopologySpecification.Component.WORD_COUNT.toString(),
                 new WordCounterBolt(),
                 1
         ).fieldsGrouping(
-                TopologySpecification.Component.SENTENCE_SPLIT.toString(),
+                TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING.toString(),
                 new Fields("wordKey")
         );
 
@@ -78,6 +86,8 @@ public class WordCountTopology extends ConfigurableTopology {
             conf.setDebug(false);
             // Enable verbose exception propagation for local/debug runs
             System.setProperty("confidentialstorm.debug.exceptions.enabled", "false");
+            // Enable enclave service null-check proxy for local runs
+            System.setProperty("confidentialstorm.enclave.proxy.enable", "true");
         }
         if (!isProd) {
             LOG.warn("Running in local mode");
