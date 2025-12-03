@@ -86,6 +86,8 @@ public class WordCountTopology extends ConfigurableTopology {
             conf.setDebug(false);
             // Enable verbose exception propagation for local/debug runs
             System.setProperty("confidentialstorm.debug.exceptions.enabled", "false");
+            // Enable enclave service null-check proxy for local runs
+            System.setProperty("confidentialstorm.enclave.proxy.enable", "true");
         }
         if (!isProd) {
             LOG.warn("Running in local mode");
