@@ -40,7 +40,7 @@ public abstract class SplitSentenceVerifier extends ConfidentialBoltService<Spli
 
     @Override
     public TopologySpecification.Component expectedDestinationComponent() {
-        return TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING;
+        return TopologySpecification.Component.SENTENCE_SPLIT;
     }
 
     @Override
