@@ -1,0 +1,62 @@
+[
+  {
+    "name": "org.apache.teaclave.javasdk.common.EnclaveInvocationContext"
+  },
+  {
+    "name": "org.apache.teaclave.javasdk.common.EnclaveInvocationResult"
+  },
+  {
+    "name": "org.apache.teaclave.javasdk.common.ServiceHandler"
+  },
+  {
+    "name": "[Lorg.apache.teaclave.javasdk.common.ServiceHandler;"
+  },
+  {
+    "name": "java.lang.String"
+  },
+  {
+    "name": "java.util.ArrayList"
+  },
+  {
+    "name": "java.util.Arrays$ArrayList"
+  },
+  {
+    "name": "java.lang.Throwable"
+  },
+  {
+    "name": "java.lang.Error"
+  },
+  {
+    "name": "java.lang.Exception"
+  },
+  {
+    "name": "java.io.IOException"
+  },
+  {
+    "name": "java.lang.ClassCastException"
+  },
+  {
+    "name": "java.lang.reflect.InvocationTargetException"
+  },
+  {
+    "name": "java.lang.NullPointerException"
+  },
+  {
+    "name": "java.io.ObjectStreamException"
+  },
+  {
+    "name": "java.io.NotSerializableException"
+  },
+  {
+    "name": "java.io.StreamCorruptedException"
+  },
+  {
+    "name": "java.lang.StackTraceElement"
+  },
+  {
+    "name": "[Ljava.lang.StackTraceElement;"
+  },
+  {
+    "name": "java.lang.Number"
+  }
+]
