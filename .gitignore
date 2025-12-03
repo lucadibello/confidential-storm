@@ -7,6 +7,8 @@ out/
 # Output histogram snapshot
 data/
 
+references/
+
 # Java package files
 *.jar
 *.war
