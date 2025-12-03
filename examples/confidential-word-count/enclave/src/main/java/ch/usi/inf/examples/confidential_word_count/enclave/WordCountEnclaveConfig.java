@@ -9,7 +9,7 @@ public class WordCountEnclaveConfig implements EnclaveConfiguration {
     @Override
     public String getStreamKeyHex() {
         // FIXME: this is a dummy key, replace with a secure key for production use
-        return "5c03a616612ac47a25a16013bc3edaeda0ef306f7576e8a0ef6aba0ccf213cb3";
+        return "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
     }
 
     @Override
