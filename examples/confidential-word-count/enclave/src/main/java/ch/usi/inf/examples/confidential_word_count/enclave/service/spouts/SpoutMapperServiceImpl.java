@@ -9,6 +9,7 @@ import ch.usi.inf.confidentialstorm.enclave.exception.EnclaveExceptionContext;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import ch.usi.inf.confidentialstorm.common.api.SpoutMapperService;
+import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import com.google.auto.service.AutoService;
 
 import java.util.Objects;
@@ -45,6 +46,7 @@ public class SpoutMapperServiceImpl implements SpoutMapperService {
 
             // get string body
             byte[] body = sealedPayload.decrypt(entry);
+            DecodedAAD inputAad = DecodedAAD.fromBytes(entry.associatedData());
 
             TopologySpecification.Component downstreamComponent = TopologySpecification.requireSingleDownstream(component);
 
@@ -53,6 +55,8 @@ public class SpoutMapperServiceImpl implements SpoutMapperService {
             AADSpecification aad = AADSpecification.builder()
                     .sourceComponent(component)
                     .destinationComponent(downstreamComponent)
+                    // preserve input attributes such as user_id to enable user-level DP
+                    .putAll(inputAad.attributes())
                     .put("producer_id", producerId)
                     .put("seq", sequence)
                     .build();
