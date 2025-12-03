@@ -2,6 +2,14 @@ package ch.usi.inf.confidentialstorm.enclave.util;
 
 public class DPUtil {
 
+    /**
+     * Converts an (epsilon, delta)-DP guarantee into an equivalent rho-zCDP guarantee
+     * (as used for the binary tree aggregation in the referenced DP streaming paper).
+     *
+     * @param eps   target epsilon (privacy loss parameter)
+     * @param delta target delta (failure probability in (eps, delta)-DP)
+     * @return rho parameter for zCDP satisfying the requested (eps, delta)-DP
+     */
     public static double cdpRho(double eps, double delta) {
         if (eps < 0 || delta <= 0) {
             throw new IllegalArgumentException("epsilon must be non-negative and delta must be positive");
@@ -22,6 +30,14 @@ public class DPUtil {
         return rho_min;
     }
 
+    /**
+     * Computes the delta that corresponds to a given rho-zCDP and epsilon bound,
+     * per the zCDP to (epsilon, delta)-DP conversion in the DP streaming paper.
+     *
+     * @param rho zCDP privacy parameter
+     * @param eps epsilon bound
+     * @return the resulting delta value
+     */
     private static double cdpDelta(double rho, double eps) {
         if (rho < 0 || eps < 0) {
             throw new IllegalArgumentException("rho and epsilon must be non-negative");
@@ -46,6 +62,15 @@ public class DPUtil {
         return Math.min(delta, 1.0);
     }
 
+    /**
+     * Computes the Gaussian sigma needed for binary tree aggregation under rho-zCDP
+     * (see Algorithm 2 / binary tree aggregation in the paper).
+     *
+     * @param rho zCDP privacy parameter
+     * @param T   number of releases/time steps supported by the tree
+     * @param L   per-user L1 sensitivity (C * L_m in the paper)
+     * @return standard deviation for the Gaussian noise
+     */
     public static double calculateSigma(double rho, double T, double L) {
         return Math.sqrt((Math.log(T) * L * L) / ((2 * rho)));
     }
