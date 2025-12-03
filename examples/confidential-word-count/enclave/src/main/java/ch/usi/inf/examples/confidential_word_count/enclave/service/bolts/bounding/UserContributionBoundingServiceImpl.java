@@ -10,20 +10,19 @@ import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecificationBuilder;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.bounding.UserContributionBoundingVerifier;
+import ch.usi.inf.confidentialstorm.enclave.dp.ContributionLimiter;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
 import com.google.auto.service.AutoService;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 @AutoService(UserContributionBoundingService.class)
 public class UserContributionBoundingServiceImpl extends UserContributionBoundingVerifier {
     private final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(UserContributionBoundingServiceImpl.class);
-    private final Map<Object, Long> userCounts = new HashMap<>();
+    private final ContributionLimiter limiter = new ContributionLimiter();
     private final String producerId = UUID.randomUUID().toString();
     private final AtomicLong sequenceCounter = new AtomicLong(0);
     private static final long MAX_CONTRIBUTIONS = DPConfig.MAX_CONTRIBUTIONS_PER_USER;
@@ -43,20 +42,16 @@ public class UserContributionBoundingServiceImpl extends UserContributionBoundin
         DecodedAAD aad = DecodedAAD.fromBytes(request.word().associatedData());
         Object userId = aad.attributes().get("user_id");
         
-        if (userId == null) {
-            LOG.warn("No user_id in AAD, dropping contribution");
-            return new UserContributionBoundingResponse(null);
-        }
+        boolean enforceBounding = DPConfig.ENABLE_USER_LEVEL_PRIVACY && userId != null;
 
-        // Check limit
-        long currentCount = userCounts.getOrDefault(userId, 0L);
-        if (currentCount >= MAX_CONTRIBUTIONS) {
-            LOG.info("User {} exceeded contribution limit ({}), dropping.", userId, MAX_CONTRIBUTIONS);
-            return new UserContributionBoundingResponse(null);
+        if (enforceBounding) {
+            if (!limiter.allow(userId, MAX_CONTRIBUTIONS)) {
+                LOG.info("User {} exceeded contribution limit ({}), dropping.", userId, MAX_CONTRIBUTIONS);
+                return new UserContributionBoundingResponse(null);
+            }
+        } else if (DPConfig.ENABLE_USER_LEVEL_PRIVACY) {
+            LOG.warn("No user_id in AAD, skipping user-level bounding (event-level privacy).");
         }
-
-        // Update count
-        userCounts.put(userId, currentCount + 1);
 
         // Re-encrypt with new AAD
         long sequence = sequenceCounter.getAndIncrement();
@@ -64,8 +59,11 @@ public class UserContributionBoundingServiceImpl extends UserContributionBoundin
                 .sourceComponent(TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING)
                 .destinationComponent(TopologySpecification.Component.WORD_COUNT)
                 .put("producer_id", producerId)
-                .put("seq", sequence)
-                .put("user_id", userId);
+                .put("seq", sequence);
+
+        if (enforceBounding) {
+            aadBuilder.put("user_id", userId);
+        }
 
         EncryptedValue newPayload = sealedPayload.encryptString(word, aadBuilder.build());
         

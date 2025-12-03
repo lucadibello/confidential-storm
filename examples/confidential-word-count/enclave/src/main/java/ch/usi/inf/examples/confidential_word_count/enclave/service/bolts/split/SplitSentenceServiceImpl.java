@@ -15,6 +15,7 @@ import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import ch.usi.inf.examples.confidential_word_count.common.api.SplitSentenceService;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.SplitSentenceRequest;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.SplitSentenceResponse;
+import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
 import com.google.auto.service.AutoService;
 
 import java.util.*;
@@ -37,9 +38,7 @@ public class SplitSentenceServiceImpl extends SplitSentenceVerifier {
         // extract user_id from input AAD
         DecodedAAD inputAad = DecodedAAD.fromBytes(request.body().associatedData());
         Object userId = inputAad.attributes().get("user_id");
-        if (userId == null) {
-            // FIXME: fallback or throw? For now log warning and maybe skip or use default?
-            // NOTE: actually, we might simply disable user-level privacy and have only event-level privacy
+        if (userId == null && DPConfig.ENABLE_USER_LEVEL_PRIVACY) {
             LOG.warn("No user_id found in AAD for split request");
         }
 
@@ -68,7 +67,7 @@ public class SplitSentenceServiceImpl extends SplitSentenceVerifier {
                     .put("producer_id", producerId)
                     .put("seq", sequence);
 
-            if (userId != null) {
+            if (DPConfig.ENABLE_USER_LEVEL_PRIVACY && userId != null) {
                 aadBuilder.put("user_id", userId);
             }
 
