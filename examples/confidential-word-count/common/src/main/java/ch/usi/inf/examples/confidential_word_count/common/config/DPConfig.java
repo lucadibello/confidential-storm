@@ -10,10 +10,10 @@ public final class DPConfig {
     /**
      * Privacy budget for the streaming histogram (Algorithm 2 in the paper).
      * <p>
-     * NOTE: for the example application, we set epsilon = 1.0 as a reasonable
-     * trade-off between privacy and utility.
+     * NOTE: for the example application, we set epsilon = 10.0 to reduce noise
+     * and ensure better utility (signal-to-noise ratio) for the demonstration.
      */
-    public static final double EPSILON = 1.0;
+    public static final double EPSILON = 10.0;
 
     /**
      * Failure probability (delta) for the (epsilon, delta)-DP guarantee.

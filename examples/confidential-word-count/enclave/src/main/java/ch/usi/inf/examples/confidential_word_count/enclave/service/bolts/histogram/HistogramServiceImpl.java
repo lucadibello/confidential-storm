@@ -79,7 +79,6 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
             long rounded = Math.round(entry.getValue());
             // we clamp the minimum rounded value to 0 as (due to the applied noise)
             // the histogram could contain negative results
-            // FIXME: is this correct? Maybe I apply too much noise
             sortedHistogram.put(entry.getKey(), Math.max(0L, rounded));
         }
 
