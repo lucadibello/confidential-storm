@@ -163,14 +163,16 @@ public final class EnclaveJsonUtil {
         if (raw == null || raw.isEmpty()) {
             return "";
         }
-        if ("null".equals(raw)) {
-            return null;
-        }
-        if ("true".equals(raw)) {
-            return Boolean.TRUE;
-        }
-        if ("false".equals(raw)) {
-            return Boolean.FALSE;
+        switch (raw) {
+            case "null" -> {
+                return null;
+            }
+            case "true" -> {
+                return Boolean.TRUE;
+            }
+            case "false" -> {
+                return Boolean.FALSE;
+            }
         }
         // try long
         try {

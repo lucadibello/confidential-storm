@@ -36,28 +36,17 @@ public final class DecodedAAD {
         Object producerId = parsed.remove("producer_id");
         // optional: remove sequence number if present
         Object sequenceNumber = parsed.remove("seq");
-        if (sequenceNumber == null) {
-            sequenceNumber = parsed.remove("sequence_number"); // backward compatibility
-        }
         Map<String, Object> attrs = Collections.unmodifiableMap(new LinkedHashMap<>(parsed));
 
         // construct DecodedAAD instance
         return new DecodedAAD(attrs,
-                toStringValue(source, "source"),
-                toStringValue(destination, "destination"),
-                toLongValue(sequenceNumber, "sequence_number"),
-                toStringValue(producerId, "producer_id"));
+                String.valueOf(source),
+                String.valueOf(destination),
+                toLongValue(sequenceNumber),
+                String.valueOf(producerId));
     }
 
-    private static String toStringValue(Object value, String fieldName) {
-        if (value == null) {
-            return null;
-        }
-        // Be permissive: coerce to string to avoid deserialization issues when types differ.
-        return String.valueOf(value);
-    }
-
-    private static Long toLongValue(Object value, String fieldName) {
+    private static Long toLongValue(Object value) {
         if (value == null) {
             return null;
         }
