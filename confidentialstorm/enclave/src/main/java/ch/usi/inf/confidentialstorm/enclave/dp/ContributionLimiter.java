@@ -1,15 +1,15 @@
 package ch.usi.inf.confidentialstorm.enclave.dp;
 
 import javax.annotation.Nullable;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Tracks per-user contribution counts and enforces a hard maximum.
  * This encapsulates the bounding logic so applications can reuse it across services.
  */
 public final class ContributionLimiter {
-    private final Map<Object, Long> counts = new ConcurrentHashMap<>();
+    private final Map<Object, Long> counts = new HashMap<>();
 
     /**
      * Records a contribution for user and returns whether it is within the bound or not.

@@ -18,13 +18,12 @@ import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
 import com.google.auto.service.AutoService;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 @AutoService(SplitSentenceService.class)
 public final class SplitSentenceServiceImpl extends SplitSentenceVerifier {
     private final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SplitSentenceServiceImpl.class);
-    private final AtomicLong sequenceCounter = new AtomicLong(0);
+    private long sequenceCounter = 0;
     private final String producerId = UUID.randomUUID().toString();
 
     @Override
@@ -68,7 +67,7 @@ public final class SplitSentenceServiceImpl extends SplitSentenceVerifier {
         List<EncryptedValue> encryptedWords = new ArrayList<>(plainWords.size());
         for (String plainWord : plainWords) {
             // append sequence number to AAD for protecting against replays
-            long sequence = sequenceCounter.getAndIncrement();
+            long sequence = sequenceCounter++;
             aadBuilder.put("seq", sequence);
 
             // append user_id to AAD if user-level privacy is enabled
