@@ -5,6 +5,7 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 import ch.usi.inf.examples.confidential_word_count.common.api.WordCountService;
+import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountAckResponse;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushRequest;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushResponse;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountRequest;
@@ -13,10 +14,10 @@ import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountRes
 import java.util.Collection;
 import java.util.List;
 
-public abstract class WordCountVerifier extends ConfidentialBoltService<WordCountRequest> implements WordCountService {
+public abstract sealed class WordCountVerifier extends ConfidentialBoltService<WordCountRequest> implements WordCountService permits WordCountServiceImpl{
 
     @Override
-    public WordCountResponse count(WordCountRequest request) throws EnclaveServiceException {
+    public WordCountAckResponse count(WordCountRequest request) throws EnclaveServiceException {
         try {
             super.verify(request);
             return countImpl(request);
@@ -26,7 +27,7 @@ public abstract class WordCountVerifier extends ConfidentialBoltService<WordCoun
         }
     }
 
-    public abstract WordCountResponse countImpl(WordCountRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException;
+    public abstract WordCountAckResponse countImpl(WordCountRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException;
 
     @Override
     public WordCountFlushResponse flush(WordCountFlushRequest request) throws EnclaveServiceException {

@@ -12,7 +12,7 @@ import ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramUpd
 import java.util.Collection;
 import java.util.List;
 
-public abstract class HistogramServiceVerifier extends ConfidentialBoltService<HistogramUpdateRequest> implements HistogramService {
+public abstract sealed class HistogramServiceVerifier extends ConfidentialBoltService<HistogramUpdateRequest> implements HistogramService permits HistogramServiceImpl  {
     @Override
     public void update(HistogramUpdateRequest update) throws EnclaveServiceException {
         try {

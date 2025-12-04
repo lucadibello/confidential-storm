@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 @AutoService(SplitSentenceService.class)
-public class SplitSentenceServiceImpl extends SplitSentenceVerifier {
+public final class SplitSentenceServiceImpl extends SplitSentenceVerifier {
     private final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SplitSentenceServiceImpl.class);
     private final AtomicLong sequenceCounter = new AtomicLong(0);
     private final String producerId = UUID.randomUUID().toString();

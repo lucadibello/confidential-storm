@@ -8,10 +8,7 @@ import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecificationBuilder;
 import ch.usi.inf.examples.confidential_word_count.common.api.WordCountService;
-import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushRequest;
-import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushResponse;
-import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountRequest;
-import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountResponse;
+import ch.usi.inf.examples.confidential_word_count.common.api.model.*;
 import com.google.auto.service.AutoService;
 
 import java.util.ArrayList;
@@ -21,21 +18,21 @@ import java.util.Map;
 import java.util.UUID;
 
 @AutoService(WordCountService.class)
-public class WordCountServiceImpl extends WordCountVerifier {
+public final class WordCountServiceImpl extends WordCountVerifier {
     private final String producerId = UUID.randomUUID().toString();
     private long sequenceCounter = 0L;
     private final Map<String, Long> buffer = new HashMap<>();
 
     @Override
-    public WordCountResponse countImpl(WordCountRequest request) throws SealedPayloadProcessingException, CipherInitializationException {
+    public WordCountAckResponse countImpl(WordCountRequest request) throws SealedPayloadProcessingException, CipherInitializationException {
         // Decrypt the word from the request
         String word = sealedPayload.decryptToString(request.word());
         
         // Update buffer
         buffer.merge(word, 1L, Long::sum);
 
-        // Return null to indicate no output
-        return null;
+        // Return acknowledgment to indicate successful buffering
+        return new WordCountAckResponse();
     }
 
     @Override

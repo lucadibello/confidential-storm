@@ -13,7 +13,7 @@ import ch.usi.inf.examples.confidential_word_count.common.api.model.SplitSentenc
 import java.util.Collection;
 import java.util.List;
 
-public abstract class SplitSentenceVerifier extends ConfidentialBoltService<SplitSentenceRequest> implements SplitSentenceService {
+public abstract sealed class SplitSentenceVerifier extends ConfidentialBoltService<SplitSentenceRequest> implements SplitSentenceService permits SplitSentenceServiceImpl {
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(SplitSentenceVerifier.class);
 
     abstract public SplitSentenceResponse splitImpl(SplitSentenceRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException;

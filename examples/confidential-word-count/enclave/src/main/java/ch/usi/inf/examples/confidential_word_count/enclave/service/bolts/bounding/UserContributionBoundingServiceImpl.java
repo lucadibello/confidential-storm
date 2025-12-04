@@ -20,7 +20,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 @AutoService(UserContributionBoundingService.class)
-public class UserContributionBoundingServiceImpl extends UserContributionBoundingVerifier {
+public final class UserContributionBoundingServiceImpl extends UserContributionBoundingVerifier {
     private final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(UserContributionBoundingServiceImpl.class);
     private final ContributionLimiter limiter = new ContributionLimiter();
     private final String producerId = UUID.randomUUID().toString();

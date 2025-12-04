@@ -16,7 +16,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 @AutoService(SpoutMapperService.class)
-public class SpoutMapperServiceImpl implements SpoutMapperService {
+public final class SpoutMapperServiceImpl implements SpoutMapperService {
     private final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SpoutMapperServiceImpl.class);
     private final EnclaveExceptionContext exceptionCtx = EnclaveExceptionContext.getInstance();
     private final String producerId = UUID.randomUUID().toString();

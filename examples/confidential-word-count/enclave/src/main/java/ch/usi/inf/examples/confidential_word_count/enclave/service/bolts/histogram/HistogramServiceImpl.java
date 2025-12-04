@@ -17,7 +17,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @AutoService(HistogramService.class)
-public class HistogramServiceImpl extends HistogramServiceVerifier {
+public final class HistogramServiceImpl extends HistogramServiceVerifier {
     private final Map<String, BinaryAggregationTree> forest = new HashMap<>();
     private final Map<String, Double> currentSums = new HashMap<>();
     private final Map<String, Double> pendingCounts = new HashMap<>();
