@@ -31,12 +31,6 @@ public class UserContributionBoundingServiceImpl extends UserContributionBoundin
     public UserContributionBoundingResponse checkImpl(UserContributionBoundingRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException {
         // Decrypt word
         String word = sealedPayload.decryptToString(request.word());
-        
-        // Verify routing key
-        String derivedKey = sealedPayload.deriveRoutingKey(word);
-        if (!derivedKey.equals(request.routingKey())) {
-            throw new IllegalArgumentException("Routing key mismatch in UserContributionBoundingService");
-        }
 
         // Extract user_id
         DecodedAAD aad = DecodedAAD.fromBytes(request.word().associatedData());

@@ -18,15 +18,6 @@
     ]
   },
   {
-    "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord",
-    "allDeclaredConstructors": true,
-    "allPublicConstructors": true,
-    "allDeclaredMethods": true,
-    "allPublicMethods": true,
-    "allDeclaredFields": true,
-    "allPublicFields": true
-  },
-  {
     "name": "ch.usi.inf.confidentialstorm.common.api.UserContributionBoundingService",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,

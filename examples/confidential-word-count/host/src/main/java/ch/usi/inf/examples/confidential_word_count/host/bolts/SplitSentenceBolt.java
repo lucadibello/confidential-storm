@@ -2,7 +2,6 @@ package ch.usi.inf.examples.confidential_word_count.host.bolts;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
-import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord;
 import ch.usi.inf.confidentialstorm.host.bolts.ConfidentialBolt;
 import ch.usi.inf.examples.confidential_word_count.common.api.SplitSentenceService;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.SplitSentenceRequest;
@@ -47,8 +46,9 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
         Objects.requireNonNull(response, "SplitSentenceResponse is null. Enclave service has failed.");
 
         // send out each encrypted word
-        for (EncryptedWord word : response.words()) {
-            getCollector().emit(input, new Values(word.routingKey(), word.payload()));
+        for (EncryptedValue word : response.words()) {
+            // NOTE: word seems like a random blob of data => hides frequency distribution from host
+            getCollector().emit(input, new Values(word));
         }
         getCollector().ack(input);
         LOG.debug("[SplitSentenceBolt {}] Acked encrypted joke {}", boltId, encryptedBody);
@@ -62,6 +62,6 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        declarer.declare(new Fields("wordKey", "encryptedWord"));
+        declarer.declare(new Fields("encryptedWord"));
     }
 }

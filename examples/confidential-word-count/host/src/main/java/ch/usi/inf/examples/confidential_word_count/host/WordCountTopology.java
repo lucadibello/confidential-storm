@@ -56,9 +56,8 @@ public class WordCountTopology extends ConfigurableTopology {
                 TopologySpecification.Component.WORD_COUNT.toString(),
                 new WordCounterBolt(),
                 1
-        ).fieldsGrouping(
-                TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING.toString(),
-                new Fields("wordKey")
+        ).shuffleGrouping(
+                TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING.toString()
         );
 
         // HistogramBolt: merges partial counters into a single (global) histogram

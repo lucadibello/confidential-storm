@@ -5,7 +5,6 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitialization
 import ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
-import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecificationBuilder;
@@ -51,22 +50,22 @@ public class SplitSentenceServiceImpl extends SplitSentenceVerifier {
                 .filter(word -> !word.isEmpty())
                 .collect(Collectors.toList());
 
+        // create default AAD specification for output words
+        AADSpecificationBuilder aadBuilder = AADSpecification.builder()
+                // NOTE: specify source and destination components for verification purposes
+                .sourceComponent(TopologySpecification.Component.SENTENCE_SPLIT)
+                .destinationComponent(TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING)
+                .put("producer_id", producerId);
+
         // NOTE: We need to encrypt each word separately as it will be handled alone
         // by the next services in the pipeline.
-        List<EncryptedWord> encryptedWords = new ArrayList<>(plainWords.size());
+        List<EncryptedValue> encryptedWords = new ArrayList<>(plainWords.size());
         for (String plainWord : plainWords) {
-            // for each word, derive a routing key (HMAC of the plaintext word)
-            String routingKey = sealedPayload.deriveRoutingKey(plainWord);
-
-            // Create new AAD specification (custom for each word)
+            // append sequence number to AAD for protecting against replays
             long sequence = sequenceCounter.getAndIncrement();
-            AADSpecificationBuilder aadBuilder = AADSpecification.builder()
-                    // NOTE: specify source and destination components for verification purposes
-                    .sourceComponent(TopologySpecification.Component.SENTENCE_SPLIT)
-                    .destinationComponent(TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING)
-                    .put("producer_id", producerId)
-                    .put("seq", sequence);
+            aadBuilder.put("seq", sequence);
 
+            // append user_id to AAD if user-level privacy is enabled
             if (DPConfig.ENABLE_USER_LEVEL_PRIVACY && userId != null) {
                 aadBuilder.put("user_id", userId);
             }
@@ -75,7 +74,7 @@ public class SplitSentenceServiceImpl extends SplitSentenceVerifier {
             EncryptedValue payload = sealedPayload.encryptString(plainWord, aadBuilder.build());
 
             // store encrypted word
-            encryptedWords.add(new EncryptedWord(routingKey, payload));
+            encryptedWords.add(payload);
         }
 
         // return response to bolt

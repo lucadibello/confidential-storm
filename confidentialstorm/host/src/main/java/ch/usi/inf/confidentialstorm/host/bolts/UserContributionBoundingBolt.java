@@ -32,21 +32,19 @@ public class UserContributionBoundingBolt extends ConfidentialBolt<UserContribut
 
     @Override
     protected void processTuple(Tuple input, UserContributionBoundingService service) throws EnclaveServiceException {
-        // extract routing key and encrypted word from the input tuple
-        String routingKey = input.getStringByField("wordKey");
         EncryptedValue word = (EncryptedValue) input.getValueByField("encryptedWord");
-        LOG.debug("[UserContributionBoundingBolt {}] Received tuple with routingKey {}", boltId, routingKey);
+        LOG.debug("[UserContributionBoundingBolt {}] Received tuple", boltId);
 
         // Check contribution limit
-        UserContributionBoundingRequest req = new UserContributionBoundingRequest(routingKey, word);
+        UserContributionBoundingRequest req = new UserContributionBoundingRequest(word);
         UserContributionBoundingResponse resp = service.check(req);
         
         if (resp.word() != null) {
             // If authorized, emit
-            LOG.info("[UserContributionBoundingBolt {}] Forwarding word {}", boltId, routingKey);
-            getCollector().emit(input, new Values(routingKey, resp.word()));
+            LOG.info("[UserContributionBoundingBolt {}] Forwarding word", boltId);
+            getCollector().emit(input, new Values(resp.word()));
         } else {
-            LOG.info("[UserContributionBoundingBolt {}] Dropping word {} (limit exceeded)", boltId, routingKey);
+            LOG.info("[UserContributionBoundingBolt {}] Dropping word (limit exceeded)", boltId);
         }
         
         getCollector().ack(input);
@@ -54,6 +52,6 @@ public class UserContributionBoundingBolt extends ConfidentialBolt<UserContribut
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        declarer.declare(new Fields("wordKey", "encryptedWord"));
+        declarer.declare(new Fields("encryptedWord"));
     }
 }

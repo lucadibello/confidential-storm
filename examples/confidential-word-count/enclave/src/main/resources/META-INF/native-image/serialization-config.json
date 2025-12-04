@@ -4,7 +4,6 @@
   { "name": "org.apache.teaclave.javasdk.common.ServiceHandler" },
   { "name": "[Lorg.apache.teaclave.javasdk.common.ServiceHandler;" },
 
-  { "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedWord" },
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue" },
 
   { "name": "ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceRequest" },
