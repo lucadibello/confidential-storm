@@ -17,14 +17,13 @@ import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
 import com.google.auto.service.AutoService;
 
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
 
 @AutoService(UserContributionBoundingService.class)
 public final class UserContributionBoundingServiceImpl extends UserContributionBoundingVerifier {
     private final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(UserContributionBoundingServiceImpl.class);
     private final ContributionLimiter limiter = new ContributionLimiter();
     private final String producerId = UUID.randomUUID().toString();
-    private final AtomicLong sequenceCounter = new AtomicLong(0);
+    private long sequenceCounter = 0;
     private static final long MAX_CONTRIBUTIONS = DPConfig.MAX_CONTRIBUTIONS_PER_USER;
 
     @Override
@@ -48,7 +47,7 @@ public final class UserContributionBoundingServiceImpl extends UserContributionB
         }
 
         // Re-encrypt with new AAD
-        long sequence = sequenceCounter.getAndIncrement();
+        long sequence = sequenceCounter++;
         AADSpecificationBuilder aadBuilder = AADSpecification.builder()
                 .sourceComponent(TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING)
                 .destinationComponent(TopologySpecification.Component.WORD_COUNT)

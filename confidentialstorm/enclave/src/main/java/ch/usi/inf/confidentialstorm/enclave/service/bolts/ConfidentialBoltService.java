@@ -12,9 +12,9 @@ import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 
 public abstract class ConfidentialBoltService<T> {
     protected final EnclaveExceptionContext exceptionCtx = EnclaveExceptionContext.getInstance();
@@ -33,7 +33,7 @@ public abstract class ConfidentialBoltService<T> {
      * Map of producer IDs to their corresponding replay windows for replay attack prevention.
      * NOTE: we use a map of replay windows as one bolt could ingest data streams from multiple different producers.
      */
-    private final Map<String, ReplayWindow> replayWindows = new ConcurrentHashMap<>();
+    private final Map<String, ReplayWindow> replayWindows = new HashMap<>();
 
     protected ConfidentialBoltService() {
         this(SealedPayload.fromConfig());
