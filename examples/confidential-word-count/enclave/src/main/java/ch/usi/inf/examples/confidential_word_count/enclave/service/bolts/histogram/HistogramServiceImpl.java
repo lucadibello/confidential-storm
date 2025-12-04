@@ -71,7 +71,7 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
                             int cmp = Double.compare(b.getValue(), a.getValue());
                             return cmp != 0 ? cmp : a.getKey().compareTo(b.getKey());
                         })
-                        .collect(Collectors.toList());
+                        .toList();
 
         // Reconstruct a sorted histogram as LinkedHashMap to preserve order
         Map<String, Long> sortedHistogram = new LinkedHashMap<>();
