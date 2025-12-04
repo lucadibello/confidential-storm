@@ -2,62 +2,75 @@ package ch.usi.inf.examples.confidential_word_count.enclave.service.bolts.wordco
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
-import ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecificationBuilder;
-import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.examples.confidential_word_count.common.api.WordCountService;
+import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushRequest;
+import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushResponse;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountRequest;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountResponse;
 import com.google.auto.service.AutoService;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @AutoService(WordCountService.class)
 public class WordCountServiceImpl extends WordCountVerifier {
     private final String producerId = UUID.randomUUID().toString();
     private long sequenceCounter = 0L;
+    private final Map<String, Long> buffer = new HashMap<>();
 
     @Override
-    public WordCountResponse countImpl(WordCountRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException {
+    public WordCountResponse countImpl(WordCountRequest request) throws SealedPayloadProcessingException, CipherInitializationException {
         // Decrypt the word from the request
         String word = sealedPayload.decryptToString(request.word());
         
-        // Extract user_id from input AAD (from the word payload)
-        DecodedAAD inputAad = DecodedAAD.fromBytes(request.word().associatedData());
-        Object userId = inputAad.attributes().get("user_id");
+        // Update buffer
+        buffer.merge(word, 1L, Long::sum);
 
-        // Verify the routing key
-        String expectedKey = sealedPayload.deriveRoutingKey(word);
-        if (!expectedKey.equals(request.routingKey())) {
-            throw new IllegalArgumentException("Routing key mismatch");
-        }
+        // Return null to indicate no output
+        return null;
+    }
 
-        // Stateless: always emit 1
-        long newCount = 1L;
+    @Override
+    public WordCountFlushResponse flushImpl(WordCountFlushRequest request) throws SealedPayloadProcessingException, CipherInitializationException, AADEncodingException {
+        // Prepare list to hold WordCountResponses
+        List<WordCountResponse> responses = new ArrayList<>();
 
-        // Create AAD for both sealed values
-        long sequence = sequenceCounter++;
+        // Create basic structure for AAD
         AADSpecificationBuilder aadBuilder = AADSpecification.builder()
                 .sourceComponent(TopologySpecification.Component.WORD_COUNT)
                 .destinationComponent(TopologySpecification.Component.HISTOGRAM_GLOBAL)
-                .put("producer_id", producerId)
-                .put("seq", sequence);
+                .put("producer_id", producerId);
 
-        if (userId != null) {
-            aadBuilder.put("user_id", userId);
+        // for each entry in the buffer, create a WordCountResponse with sealed word and sealed count
+        for (Map.Entry<String, Long> entry : buffer.entrySet()) {
+            String word = entry.getKey();
+            Long count = entry.getValue();
+
+            // Create AAD for both sealed values
+            // NOTE: the `user_id` attribute is lost during aggregation (expected behavior)
+            long sequence = sequenceCounter++;
+            AADSpecification aad = aadBuilder.put("seq", sequence).build();
+
+            // Seal the word and the new count
+            EncryptedValue sealedWord = sealedPayload.encryptString(word, aad);
+            EncryptedValue sealedCount = sealedPayload.encryptString(Long.toString(count), aad);
+
+            // Create WordCountResponse and add to responses
+            responses.add(new WordCountResponse(sealedWord, sealedCount));
         }
-        
-        AADSpecification aad = aadBuilder.build();
 
-        // Seal the word and the new count
-        EncryptedValue sealedWord = sealedPayload.encryptString(word, aad);
-        EncryptedValue sealedCount = sealedPayload.encryptString(Long.toString(newCount), aad);
+        // clear the buffer after flushing
+        buffer.clear();
 
-        // Return the response including the sealed values
-        return new WordCountResponse(expectedKey, sealedWord, sealedCount);
+        // Return the flush response with all WordCountResponses
+        return new WordCountFlushResponse(responses);
     }
 }
