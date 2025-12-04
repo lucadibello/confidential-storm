@@ -9,7 +9,6 @@ import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountAck
 import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushRequest;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushResponse;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountRequest;
-import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountResponse;
 
 import java.util.Collection;
 import java.util.List;

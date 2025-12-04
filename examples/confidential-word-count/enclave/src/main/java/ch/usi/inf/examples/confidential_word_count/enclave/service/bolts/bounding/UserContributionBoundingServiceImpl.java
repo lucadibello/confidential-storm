@@ -28,7 +28,7 @@ public final class UserContributionBoundingServiceImpl extends UserContributionB
     private static final long MAX_CONTRIBUTIONS = DPConfig.MAX_CONTRIBUTIONS_PER_USER;
 
     @Override
-    public UserContributionBoundingResponse checkImpl(UserContributionBoundingRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException {
+    public UserContributionBoundingResponse checkImpl(UserContributionBoundingRequest request) throws SealedPayloadProcessingException, CipherInitializationException, AADEncodingException {
         // Decrypt word
         String word = sealedPayload.decryptToString(request.word());
 

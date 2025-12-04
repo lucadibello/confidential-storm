@@ -2,7 +2,6 @@ package ch.usi.inf.examples.confidential_word_count.enclave.service.bolts.split;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
-import ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
@@ -28,7 +27,7 @@ public final class SplitSentenceServiceImpl extends SplitSentenceVerifier {
     private final String producerId = UUID.randomUUID().toString();
 
     @Override
-    public SplitSentenceResponse splitImpl(SplitSentenceRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException {
+    public SplitSentenceResponse splitImpl(SplitSentenceRequest request) throws SealedPayloadProcessingException, CipherInitializationException,  AADEncodingException {
         LOG.info("SplitSentenceServiceImpl: validated request received.");
 
         // decrypt the payload
