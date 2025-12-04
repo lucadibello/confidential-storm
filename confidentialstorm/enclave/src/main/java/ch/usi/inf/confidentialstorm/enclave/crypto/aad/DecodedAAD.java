@@ -78,11 +78,11 @@ public final class DecodedAAD {
         return attributes;
     }
 
-    public Optional<String> sourceHash() {
+    public Optional<String> sourceName() {
         return Optional.ofNullable(sourceName);
     }
 
-    public Optional<String> destinationHash() {
+    public Optional<String> destinationName() {
         return Optional.ofNullable(destinationName);
     }
 
@@ -142,8 +142,8 @@ public final class DecodedAAD {
     public String toString() {
         return "DecodedAAD{" +
                 "attributes=" + attributes +
-                ", sourceHash='" + sourceName + '\'' +
-                ", destinationHash='" + destinationName + '\'' +
+                ", sourceName='" + sourceName + '\'' +
+                ", destinationName='" + destinationName + '\'' +
                 ", sequenceNumber=" + sequenceNumber +
                 ", producerId='" + producerId + '\'' +
                 '}';
