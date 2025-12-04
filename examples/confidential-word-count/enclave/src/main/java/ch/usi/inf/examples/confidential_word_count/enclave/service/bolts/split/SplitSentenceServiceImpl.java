@@ -23,11 +23,11 @@ import java.util.stream.Collectors;
 @AutoService(SplitSentenceService.class)
 public final class SplitSentenceServiceImpl extends SplitSentenceVerifier {
     private final EnclaveLogger LOG = EnclaveLoggerFactory.getLogger(SplitSentenceServiceImpl.class);
-    private long sequenceCounter = 0;
     private final String producerId = UUID.randomUUID().toString();
+    private long sequenceCounter = 0;
 
     @Override
-    public SplitSentenceResponse splitImpl(SplitSentenceRequest request) throws SealedPayloadProcessingException, CipherInitializationException,  AADEncodingException {
+    public SplitSentenceResponse splitImpl(SplitSentenceRequest request) throws SealedPayloadProcessingException, CipherInitializationException, AADEncodingException {
         LOG.info("SplitSentenceServiceImpl: validated request received.");
 
         // decrypt the payload

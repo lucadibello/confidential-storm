@@ -14,16 +14,14 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @AutoService(HistogramService.class)
 public final class HistogramServiceImpl extends HistogramServiceVerifier {
     private final Map<String, BinaryAggregationTree> forest = new HashMap<>();
     private final Map<String, Double> currentSums = new HashMap<>();
     private final Map<String, Double> pendingCounts = new HashMap<>();
-    private int triggerIndex = 0;
-    
     private final double sigma;
+    private int triggerIndex = 0;
 
     @SuppressWarnings("unused")
     public HistogramServiceImpl() {
@@ -31,6 +29,21 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
         double rho = DPUtil.cdpRho(DPConfig.EPSILON, DPConfig.DELTA);
         double l1Sensitivity = DPConfig.l1Sensitivity();
         this.sigma = DPUtil.calculateSigma(rho, DPConfig.MAX_TIME_STEPS, l1Sensitivity);
+    }
+
+    private static Map<String, Long> produceHistogram(List<Map.Entry<String, Double>> sortedEntries) {
+        Map<String, Long> sortedHistogram = new LinkedHashMap<>();
+        for (Map.Entry<String, Double> entry : sortedEntries) {
+            long rounded = Math.round(entry.getValue());
+
+            // if the rounded value is negative (due to noise), we don't include the entry in the histogram!
+            // this can happen when the true count is low and the noise is high
+            if (rounded < 0L) {
+                continue;
+            }
+            sortedHistogram.put(entry.getKey(), rounded);
+        }
+        return sortedHistogram;
     }
 
     @Override
@@ -74,13 +87,7 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
                         .toList();
 
         // Reconstruct a sorted histogram as LinkedHashMap to preserve order
-        Map<String, Long> sortedHistogram = new LinkedHashMap<>();
-        for (Map.Entry<String, Double> entry : sortedEntries) {
-            long rounded = Math.round(entry.getValue());
-            // we clamp the minimum rounded value to 0 as (due to the applied noise)
-            // the histogram could contain negative results
-            sortedHistogram.put(entry.getKey(), Math.max(0L, rounded));
-        }
+        Map<String, Long> sortedHistogram = produceHistogram(sortedEntries);
 
         // return a copy to avoid external modification
         // NOTE: made immutable by the HistogramSnapshot constructor to avoid serialization issues

@@ -13,7 +13,7 @@ import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountReq
 import java.util.Collection;
 import java.util.List;
 
-public abstract sealed class WordCountVerifier extends ConfidentialBoltService<WordCountRequest> implements WordCountService permits WordCountServiceImpl{
+public abstract sealed class WordCountVerifier extends ConfidentialBoltService<WordCountRequest> implements WordCountService permits WordCountServiceImpl {
 
     @Override
     public WordCountAckResponse count(WordCountRequest request) throws EnclaveServiceException {

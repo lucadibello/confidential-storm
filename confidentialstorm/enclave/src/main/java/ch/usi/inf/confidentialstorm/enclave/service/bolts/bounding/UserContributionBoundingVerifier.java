@@ -3,11 +3,7 @@ package ch.usi.inf.confidentialstorm.enclave.service.bolts.bounding;
 import ch.usi.inf.confidentialstorm.common.api.UserContributionBoundingService;
 import ch.usi.inf.confidentialstorm.common.api.model.UserContributionBoundingRequest;
 import ch.usi.inf.confidentialstorm.common.api.model.UserContributionBoundingResponse;
-import ch.usi.inf.confidentialstorm.common.crypto.exception.AADEncodingException;
-import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
-import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
-import ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException;
-import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.*;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
@@ -25,7 +21,7 @@ public abstract class UserContributionBoundingVerifier extends ConfidentialBoltS
     @Override
     public UserContributionBoundingResponse check(UserContributionBoundingRequest request) throws EnclaveServiceException {
         try {
-            log.info("UserContributionBoundingVerifier: check called");
+            log.debug("check called");
             super.verify(request);
             return checkImpl(request);
         } catch (Throwable t) {

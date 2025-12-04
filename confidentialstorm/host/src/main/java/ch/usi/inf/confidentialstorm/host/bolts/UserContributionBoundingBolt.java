@@ -38,7 +38,7 @@ public class UserContributionBoundingBolt extends ConfidentialBolt<UserContribut
         // Check contribution limit
         UserContributionBoundingRequest req = new UserContributionBoundingRequest(word);
         UserContributionBoundingResponse resp = service.check(req);
-        
+
         if (resp.word() != null) {
             // If authorized, emit
             LOG.info("[UserContributionBoundingBolt {}] Forwarding word", boltId);
@@ -46,7 +46,7 @@ public class UserContributionBoundingBolt extends ConfidentialBolt<UserContribut
         } else {
             LOG.info("[UserContributionBoundingBolt {}] Dropping word (limit exceeded)", boltId);
         }
-        
+
         getCollector().ack(input);
     }
 

@@ -5,7 +5,6 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.ConfidentialBolt;
 import ch.usi.inf.examples.confidential_word_count.common.api.WordCountService;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.*;
-
 import org.apache.storm.Config;
 import org.apache.storm.Constants;
 import org.apache.storm.task.TopologyContext;

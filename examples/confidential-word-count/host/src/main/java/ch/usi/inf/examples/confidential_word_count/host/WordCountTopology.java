@@ -1,7 +1,7 @@
 package ch.usi.inf.examples.confidential_word_count.host;
 
-import ch.usi.inf.confidentialstorm.host.bolts.UserContributionBoundingBolt;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
+import ch.usi.inf.confidentialstorm.host.bolts.UserContributionBoundingBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.SplitSentenceBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.WordCounterBolt;
@@ -11,7 +11,6 @@ import org.apache.storm.LocalCluster;
 import org.apache.storm.generated.StormTopology;
 import org.apache.storm.topology.ConfigurableTopology;
 import org.apache.storm.topology.TopologyBuilder;
-import org.apache.storm.tuple.Fields;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

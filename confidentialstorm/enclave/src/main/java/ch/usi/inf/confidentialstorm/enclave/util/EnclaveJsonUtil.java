@@ -10,7 +10,8 @@ import java.util.Optional;
  */
 public final class EnclaveJsonUtil {
 
-    private EnclaveJsonUtil() {}
+    private EnclaveJsonUtil() {
+    }
 
     public static Map<String, Object> parseJson(String json) {
         try {

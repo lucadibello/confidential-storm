@@ -11,23 +11,19 @@ import ch.usi.inf.examples.confidential_word_count.common.api.WordCountService;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.*;
 import com.google.auto.service.AutoService;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @AutoService(WordCountService.class)
 public final class WordCountServiceImpl extends WordCountVerifier {
     private final String producerId = UUID.randomUUID().toString();
-    private long sequenceCounter = 0L;
     private final Map<String, Long> buffer = new HashMap<>();
+    private long sequenceCounter = 0L;
 
     @Override
     public WordCountAckResponse countImpl(WordCountRequest request) throws SealedPayloadProcessingException, CipherInitializationException {
         // Decrypt the word from the request
         String word = sealedPayload.decryptToString(request.word());
-        
+
         // Update buffer
         buffer.merge(word, 1L, Long::sum);
 

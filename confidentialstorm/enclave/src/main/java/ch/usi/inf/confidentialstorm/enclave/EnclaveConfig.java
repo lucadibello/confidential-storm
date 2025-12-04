@@ -9,7 +9,9 @@ import java.util.ServiceLoader;
  * Configuration parameters for the secure enclave.
  */
 public final class EnclaveConfig {
-    
+    /**
+     * The EnclaveConfiguration provider loaded via ServiceLoader.
+     */
     private static final EnclaveConfiguration provider;
 
     static {
@@ -31,6 +33,7 @@ public final class EnclaveConfig {
         provider = found;
     }
 
+    // Various feature toggles - can be enabled/disabled as needed
     /**
      * Hard-coded stream key in hexadecimal format to decrypt data within the enclave.
      * <p>
@@ -54,8 +57,6 @@ public final class EnclaveConfig {
      * before processing data. Routing information is stored in the AAD payload of each encrypted tuple.
      */
     public static final boolean ENABLE_ROUTE_VALIDATION = provider.isRouteValidationEnabled();
-
-    // Various feature toggles - can be enabled/disabled as needed
     /**
      * Whether replay protection is enabled. If true, the enclave will include additional metadata
      * to prevent replay attacks on the encrypted data.
