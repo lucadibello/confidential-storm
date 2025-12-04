@@ -4,10 +4,8 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceExcept
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.ConfidentialBolt;
 import ch.usi.inf.examples.confidential_word_count.common.api.WordCountService;
-import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountRequest;
-import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountResponse;
-import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushRequest;
-import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushResponse;
+import ch.usi.inf.examples.confidential_word_count.common.api.model.*;
+
 import org.apache.storm.Config;
 import org.apache.storm.Constants;
 import org.apache.storm.task.TopologyContext;
@@ -72,7 +70,8 @@ public class WordCounterBolt extends ConfidentialBolt<WordCountService> {
 
         // confidentially count the occurrences of the word
         WordCountRequest req = new WordCountRequest(word);
-        service.count(req); // NOTE: we don't expect to get a response here
+        WordCountAckResponse ack = service.count(req); // Receive and store the ack
+        LOG.debug("[WordCounterBolt {}] Word counted and buffered. Received ack: {}", boltId, ack); // Log the ack
 
         // acknowledge the tuple
         getCollector().ack(input);
