@@ -1,5 +1,6 @@
 package ch.usi.inf.confidentialstorm.enclave.util;
 
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -183,5 +184,71 @@ public final class EnclaveJsonUtil {
         }
         // fallback string
         return raw;
+    }
+
+    public static byte[] serialize(Map<String, Object> fields) {
+        StringBuilder sb = new StringBuilder();
+        sb.append('{');
+        boolean first = true;
+        for (Map.Entry<String, Object> entry : fields.entrySet()) {
+            if (!first) {
+                sb.append(',');
+            }
+            first = false;
+            sb.append('"').append(escapeJson(entry.getKey())).append("\":");
+            Object value = entry.getValue();
+            if (value == null) {
+                sb.append("null");
+            } else if (value instanceof Number || value instanceof Boolean) {
+                sb.append(value);
+            } else {
+                sb.append('"').append(escapeJson(String.valueOf(value))).append('"');
+            }
+        }
+        sb.append('}');
+        return sb.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static String escapeJson(String input) {
+        if (input == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(input.length());
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            switch (c) {
+                case '"':
+                    sb.append("\\\"");
+                    break;
+                case '\\':
+                    sb.append("\\\\");
+                    break;
+                case '\b':
+                    sb.append("\\b");
+                    break;
+                case '\f':
+                    sb.append("\\f");
+                    break;
+                case '\n':
+                    sb.append("\\n");
+                    break;
+                case '\r':
+                    sb.append("\\r");
+                    break;
+                case '\t':
+                    sb.append("\\t");
+                    break;
+                default:
+                    if (c < ' ' || c >= 0x7F) {
+                        String hex = Integer.toHexString(c);
+                        sb.append("\\u");
+                        sb.append("0".repeat(4 - hex.length()));
+                        sb.append(hex);
+                    } else {
+                        sb.append(c);
+                    }
+            }
+        }
+        return sb.toString();
     }
 }
