@@ -8,6 +8,7 @@ import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecificationBuilder;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveJsonUtil;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import ch.usi.inf.examples.confidential_word_count.common.api.SplitSentenceService;
@@ -31,7 +32,7 @@ public final class SplitSentenceServiceImpl extends SplitSentenceVerifier {
         LOG.info("SplitSentenceServiceImpl: validated request received.");
 
         // decrypt the payload
-        String body = sealedPayload.decryptToString(request.body());
+        String jsonPayload = sealedPayload.decryptToString(request.body());
 
         // extract user_id from input AAD
         DecodedAAD inputAad = DecodedAAD.fromBytes(request.body().associatedData());
@@ -40,11 +41,17 @@ public final class SplitSentenceServiceImpl extends SplitSentenceVerifier {
             LOG.warn("No user_id found in AAD for split request");
         }
 
-        LOG.info("Received sentence: {}", body);
+        // extract sentence from the json body
+        Map<String, Object> jsonMap = EnclaveJsonUtil.parseJson(jsonPayload);
+        Object bodyObj = jsonMap.get("body");
+        String jokeText = (bodyObj instanceof String) ? (String) bodyObj : "";
+        if (jokeText.isEmpty()) {
+            LOG.warn("Could not extract 'body' from JSON payload: {}", jsonPayload);
+        }
 
         // compute sensitive operation
         //noinspection SimplifyStreamApiCallChains
-        List<String> plainWords = Arrays.stream(body.split("\\W+"))
+        List<String> plainWords = Arrays.stream(jokeText.split("\\W+"))
                 .map(word -> word.toLowerCase(Locale.ROOT).trim())
                 .filter(word -> !word.isEmpty())
                 .collect(Collectors.toList());
