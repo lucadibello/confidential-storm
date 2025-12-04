@@ -1,17 +1,20 @@
 [
+  { "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.SplitSentenceRequest" },
+  { "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.SplitSentenceResponse" },
+  { "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountRequest" },
+  { "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountResponse" },
+  { "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountAckResponse" },
+  { "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushRequest" },
+  { "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushResponse" },
+  { "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramSnapshotResponse" },
+  { "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramUpdateRequest" },
+
   { "name": "org.apache.teaclave.javasdk.common.EnclaveInvocationContext" },
   { "name": "org.apache.teaclave.javasdk.common.EnclaveInvocationResult" },
   { "name": "org.apache.teaclave.javasdk.common.ServiceHandler" },
   { "name": "[Lorg.apache.teaclave.javasdk.common.ServiceHandler;" },
 
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue" },
-
-  { "name": "ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceRequest" },
-  { "name": "ch.usi.inf.confidentialstorm.common.api.model.SplitSentenceResponse" },
-  { "name": "ch.usi.inf.confidentialstorm.common.api.model.WordCountRequest" },
-  { "name": "ch.usi.inf.confidentialstorm.common.api.model.WordCountResponse" },
-  { "name": "ch.usi.inf.confidentialstorm.common.api.model.HistogramSnapshotResponse" },
-  { "name": "ch.usi.inf.confidentialstorm.common.api.model.HistogramUpdateRequest" },
 
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveCryptoException"},
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException"},
