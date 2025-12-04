@@ -82,25 +82,6 @@
   },
 
   {
-    "name": "ch.usi.inf.confidentialstorm.common.api.UserContributionBoundingService",
-    "allDeclaredConstructors": true,
-    "allPublicConstructors": true,
-    "allDeclaredMethods": true,
-    "allPublicMethods": true,
-    "allDeclaredFields": true,
-    "allPublicFields": true
-  },
-  {
-    "name": "ch.usi.inf.examples.confidential_word_count.enclave.service.bolts.bounding.UserContributionBoundingServiceImpl",
-    "allDeclaredConstructors": true,
-    "allPublicConstructors": true,
-    "allDeclaredMethods": true,
-    "allPublicMethods": true,
-    "allDeclaredFields": true,
-    "allPublicFields": true
-  },
-
-  {
     "name": "java.security.MessageDigestSpi"
   },
   {
