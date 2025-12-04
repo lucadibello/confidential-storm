@@ -27,21 +27,23 @@ public final class DPConfig {
      * Maximum number of triggering steps supported by the DP tree.
      * This upper bounds the depth of the binary aggregation tree.
      * <p>
-     * NOTE: for the example application, we set this to 24 as the local cluster
-     * will run for 120 seconds, and we have a triggering interval of 5 seconds:
-     * -> 120 / 5 = 24 time steps.
+     * NOTE: for the example application, we set this to 60 as the local cluster
+     * will run for 120 seconds, and we have a triggering interval of 2 seconds:
+     * -> 120 / 2 = 60 time steps.
      */
-    public static final int MAX_TIME_STEPS = 24;
+    public static final int MAX_TIME_STEPS = 60;
 
     /**
      * User-level contribution bounds (Section 3.2 of the paper):
      * each user can contribute at most this many records overall.
      * <p>
-     * NOTE:  Based on the * per-user percentile estimator (p=0.99)
-     * on the current dataset, * a bound of ~4600 words avoids
-     * dropping ~99% of users.
+     *
+     * NOTE: Set to 50 to balance Bias vs Variance.
+     * While the 99th percentile is ~4600 words/user, high sensitivity
+     * creates too much noise (sigma ~ 4600/epsilon) reducing drastically
+     * the utility of the results.
      */
-    public static final long MAX_CONTRIBUTIONS_PER_USER = 4600L;
+    public static final long MAX_CONTRIBUTIONS_PER_USER = 50L;
 
     /**
      * Per-record clamp for the value being aggregated (|v| <= L_m).
