@@ -1,14 +1,14 @@
-# regenerate the dataset by adding a sampled userId to each joke for user-level privacy testing
+# regenerates the dataset by adding a random userId to each joke for user-level privacy testing
 import sys
 import os
 import logging
 import json
 import random
 
-# Config: moderate heavy-tail user sampling via lognormal weights
+# settings for userId assignment
 NUM_USERS = 500
 LOGNORMAL_MU = 0.0
-LOGNORMAL_SIGMA = 1.0  # higher -> heavier tail
+LOGNORMAL_SIGMA = 1.0  # higher = heavier tail
 
 # Setup logger
 logging.basicConfig(
@@ -37,14 +37,37 @@ def main(dataset_path: str, output_path: str):
     )
 
     users = list(range(1, NUM_USERS + 1))
+
+    # we need to generate a long tailed distribution of user activity -> some users are more active then others
+    # so, we generate lognormal weights for each user to be used for random sampling
+    # SOURCES:
+    # - https://stackoverflow.com/questions/39024785/long-tail-distribution-of-random-numbers-in-python
+    # - https://numpy.org/doc/stable/reference/random/generated/numpy.random.lognormal.html -> not used, but has a nice plot
     weights = [random.lognormvariate(LOGNORMAL_MU, LOGNORMAL_SIGMA) for _ in users]
 
-    for i, joke in enumerate(dataset_data):
+    # for each joke: validate + assign a user id for DP testing
+    _required_keys = {"body", "category", "id", "rating"}
+    for joke in dataset_data[:]:  # Iterate over a copy of the list
         if not isinstance(joke, dict):
-            logger.error(f"Entry at index {i} is not a JSON object, got: {type(joke)}")
+            logger.error(f"Entry is not a JSON object, got: {type(joke)}")
             sys.exit(1)
 
-        # weighted random choice to mimic heavy-tailed user activity
+        if not _required_keys.issubset(joke.keys()):
+            logger.error(
+                f"Entry is missing required keys. Expected keys: {_required_keys}, got: {joke.keys()}"
+            )
+            dataset_data.remove(joke)
+            continue
+        elif joke["body"] is None or joke["body"].strip() == "":
+            logger.warning("Entry has empty body. Deleting entry.")
+            dataset_data.remove(joke)
+            continue
+
+    # Reassign IDs after cleaning the list
+    for i, joke in enumerate(dataset_data):
+        joke["id"] = i
+
+        # Weighted random choice to simulate long-tail user activity
         joke["user_id"] = random.choices(users, weights=weights, k=1)[0]
 
     # write updated dataset
