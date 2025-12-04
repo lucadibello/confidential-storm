@@ -1,5 +1,6 @@
 package ch.usi.inf.confidentialstorm.common.crypto.exception;
 
+import java.io.Serial;
 import java.io.Serializable;
 
 /**
@@ -8,6 +9,7 @@ import java.io.Serializable;
  * The exception extracts the original exception type, message, and stack trace for better diagnostics.
  */
 public class EnclaveServiceException extends Exception implements Serializable {
+    @Serial
     private static final long serialVersionUID = 1L;
 
     private final String originalType;

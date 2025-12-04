@@ -54,8 +54,7 @@ public class RandomJokeSpout extends ConfidentialSpout {
         // make test call to check what's crashing
         LOG.debug("[RandomJokeSpout {}] Testing route for joke index {}", this.state.getTaskId(), idx);
 
-        EncryptedValue routedJoke = null;
-        routedJoke = getMapperService().setupRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
+        EncryptedValue routedJoke = getMapperService().setupRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
 
         LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJoke);
         getCollector().emit(new Values(routedJoke));
