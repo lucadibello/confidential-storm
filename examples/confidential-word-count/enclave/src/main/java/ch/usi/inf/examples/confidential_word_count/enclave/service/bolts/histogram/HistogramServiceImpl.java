@@ -25,6 +25,7 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
     
     private final double sigma;
 
+    @SuppressWarnings("unused")
     public HistogramServiceImpl() {
         // Calibrate noise with user-level sensitivity C * L_m (refer to section 3.2 of the paper)
         double rho = DPUtil.cdpRho(DPConfig.EPSILON, DPConfig.DELTA);

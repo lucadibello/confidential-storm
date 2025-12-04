@@ -23,6 +23,7 @@ public final class SpoutMapperServiceImpl implements SpoutMapperService {
     private final SealedPayload sealedPayload;
     private long sequenceCounter = 0L;
 
+    @SuppressWarnings("unused")
     public SpoutMapperServiceImpl() {
         this(SealedPayload.fromConfig());
     }
