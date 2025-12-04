@@ -95,7 +95,7 @@ public abstract class ConfidentialBoltService<T> {
         for (EncryptedValue sealedValue : values) {
             if (EnclaveConfig.ENABLE_ROUTE_VALIDATION) {
                 try {
-                    // NOTE: if the source is null, it means that the value was created outside of ConfidentialStorm
+                    // NOTE: if the source is null, it means that the value was created outside ConfidentialStorm
                     // hence, verifyRoute would verify only the destination component
                     sealedPayload.verifyRoute(sealedValue, expectedSource, destination);
                 } catch (Exception e) {
@@ -142,7 +142,7 @@ public abstract class ConfidentialBoltService<T> {
             return;
         }
 
-        // now, check sequence number for replay attacks -> if the sequence number is outside of the replay window or
+        // now, check sequence number for replay attacks -> if the sequence number is outside the replay window or
         // has already been seen, we reject the request
 
         // we create or get the existing replay window for this producer (1 replay window per producer)

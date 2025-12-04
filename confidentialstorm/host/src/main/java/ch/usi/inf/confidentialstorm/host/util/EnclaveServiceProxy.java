@@ -38,10 +38,11 @@ public final class EnclaveServiceProxy {
 
     /**
      * Wraps the given target service with a proxy that checks for null return values.
+     *
      * @param serviceInterface the EnclaveService interface class to wrap
-     * @param target the target service implementation
+     * @param target           the target service implementation
+     * @param <S>              the type of the service interface
      * @return a proxy instance that checks for null return values
-     * @param <S> the type of the service interface
      */
     @SuppressWarnings("unchecked")
     public static <S> S wrap(Class<S> serviceInterface, S target) {
@@ -63,8 +64,9 @@ public final class EnclaveServiceProxy {
 
     /**
      * Proxy handler that checks for null return values.
+     *
      * @param delegate the target service implementation
-     * @param <S> the type of the service interface
+     * @param <S>      the type of the service interface
      */
     private record NullCheckingHandler<S>(S delegate) implements InvocationHandler {
         @Override

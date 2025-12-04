@@ -56,7 +56,7 @@ public class JsonUtilsTest {
     public void testAADUtilsParsePrimitives() {
         String json = "{\"boolTrue\": true, \"boolFalse\": false, \"nullVal\": null, \"intVal\": 42, \"doubleVal\": 3.14}";
         Map<String, Object> result = AADUtils.parseAadJson(json.getBytes(StandardCharsets.UTF_8));
-        
+
         assertEquals(Boolean.TRUE, result.get("boolTrue"));
         assertEquals(Boolean.FALSE, result.get("boolFalse"));
         assertNull(result.get("nullVal"));
@@ -70,9 +70,9 @@ public class JsonUtilsTest {
     @Test
     public void testAADUtilsParseEscapes() {
         // JSON: {"str": "\t\n\\\""} -> in Java string: "{\"str\": \"\\t\\n\\\\\\\"\"}"
-        String json = "{\"str\": \"\\t\\n\\\\\\\"\"}"; 
+        String json = "{\"str\": \"\\t\\n\\\\\\\"\"}";
         Map<String, Object> result = AADUtils.parseAadJson(json.getBytes(StandardCharsets.UTF_8));
-        
+
         String expected = "\t\n\\\"";
         assertEquals(expected, result.get("str"));
     }
@@ -85,7 +85,7 @@ public class JsonUtilsTest {
         // JSON: {"unicode": "\u00e9"} -> é
         String json = "{\"unicode\": \"\\u00e9\"}";
         Map<String, Object> result = AADUtils.parseAadJson(json.getBytes(StandardCharsets.UTF_8));
-        
+
         assertEquals("é", result.get("unicode"));
     }
 }
