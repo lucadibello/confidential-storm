@@ -40,7 +40,11 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
     @Override
     public void updateImpl(HistogramUpdateRequest update) throws SealedPayloadProcessingException, CipherInitializationException {
         String word = sealedPayload.decryptToString(update.word());
-        double count = Double.parseDouble(sealedPayload.decryptToString(update.count()));
+        double rawCount = Double.parseDouble(sealedPayload.decryptToString(update.count()));
+
+        // clamp the contribution to [-C, C]
+        double clamp = DPConfig.PER_RECORD_CLAMP;
+        double count = Math.max(-clamp, Math.min(rawCount, clamp));
 
         // Extract user_id from AAD
         DecodedAAD aad = DecodedAAD.fromBytes(update.word().associatedData());
