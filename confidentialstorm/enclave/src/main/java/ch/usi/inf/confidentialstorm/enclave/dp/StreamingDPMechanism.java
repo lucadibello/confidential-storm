@@ -242,7 +242,11 @@ public class StreamingDPMechanism {
         // Sort by value descending
         currentSums.entrySet().stream()
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
-                .forEach(entry -> sortedHistogram.put(entry.getKey(), FastMath.round(entry.getValue())));
+                .forEach(entry -> {
+                    long rounded = FastMath.round(entry.getValue());
+                    // Clamp to zero to avoid negative noisy counts at publication time
+                    sortedHistogram.put(entry.getKey(), FastMath.max(0L, rounded));
+                });
 
         return sortedHistogram;
     }
