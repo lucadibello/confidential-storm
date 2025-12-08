@@ -5,7 +5,7 @@ import ch.usi.inf.confidentialstorm.enclave.util.logger.LogLevel;
 import com.google.auto.service.AutoService;
 
 @AutoService(EnclaveConfiguration.class)
-public final class WordCountEnclaveConfig implements EnclaveConfiguration {
+public final class WordCountEnclaveConfigProvider implements EnclaveConfiguration {
     @Override
     public String getStreamKeyHex() {
         // FIXME: this is a dummy key, replace with a secure key for production use
