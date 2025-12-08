@@ -137,22 +137,16 @@ public final class BinaryAggregationTree {
 
     /**
      * Helper method to compute the DP prefix sum S_i^priv for leaf i.
-     * The computation follows the binary aggregation tree algorithm outlined by Zhang et al.,
-     * summing values along the path from root to leaf based on the binary representation of
-     * the leaf index.
-     * <p>
-     * Refer to Algorithm 4 in "Differentially Private Stream Processing at Scale"
+     * The computation uses the "Bottom-up Honaker variance reduction" technique described in Appendix C
+     * of the paper. Instead of simply summing the nodes in the canonical decomposition, we compute
+     * a weighted estimate for each canonical node using its subtree.
      *
      * @param i the zero-based index of the leaf
      * @return the differentially private prefix sum S_i^priv
      */
     public double query(int i) {
         // now compute DP prefix sum S_i^priv
-        // - convert i to binary representation with TREE_HEIGHT bits => b = [b_0 .... b_{TREE_HEIGHT-1}] where b_0 is the most significant bit
-        //    - NOTE: this requires to pad i with leading zeros to have TREE_HEIGHT bits. As we use shifts, this is done automatically.
-        // - iterate through the path from root to leaf i:
-        //    - at each level l, if b_l == 1, add the value in the left sibling of the current node node_j to S_i^priv
-        int indexBinary = i + 1; // convert from 0-based to 1-based index -> Zhang et al. use 1-based indexing
+        int indexBinary = i + 1; // convert from 0-based to 1-based index
 
         int nodeIndex = 0; // current node index, starting from the root
         double sPriv = 0f;
@@ -163,18 +157,26 @@ public final class BinaryAggregationTree {
             // get the bit at position 'j' from indexBinary (from most significant to least significant)
             int levelBit = (indexBinary >> (height - j)) & 1;
 
-            // if the bit is 1, add the left sibling's value to sPriv
+            // if the bit is 1, add the left sibling's contribution to sPriv
             if (levelBit == 1) {
                 int leftSibling;
                 if (nodeIndex == 0) {
-                    leftSibling = 0; // root has no siblings
+                    leftSibling = 0; // root has no siblings (should not happen in loop if logic is correct)
                 } else if (nodeIndex % 2 == 0) {
                     leftSibling = nodeIndex - 1; // node_i is a right child
                 } else {
                     leftSibling = nodeIndex; // node_i is a left child, so its left sibling is itself
                 }
-                // add the left sibling's value to sPriv
-                sPriv += tree.get(leftSibling);
+                
+                // Calculate kappa (subtree height) for the sibling
+                // The sibling is at level 'j'. The total tree height is 'height'.
+                // - If j = height (leaf), kappa = 1.
+                // - If j = 0 (root), kappa = height + 1.
+                int kappa = height - j + 1;
+
+                // Add the Honaker variance-reduced estimate for this node
+                // NOTE: from paper Appendix C, "Honaker estimation for variance reduction", weights c_j
+                sPriv += computeHonakerEstimate(leftSibling, kappa);
             }
 
             // for all levels except the last one (leaf level), move to the next node in the path
@@ -191,6 +193,58 @@ public final class BinaryAggregationTree {
 
         // return total DP sum S_i^priv
         return sPriv;
+    }
+
+    /**
+     * Computes the Honaker estimate for a given node.
+     * The estimate is a weighted sum of the sums of levels in the subtree rooted at nodeIndex.
+     * <p>
+     * Formula: Sum_{k=0 to kappa-1} (c_k * Sum(level_k))
+     * where c_k = (1/2^k) / Sum_{m=0 to kappa-1} (1/2^m)
+     * The denominator is 2 * (1 - 2^-kappa).
+     * <p>
+     * Refer to Appendix C subsection "Honaker estimation for variance reduction" for details.
+     *
+     * @param nodeIndex The root of the subtree.
+     * @param kappa     The height of the subtree (number of levels).
+     * @return The weighted estimate.
+     */
+    private double computeHonakerEstimate(int nodeIndex, int kappa) {
+        double weightedSum = 0.0;
+        // formula denominator for weights c_k
+        double normalization = 2.0 * (1.0 - Math.pow(2.0, -kappa));
+
+        // We need to traverse levels 0 to kappa-1 of the subtree.
+        // Level 0 contains just nodeIndex.
+        // Level k contains 2^k nodes.
+        
+        List<Integer> currentLevelNodes = new ArrayList<>();
+        currentLevelNodes.add(nodeIndex);
+
+        for (int k = 0; k < kappa; k++) {
+            double levelSum = 0.0;
+            List<Integer> nextLevelNodes = new ArrayList<>();
+
+            for (int idx : currentLevelNodes) {
+                if (idx < tree.size()) {
+                    levelSum += tree.get(idx);
+                    
+                    // Prepare children for next level
+                    if (k < kappa - 1) {
+                        nextLevelNodes.add(2 * idx + 1);
+                        nextLevelNodes.add(2 * idx + 2);
+                    }
+                }
+            }
+
+            // Calculate weight c_k
+            double weight = Math.pow(2.0, -k) / normalization;
+            weightedSum += levelSum * weight;
+
+            currentLevelNodes = nextLevelNodes;
+        }
+
+        return weightedSum;
     }
 
     /**
