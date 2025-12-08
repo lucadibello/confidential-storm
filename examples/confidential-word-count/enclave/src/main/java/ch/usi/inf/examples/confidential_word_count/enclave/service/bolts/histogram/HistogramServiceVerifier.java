@@ -8,6 +8,7 @@ import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 import ch.usi.inf.examples.confidential_word_count.common.api.HistogramService;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramUpdateRequest;
+import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 
 import java.util.Collection;
 import java.util.List;
@@ -27,12 +28,12 @@ public abstract sealed class HistogramServiceVerifier extends ConfidentialBoltSe
 
     @Override
     public TopologySpecification.Component expectedSourceComponent() {
-        return TopologySpecification.Component.WORD_COUNT;
+        return ComponentConstants.WORD_COUNT;
     }
 
     @Override
     public TopologySpecification.Component expectedDestinationComponent() {
-        return TopologySpecification.Component.HISTOGRAM_GLOBAL;
+        return ComponentConstants.HISTOGRAM_GLOBAL;
     }
 
     @Override

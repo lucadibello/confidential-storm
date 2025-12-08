@@ -5,7 +5,6 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitialization
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
-import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.exception.EnclaveExceptionContext;
@@ -13,6 +12,7 @@ import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import ch.usi.inf.examples.synthetic_dp.common.api.SyntheticDataService;
 import ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticEncryptedRecord;
+import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
 import com.google.auto.service.AutoService;
 import java.util.Objects;
 import java.util.UUID;
@@ -37,8 +37,8 @@ public final class SyntheticDataServiceImpl implements SyntheticDataService {
     public SyntheticEncryptedRecord encryptRecord(String key, String count, String userId) throws EnclaveServiceException {
         try {
             AADSpecification aad = AADSpecification.builder()
-                    .sourceComponent(TopologySpecification.Component.RANDOM_JOKE_SPOUT)
-                    .destinationComponent(TopologySpecification.Component.HISTOGRAM_GLOBAL)
+                    .sourceComponent(ComponentConstants.SPOUT)
+                    .destinationComponent(ComponentConstants.HISTOGRAM_GLOBAL)
                     .put("producer_id", producerId)
                     .put("seq", seq++)
                     .put("user_id", userId)

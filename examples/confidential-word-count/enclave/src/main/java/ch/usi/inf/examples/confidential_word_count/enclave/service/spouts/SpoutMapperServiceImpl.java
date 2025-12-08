@@ -10,6 +10,7 @@ import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.enclave.exception.EnclaveExceptionContext;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
+import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import com.google.auto.service.AutoService;
 
 import java.util.Objects;
@@ -38,11 +39,11 @@ public final class SpoutMapperServiceImpl implements SpoutMapperService {
             Objects.requireNonNull(component, "component cannot be null");
             Objects.requireNonNull(entry, "Encrypted entry cannot be null");
 
-            LOG.info("Setting up route for component: " + component.name());
+            LOG.info("Setting up route for component: " + component.getName());
             // we want to verify that the entry is correctly sealed
             sealedPayload.verifyRoute(entry,
-                    TopologySpecification.Component.DATASET,
-                    TopologySpecification.Component.MAPPER
+                    ComponentConstants.DATASET,
+                    ComponentConstants.MAPPER
             );
 
             // get string body

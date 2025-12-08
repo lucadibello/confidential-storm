@@ -8,6 +8,7 @@ import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 import ch.usi.inf.examples.synthetic_dp.common.api.SyntheticHistogramService;
 import ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticUpdateRequest;
+import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
 import java.util.Collection;
 import java.util.List;
 
@@ -29,12 +30,12 @@ public abstract sealed class SyntheticHistogramServiceVerifier extends Confident
 
     @Override
     public TopologySpecification.Component expectedSourceComponent() {
-        return TopologySpecification.Component.RANDOM_JOKE_SPOUT;
+        return ComponentConstants.SPOUT;
     }
 
     @Override
     public TopologySpecification.Component expectedDestinationComponent() {
-        return TopologySpecification.Component.HISTOGRAM_GLOBAL;
+        return ComponentConstants.HISTOGRAM_GLOBAL;
     }
 
     @Override

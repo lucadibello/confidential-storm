@@ -3,12 +3,18 @@ package ch.usi.inf.confidentialstorm.common.topology;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.ServiceLoader;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Declarative description of the WordCount topology used to derive routing
+ * Declarative description of a topology used to derive routing
  * information for confidential components.
+ * <p>
+ * Component identifiers are no longer hard-coded to a single example; examples can
+ * register arbitrary components via constants or Component.of(...).
  */
 public final class TopologySpecification {
 
@@ -21,8 +27,6 @@ public final class TopologySpecification {
             found = p;
             break;
         }
-
-        // Default fallback: empty topology
         provider = Objects.requireNonNullElseGet(found, () -> component -> Collections.emptyList());
     }
 
@@ -45,32 +49,34 @@ public final class TopologySpecification {
         return downstream.get(0);
     }
 
-    public enum Component implements Serializable {
-        DATASET("_DATASET"),
-        MAPPER("_MAPPER"),
-        RANDOM_JOKE_SPOUT("random-joke-spout"),
-        SENTENCE_SPLIT("sentence-split"),
-        USER_CONTRIBUTION_BOUNDING("user-contribution-bounding"),
-        WORD_COUNT("word-count"),
-        HISTOGRAM_GLOBAL("histogram-global");
-
+    /**
+     * Component identifier, flexible (not enum) to allow example-specific topologies.
+     */
+    public static final class Component implements Serializable {
         private static final long serialVersionUID = 1L;
+        private static final Map<String, Component> REGISTRY = new ConcurrentHashMap<>();
+
         private final String name;
 
-        Component(String name) {
+        private Component(String name) {
             this.name = name;
+        }
+
+        public static Component of(String name) {
+            Objects.requireNonNull(name, "component name cannot be null");
+            String key = normalize(name);
+            return REGISTRY.computeIfAbsent(key, k -> new Component(name));
         }
 
         public static Component fromValue(String value) {
             if (value == null) {
                 return null;
             }
-            for (Component component : Component.values()) {
-                if (component.name.equals(value) || component.name().equalsIgnoreCase(value)) {
-                    return component;
-                }
-            }
-            throw new IllegalArgumentException("Unknown component: " + value);
+            return of(value);
+        }
+
+        private static String normalize(String name) {
+            return name.toLowerCase(Locale.ROOT);
         }
 
         public String getName() {
@@ -80,6 +86,18 @@ public final class TopologySpecification {
         @Override
         public String toString() {
             return name;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof Component other)) return false;
+            return normalize(this.name).equals(normalize(other.name));
+        }
+
+        @Override
+        public int hashCode() {
+            return normalize(this.name).hashCode();
         }
     }
 }

@@ -11,8 +11,8 @@ import java.util.Map;
 public final class SyntheticTopologyProvider implements TopologyProvider {
 
     private static final Map<Component, List<Component>> DOWNSTREAM = Map.of(
-            Component.RANDOM_JOKE_SPOUT, List.of(Component.HISTOGRAM_GLOBAL),
-            Component.HISTOGRAM_GLOBAL, Collections.emptyList()
+            ComponentConstants.SPOUT, List.of(ComponentConstants.HISTOGRAM_GLOBAL),
+            ComponentConstants.HISTOGRAM_GLOBAL, Collections.emptyList()
     );
 
     @Override

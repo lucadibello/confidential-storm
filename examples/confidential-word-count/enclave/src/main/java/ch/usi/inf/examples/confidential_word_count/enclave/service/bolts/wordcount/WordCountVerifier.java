@@ -9,6 +9,7 @@ import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountAck
 import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushRequest;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushResponse;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountRequest;
+import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 
 import java.util.Collection;
 import java.util.List;
@@ -43,12 +44,12 @@ public abstract sealed class WordCountVerifier extends ConfidentialBoltService<W
 
     @Override
     public TopologySpecification.Component expectedSourceComponent() {
-        return TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING;
+        return ComponentConstants.USER_CONTRIBUTION_BOUNDING;
     }
 
     @Override
     public TopologySpecification.Component expectedDestinationComponent() {
-        return TopologySpecification.Component.WORD_COUNT;
+        return ComponentConstants.WORD_COUNT;
     }
 
     @Override

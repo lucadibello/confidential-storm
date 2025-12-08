@@ -56,7 +56,7 @@ public class SealedPayloadSerializationTest {
         String unicodeString = "Mosé";
 
         EncryptedValue encrypted = sealer.encryptString("data",
-                AADSpecification.builder().put("name", unicodeString).build());
+                AADSpecification.builder().put("getName", unicodeString).build());
 
         String aadJson = new String(encrypted.associatedData(), StandardCharsets.UTF_8);
 

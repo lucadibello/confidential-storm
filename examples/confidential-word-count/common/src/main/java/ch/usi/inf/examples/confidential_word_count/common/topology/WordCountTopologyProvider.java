@@ -13,11 +13,11 @@ import java.util.Map;
 public class WordCountTopologyProvider implements TopologyProvider {
 
     private static final Map<Component, List<Component>> DOWNSTREAM = Map.of(
-            Component.RANDOM_JOKE_SPOUT, List.of(Component.SENTENCE_SPLIT),
-            Component.SENTENCE_SPLIT, List.of(Component.USER_CONTRIBUTION_BOUNDING),
-            Component.USER_CONTRIBUTION_BOUNDING, List.of(Component.WORD_COUNT),
-            Component.WORD_COUNT, List.of(Component.HISTOGRAM_GLOBAL),
-            Component.HISTOGRAM_GLOBAL, Collections.emptyList()
+            ComponentConstants.RANDOM_JOKE_SPOUT, List.of(ComponentConstants.SENTENCE_SPLIT),
+            ComponentConstants.SENTENCE_SPLIT, List.of(ComponentConstants.USER_CONTRIBUTION_BOUNDING),
+            ComponentConstants.USER_CONTRIBUTION_BOUNDING, List.of(ComponentConstants.WORD_COUNT),
+            ComponentConstants.WORD_COUNT, List.of(ComponentConstants.HISTOGRAM_GLOBAL),
+            ComponentConstants.HISTOGRAM_GLOBAL, Collections.emptyList()
     );
 
     @Override

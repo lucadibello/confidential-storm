@@ -1,6 +1,6 @@
 package ch.usi.inf.examples.confidential_word_count.host;
 
-import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
+import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import ch.usi.inf.confidentialstorm.host.bolts.UserContributionBoundingBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.SplitSentenceBolt;
@@ -31,40 +31,40 @@ public class WordCountTopology extends ConfigurableTopology {
 
         // WordSpout: stream of phrases from a book
         builder.setSpout(
-                TopologySpecification.Component.RANDOM_JOKE_SPOUT.toString(),
+                ComponentConstants.RANDOM_JOKE_SPOUT.toString(),
                 new RandomJokeSpout(),
                 1
         );
 
         // SplitSentenceBolt: splits each sentence into a stream of words
         builder.setBolt(
-                TopologySpecification.Component.SENTENCE_SPLIT.toString(),
+                ComponentConstants.SENTENCE_SPLIT.toString(),
                 new SplitSentenceBolt(),
                 1
-        ).shuffleGrouping(TopologySpecification.Component.RANDOM_JOKE_SPOUT.toString());
+        ).shuffleGrouping(ComponentConstants.RANDOM_JOKE_SPOUT.toString());
 
         // UserContributionBoundingBolt: filters words based on per-user contribution limits
         builder.setBolt(
-                TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING.toString(),
+                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString(),
                 new UserContributionBoundingBolt(),
                 1
-        ).shuffleGrouping(TopologySpecification.Component.SENTENCE_SPLIT.toString());
+        ).shuffleGrouping(ComponentConstants.SENTENCE_SPLIT.toString());
 
         // WordCountBolt: counts the words that are emitted (now stateless forwarding for DP)
         builder.setBolt(
-                TopologySpecification.Component.WORD_COUNT.toString(),
+                ComponentConstants.WORD_COUNT.toString(),
                 new WordCounterBolt(),
                 1
         ).shuffleGrouping(
-                TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING.toString()
+                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString()
         );
 
         // HistogramBolt: merges partial counters into a single (global) histogram
         builder.setBolt(
-                TopologySpecification.Component.HISTOGRAM_GLOBAL.toString(),
+                ComponentConstants.HISTOGRAM_GLOBAL.toString(),
                 new HistogramBolt(),
                 1
-        ).globalGrouping(TopologySpecification.Component.WORD_COUNT.toString());
+        ).globalGrouping(ComponentConstants.WORD_COUNT.toString());
 
         // configure spout wait strategy to avoid starving other bolts
         // NOTE: learn more here https://storm.apache.org/releases/current/Performance.html

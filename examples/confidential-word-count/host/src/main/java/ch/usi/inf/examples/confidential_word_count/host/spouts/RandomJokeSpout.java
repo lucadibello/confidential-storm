@@ -5,6 +5,7 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.host.spouts.ConfidentialSpout;
 import ch.usi.inf.examples.confidential_word_count.common.api.SpoutMapperService;
+import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import ch.usi.inf.examples.confidential_word_count.host.util.JokeReader;
 import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
@@ -59,7 +60,7 @@ public class RandomJokeSpout extends ConfidentialSpout<SpoutMapperService> {
         // make test call to check what's crashing
         LOG.debug("[RandomJokeSpout {}] Testing route for joke index {}", this.state.getTaskId(), idx);
 
-        EncryptedValue routedJoke = getService().setupRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
+        EncryptedValue routedJoke = getService().setupRoute(ComponentConstants.RANDOM_JOKE_SPOUT, currentJoke);
 
         LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJoke);
         getCollector().emit(new Values(routedJoke));

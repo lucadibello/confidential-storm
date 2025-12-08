@@ -1,6 +1,6 @@
 package ch.usi.inf.examples.synthetic_dp.host;
 
-import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
+import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
 import ch.usi.inf.examples.synthetic_dp.host.bolts.SyntheticHistogramBolt;
 import ch.usi.inf.examples.synthetic_dp.host.spouts.SyntheticSpout;
 import org.apache.storm.Config;
@@ -15,9 +15,9 @@ public class SyntheticTopology {
 
     public static void main(String[] args) throws Exception {
         TopologyBuilder builder = new TopologyBuilder();
-        builder.setSpout(TopologySpecification.Component.RANDOM_JOKE_SPOUT.toString(), new SyntheticSpout(), 1);
-        builder.setBolt(TopologySpecification.Component.HISTOGRAM_GLOBAL.toString(), new SyntheticHistogramBolt(), 1)
-                .globalGrouping(TopologySpecification.Component.RANDOM_JOKE_SPOUT.toString());
+        builder.setSpout(ComponentConstants.SPOUT.toString(), new SyntheticSpout(), 1);
+        builder.setBolt(ComponentConstants.HISTOGRAM_GLOBAL.toString(), new SyntheticHistogramBolt(), 1)
+                .globalGrouping(ComponentConstants.SPOUT.toString());
 
         Config conf = new Config();
         conf.setDebug(false);

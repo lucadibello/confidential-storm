@@ -10,6 +10,7 @@ import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecificationBuilder;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.examples.confidential_word_count.common.api.WordCountService;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.*;
+import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import com.google.auto.service.AutoService;
 
 import java.util.*;
@@ -56,8 +57,8 @@ public final class WordCountServiceImpl extends WordCountVerifier {
                 // Create AAD
                 long sequence = sequenceCounter++;
                 AADSpecificationBuilder entryAadBuilder = AADSpecification.builder()
-                        .sourceComponent(TopologySpecification.Component.WORD_COUNT)
-                        .destinationComponent(TopologySpecification.Component.HISTOGRAM_GLOBAL)
+                        .sourceComponent(ComponentConstants.WORD_COUNT)
+                        .destinationComponent(ComponentConstants.HISTOGRAM_GLOBAL)
                         .put("producer_id", producerId)
                         .put("seq", sequence);
                 

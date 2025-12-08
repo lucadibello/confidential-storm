@@ -30,15 +30,7 @@ public abstract class UserContributionBoundingVerifier extends ConfidentialBoltS
         }
     }
 
-    @Override
-    public TopologySpecification.Component expectedSourceComponent() {
-        return TopologySpecification.Component.SENTENCE_SPLIT;
-    }
 
-    @Override
-    public TopologySpecification.Component expectedDestinationComponent() {
-        return TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING;
-    }
 
     @Override
     public Collection<EncryptedValue> valuesToVerify(UserContributionBoundingRequest request) {

@@ -15,6 +15,7 @@ import ch.usi.inf.examples.confidential_word_count.common.api.SplitSentenceServi
 import ch.usi.inf.examples.confidential_word_count.common.api.model.SplitSentenceRequest;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.SplitSentenceResponse;
 import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
+import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import com.google.auto.service.AutoService;
 
 import java.util.*;
@@ -58,8 +59,8 @@ public final class SplitSentenceServiceImpl extends SplitSentenceVerifier {
         // create default AAD specification for output words
         AADSpecificationBuilder aadBuilder = AADSpecification.builder()
                 // NOTE: specify source and destination components for verification purposes
-                .sourceComponent(TopologySpecification.Component.SENTENCE_SPLIT)
-                .destinationComponent(TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING)
+                .sourceComponent(ComponentConstants.SENTENCE_SPLIT)
+                .destinationComponent(ComponentConstants.USER_CONTRIBUTION_BOUNDING)
                 .put("producer_id", producerId);
 
         // NOTE: We need to encrypt each word separately as it will be handled alone

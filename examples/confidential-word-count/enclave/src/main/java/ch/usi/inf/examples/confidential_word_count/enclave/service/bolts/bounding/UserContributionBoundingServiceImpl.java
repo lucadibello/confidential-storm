@@ -16,6 +16,7 @@ import ch.usi.inf.confidentialstorm.enclave.service.bolts.bounding.UserContribut
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
+import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import com.google.auto.service.AutoService;
 
 import java.util.UUID;
@@ -27,6 +28,16 @@ public final class UserContributionBoundingServiceImpl extends UserContributionB
     private final ContributionLimiter limiter = new ContributionLimiter();
     private final String producerId = UUID.randomUUID().toString();
     private long sequenceCounter = 0;
+
+    @Override
+    public TopologySpecification.Component expectedSourceComponent() {
+        return ComponentConstants.SENTENCE_SPLIT;
+    }
+
+    @Override
+    public TopologySpecification.Component expectedDestinationComponent() {
+        return ComponentConstants.USER_CONTRIBUTION_BOUNDING;
+    }
 
     @Override
     public UserContributionBoundingResponse checkImpl(UserContributionBoundingRequest request) throws SealedPayloadProcessingException, CipherInitializationException, AADEncodingException {
@@ -51,8 +62,8 @@ public final class UserContributionBoundingServiceImpl extends UserContributionB
         // Re-encrypt with new AAD
         long sequence = sequenceCounter++;
         AADSpecificationBuilder aadBuilder = AADSpecification.builder()
-                .sourceComponent(TopologySpecification.Component.USER_CONTRIBUTION_BOUNDING)
-                .destinationComponent(TopologySpecification.Component.WORD_COUNT)
+                .sourceComponent(ComponentConstants.USER_CONTRIBUTION_BOUNDING)
+                .destinationComponent(ComponentConstants.WORD_COUNT)
                 .put("producer_id", producerId)
                 .put("seq", sequence);
 
