@@ -4,6 +4,7 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceExcept
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.host.spouts.ConfidentialSpout;
+import ch.usi.inf.examples.confidential_word_count.common.api.SpoutMapperService;
 import ch.usi.inf.examples.confidential_word_count.host.util.JokeReader;
 import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
@@ -18,11 +19,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-public class RandomJokeSpout extends ConfidentialSpout {
+public class RandomJokeSpout extends ConfidentialSpout<SpoutMapperService> {
     private static final long EMIT_DELAY_MS = 250;
     private static final Logger LOG = LoggerFactory.getLogger(RandomJokeSpout.class);
     private List<EncryptedValue> encryptedJokes;
     private Random rand;
+
+    public RandomJokeSpout() {
+        super(SpoutMapperService.class);
+    }
 
     @Override
     protected void afterOpen(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector) {
@@ -54,7 +59,7 @@ public class RandomJokeSpout extends ConfidentialSpout {
         // make test call to check what's crashing
         LOG.debug("[RandomJokeSpout {}] Testing route for joke index {}", this.state.getTaskId(), idx);
 
-        EncryptedValue routedJoke = getMapperService().setupRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
+        EncryptedValue routedJoke = getService().setupRoute(TopologySpecification.Component.RANDOM_JOKE_SPOUT, currentJoke);
 
         LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJoke);
         getCollector().emit(new Values(routedJoke));

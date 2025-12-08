@@ -1,6 +1,5 @@
 package ch.usi.inf.confidentialstorm.host.spouts;
 
-import ch.usi.inf.confidentialstorm.common.api.SpoutMapperService;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.host.base.ConfidentialComponentState;
 import ch.usi.inf.confidentialstorm.host.util.EnclaveErrorUtils;
@@ -14,22 +13,29 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
-public abstract class ConfidentialSpout extends BaseRichSpout {
+/**
+ * Generic confidential spout that loads an enclave service of the caller's choice.
+ */
+public abstract class ConfidentialSpout<S> extends BaseRichSpout {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConfidentialSpout.class);
 
-    protected transient ConfidentialComponentState<SpoutOutputCollector, SpoutMapperService> state;
+    protected transient ConfidentialComponentState<SpoutOutputCollector, S> state;
+    private final Class<S> serviceClass;
+    private final EnclaveType enclaveType;
 
-    public ConfidentialSpout() {
-        LOG.info("Creating Confidential Spout");
+    protected ConfidentialSpout(Class<S> serviceClass) {
+        this(serviceClass, EnclaveType.TEE_SDK);
+    }
+
+    protected ConfidentialSpout(Class<S> serviceClass, EnclaveType enclaveType) {
+        this.serviceClass = serviceClass;
+        this.enclaveType = enclaveType;
     }
 
     @Override
     public void open(Map<String, Object> topoConf, TopologyContext context, SpoutOutputCollector spoutOutputCollector) {
-        this.state = new ConfidentialComponentState<>(
-                SpoutMapperService.class,
-                EnclaveType.TEE_SDK
-        );
+        this.state = new ConfidentialComponentState<>(serviceClass, enclaveType);
         state.initialize();
         LOG.info("Opening Confidential Spout");
         state.setComponentId(context.getThisComponentId());
@@ -62,7 +68,9 @@ public abstract class ConfidentialSpout extends BaseRichSpout {
 
         // destroy the confidential component state
         try {
-            this.state.destroy();
+            if (this.state != null) {
+                this.state.destroy();
+            }
         } catch (EnclaveDestroyingException e) {
             LOG.error("Failed to destroy enclave for bolt {} (task {})",
                     this.state.getComponentId(), this.state.getTaskId(), e);
@@ -73,7 +81,7 @@ public abstract class ConfidentialSpout extends BaseRichSpout {
         // hook for subclass
     }
 
-    protected SpoutMapperService getMapperService() {
+    protected S getService() {
         return state.getEnclaveManager().getService();
     }
 
