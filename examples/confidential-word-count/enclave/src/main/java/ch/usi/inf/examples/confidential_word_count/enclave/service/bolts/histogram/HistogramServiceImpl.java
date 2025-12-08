@@ -12,6 +12,7 @@ import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
 import com.google.auto.service.AutoService;
 
 import java.util.Map;
+import org.apache.commons.math3.util.FastMath;
 
 @AutoService(HistogramService.class)
 public final class HistogramServiceImpl extends HistogramServiceVerifier {
@@ -44,7 +45,7 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
 
         // clamp the contribution to [-C, C]
         double clamp = DPConfig.PER_RECORD_CLAMP;
-        double count = Math.max(-clamp, Math.min(rawCount, clamp));
+        double count = FastMath.max(-clamp, FastMath.min(rawCount, clamp));
 
         // Extract user_id from AAD
         DecodedAAD aad = DecodedAAD.fromBytes(update.word().associatedData());

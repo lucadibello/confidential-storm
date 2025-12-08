@@ -1,5 +1,7 @@
 package ch.usi.inf.confidentialstorm.enclave.util;
 
+import org.apache.commons.math3.util.FastMath;
+
 public class DPUtil {
 
     /**
@@ -49,7 +51,7 @@ public class DPUtil {
 
         for (int i = 0; i < 1000; i++) {
             double alpha = (amin + amax) / 2;
-            double derivative = (2 * alpha - 1) * rho - eps + Math.log1p(-1.0 / alpha);
+            double derivative = (2 * alpha - 1) * rho - eps + FastMath.log1p(-1.0 / alpha);
             if (derivative < 0) {
                 amin = alpha;
             } else {
@@ -58,8 +60,8 @@ public class DPUtil {
         }
 
         double alpha = (amin + amax) / 2;
-        double delta = Math.exp((alpha - 1) * (alpha * rho - eps) + alpha * Math.log1p(-1.0 / alpha)) / (alpha - 1.0);
-        return Math.min(delta, 1.0);
+        double delta = FastMath.exp((alpha - 1) * (alpha * rho - eps) + alpha * FastMath.log1p(-1.0 / alpha)) / (alpha - 1.0);
+        return FastMath.min(delta, 1.0);
     }
 
     /**
@@ -73,7 +75,7 @@ public class DPUtil {
      */
     public static double calculateSigma(double rho, double T, double L) {
         // use log base 2 for tree height calculation as per theorem C.1
-        double log2T = Math.log(T) / Math.log(2);
-        return Math.sqrt((log2T * L * L) / ((2 * rho)));
+        double log2T = FastMath.log(T) / FastMath.log(2);
+        return FastMath.sqrt((log2T * L * L) / ((2 * rho)));
     }
 }

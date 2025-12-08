@@ -4,6 +4,8 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.commons.math3.util.FastMath;
+
 /**
  * A binary aggregation tree for differential privacy.
  * This class implements a binary tree structure used for computing differentially private
@@ -43,8 +45,8 @@ public final class BinaryAggregationTree {
      */
     public BinaryAggregationTree(int T, double sigma) {
         // precompute tree parameters
-        height = (int) Math.ceil(Math.log(T) / Math.log(2)); // H = ceil(log2(T))
-        num_leaves = (int) Math.pow(2, height); // L = 2^log2(H)
+        height = (int) FastMath.ceil(FastMath.log(T) / FastMath.log(2)); // H = ceil(log2(T))
+        num_leaves = (int) FastMath.pow(2, height); // L = 2^log2(H)
 
         // store sigma for Honaker variance computation
         this.sigma = sigma;
@@ -90,7 +92,7 @@ public final class BinaryAggregationTree {
                 // Variance contribution for this node (using Honaker formula)
                 // Formula: Variance(node_i) = sigma^2 / (2 * (1 - 2^-kappa))
                 // NOTE: refer to Appendix C of the paper, equation 1
-                double nodeVariance = (sigma * sigma) / (2.0 * (1.0 - Math.pow(2.0, -kappa)));
+                double nodeVariance = (sigma * sigma) / (2.0 * (1.0 - FastMath.pow(2.0, -kappa)));
                 totalVariance += nodeVariance;
             }
 
@@ -212,7 +214,7 @@ public final class BinaryAggregationTree {
     private double computeHonakerEstimate(int nodeIndex, int kappa) {
         double weightedSum = 0.0;
         // formula denominator for weights c_k
-        double normalization = 2.0 * (1.0 - Math.pow(2.0, -kappa));
+        double normalization = 2.0 * (1.0 - FastMath.pow(2.0, -kappa));
 
         // We need to traverse levels 0 to kappa-1 of the subtree.
         // Level 0 contains just nodeIndex.
@@ -238,7 +240,7 @@ public final class BinaryAggregationTree {
             }
 
             // Calculate weight c_k
-            double weight = Math.pow(2.0, -k) / normalization;
+            double weight = FastMath.pow(2.0, -k) / normalization;
             weightedSum += levelSum * weight;
 
             currentLevelNodes = nextLevelNodes;

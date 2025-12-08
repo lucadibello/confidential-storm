@@ -3,6 +3,7 @@ package ch.usi.inf.confidentialstorm.enclave.dp;
 import java.util.*;
 
 import org.apache.commons.math3.distribution.NormalDistribution;
+import org.apache.commons.math3.util.FastMath;
 
 /**
  * Implements the Differentially Private Stream Aggregation mechanism (DP-SQLP).
@@ -230,7 +231,7 @@ public class StreamingDPMechanism {
      * @return The computed tau value
      */
     private static double computeTau(double lambda_square, double beta) {
-        double std_dev = Math.sqrt(lambda_square);
+        double std_dev = FastMath.sqrt(lambda_square);
         NormalDistribution distribution = new NormalDistribution(0, std_dev);
         return distribution.inverseCumulativeProbability(1.0 - beta);
     }
@@ -241,7 +242,7 @@ public class StreamingDPMechanism {
         // Sort by value descending
         currentSums.entrySet().stream()
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
-                .forEach(entry -> sortedHistogram.put(entry.getKey(), Math.round(entry.getValue())));
+                .forEach(entry -> sortedHistogram.put(entry.getKey(), FastMath.round(entry.getValue())));
 
         return sortedHistogram;
     }
