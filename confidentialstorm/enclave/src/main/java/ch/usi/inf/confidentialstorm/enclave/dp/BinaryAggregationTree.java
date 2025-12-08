@@ -9,6 +9,9 @@ import java.util.List;
  * This class implements a binary tree structure used for computing differentially private
  * prefix sums. Each node in the tree is initialized with Gaussian noise, and values are
  * added along paths from leaves to the root to maintain differential privacy guarantees.
+ *
+ * <p>
+ * Refer to Algorithm 4 in "Differentially Private Stream Processing at Scale"
  */
 public final class BinaryAggregationTree {
     /**
@@ -28,6 +31,11 @@ public final class BinaryAggregationTree {
     private final int num_leaves;
 
     /**
+     * Standard deviation of the Gaussian noise added to each node.
+     */
+    private final double sigma;
+
+    /**
      * Constructs a binary aggregation tree for differential privacy.
      *
      * @param T     the number of time steps or data points to process
@@ -38,8 +46,62 @@ public final class BinaryAggregationTree {
         height = (int) Math.ceil(Math.log(T) / Math.log(2)); // H = ceil(log2(T))
         num_leaves = (int) Math.pow(2, height); // L = 2^log2(H)
 
+        // store sigma for Honaker variance computation
+        this.sigma = sigma;
+
         // initialize tree with Gaussian noise
         this.tree = initializeTree(sigma);
+    }
+
+    /**
+     * Computes the variance of the Honaker estimate for a specific leaf index (time step).
+     * The variance depends on the number of levels involved in the prefix sum.
+     * <p>
+     * From the paper: Variance(node) = sigma^2 * (1 / (2 * (1 - 2^-kappa)))
+     * where kappa is the height of the subtree rooted at node_i.
+     * <p>
+     * The total variance is the sum of variances of all nodes in the path for the prefix sum.
+     * <p>
+     * Refer to Appendix C subsection "Honaker estimation for variance reduction"
+     *
+     * @param i the zero-based index of the leaf
+     * @return the variance of the prefix sum at step i
+     */
+    public double getHonakerVariance(int i) {
+        // NOTE: same traversal logic of query(i) to identify which nodes are summed
+        int indexBinary = i + 1;
+        int nodeIndex = 0;
+        double totalVariance = 0.0;
+
+        // FIXME: remove useless comments as soon as this works as expected
+
+        // Tree height H (root is level 0, leaves are level H)
+        // NOTE: "level_0...level_kappa are levels of subtree rooted at node_i".
+
+        // A node at depth 'j' (j=0 => root) covers 2^(height - j) leaves
+        // kappa = height - j + 1. (Leaves have height 1).
+
+        for (int j = 0; j <= height; j++) {
+            int levelBit = (indexBinary >> (height - j)) & 1;
+
+            if (levelBit == 1) {
+                int kappa = height - j + 1;
+                
+                // Variance contribution for this node (using Honaker formula)
+                // Formula: Variance(node_i) = sigma^2 / (2 * (1 - 2^-kappa))
+                // NOTE: refer to Appendix C of the paper, equation 1
+                double nodeVariance = (sigma * sigma) / (2.0 * (1.0 - Math.pow(2.0, -kappa)));
+                totalVariance += nodeVariance;
+            }
+
+            if (j < height) {
+                int pathBit = (i >> (height - 1 - j)) & 1;
+                int leftChild = 2 * nodeIndex + 1;
+                int rightChild = leftChild + 1;
+                nodeIndex = (pathBit == 0) ? leftChild : rightChild;
+            }
+        }
+        return totalVariance;
     }
 
     /**
@@ -78,11 +140,13 @@ public final class BinaryAggregationTree {
      * The computation follows the binary aggregation tree algorithm outlined by Zhang et al.,
      * summing values along the path from root to leaf based on the binary representation of
      * the leaf index.
+     * <p>
+     * Refer to Algorithm 4 in "Differentially Private Stream Processing at Scale"
      *
      * @param i the zero-based index of the leaf
      * @return the differentially private prefix sum S_i^priv
      */
-    private double query(int i) {
+    public double query(int i) {
         // now compute DP prefix sum S_i^priv
         // - convert i to binary representation with TREE_HEIGHT bits => b = [b_0 .... b_{TREE_HEIGHT-1}] where b_0 is the most significant bit
         //    - NOTE: this requires to pad i with leading zeros to have TREE_HEIGHT bits. As we use shifts, this is done automatically.
@@ -151,7 +215,4 @@ public final class BinaryAggregationTree {
         return tree;
     }
 
-    public List<Double> getTree() {
-        return tree;
-    }
 }
