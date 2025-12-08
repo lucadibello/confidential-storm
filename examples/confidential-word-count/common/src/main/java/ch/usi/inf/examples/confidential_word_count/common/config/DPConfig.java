@@ -18,6 +18,17 @@ public final class DPConfig {
      * choice in the literature for practical DP applications.
      */
     public static final double DELTA = 1e-5;
+
+    // Privacy Budget Split (50% for Key Selection, 50% for Histogram)
+    public static final double EPSILON_K = EPSILON / 2.0;
+    public static final double DELTA_K = (2.0 / 3.0) * DELTA;
+
+    public static final double EPSILON_H = EPSILON / 2.0;
+    public static final double DELTA_H = DELTA / 3.0;
+
+    // Threshold for key selection (Algorithm 3 in the paper)
+    public static final long MU = 10L; // FIXME: tune this value
+
     /**
      * Maximum number of triggering steps supported by the DP tree.
      * This upper bounds the depth of the binary aggregation tree.
