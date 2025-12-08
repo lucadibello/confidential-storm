@@ -27,6 +27,9 @@ public class StreamingDPMechanism {
     // Key -> TimeStep when it is predicted to be released
     private final Map<String, Integer> predictedReleaseTimes = new HashMap<>();
 
+    // Key -> Set of observed user IDs for Key Selection (to ensure Sensitivity = 1)
+    private final Map<String, Set<String>> observedUsersForKeySelection = new HashMap<>();
+
     // Buffer for hierarchical perturbation (Algorithm 2)
     // Stores aggregated value (Delta V) since last release (or start)
     private final Map<String, Double> unreleasedHistogramBuffer = new HashMap<>();
@@ -98,60 +101,74 @@ public class StreamingDPMechanism {
         // c) Keys already selected
         keysToProcess.addAll(selectedKeys);
 
-
         // 2. Process each key
         for (String key : keysToProcess) {
+            boolean alreadySelected = selectedKeys.contains(key);
+            boolean selectedThisStep = false;
+
             // Get inputs for this window
             double countInput = currentWindowCounts.getOrDefault(key, 0.0);
-            int uniqueUsersInput = currentWindowUniqueUsers.getOrDefault(key, Collections.emptySet()).size();
+            Set<String> windowUsers = currentWindowUniqueUsers.getOrDefault(key, Collections.emptySet());
 
             // Accumulate histogram buffer (Algo 2: Delta V accumulates until release)
             unreleasedHistogramBuffer.merge(key, countInput, Double::sum);
-
-            // If already selected, we just update the histogram tree
-            if (selectedKeys.contains(key)) {
-                updateHistogramTree(key);
-                continue;
-            }
 
             // --- Key Selection Logic (Algo 1 & 3) ---
             
             // Check if we have a stale prediction for the future (Case 1 of Algo 3)
             // If we are processing this key now (due to input) but it was predicted for later,
             // we must invalidate that prediction because the state is changing.
+            //
+            // Refer to section 4.3, case (1) of empty key release prediction
             if (predictedReleaseTimes.containsKey(key)) {
                 int predictedTime = predictedReleaseTimes.get(key);
                 if (predictedTime > timeStep) {
+                    // remove stale prediction as we have new data now
                     predictedReleaseTimes.remove(key);
                 }
             }
 
-            // Update Key Selection Tree
+            // Update key selection tree
             BinaryAggregationTree keyTree = keySelectionForest.computeIfAbsent(
                     key, k -> new BinaryAggregationTree(maxTimeSteps, sigmaKey)
             );
+
+            // Filter for globally unique users (Sensitivity = 1, refer to 4.3 of the paper)
+            Set<String> observedUsers = observedUsersForKeySelection.computeIfAbsent(key, k -> new HashSet<>());
+            int newUniqueUsers = 0;
+            for (String userId : windowUsers) {
+                if (observedUsers.add(userId)) {
+                    newUniqueUsers++;
+                }
+            }
+
             // Add unique users count to the tree
-            double noisyUniqueUsers = keyTree.addToTree(timeStep, uniqueUsersInput);
+            double noisyUniqueUsers = keyTree.addToTree(timeStep, newUniqueUsers);
+
 
             // Calculate time-dependent threshold tau_i
-
-            // we compute the standard deviation of the noise at this time step
             // NOTE: Refer to Appendix D of the "Differentially Private Stream Processing at Scale" paper for details
 
-            // To do so, we retrieve the Honaker variance at this time step
+            // Compute the Honaker variance at this time step
             double currentVariance = keyTree.getHonakerVariance(timeStep);
-            // double futureTau = 5.0 * Math.sqrt(futureVariance); -> previous heuristic
+            // Compute tau using the inverse CDF of the Gaussian distribution at beta - 1
             double tauTimeDependent = computeTau(currentVariance, this.beta);
 
             if (noisyUniqueUsers >= (double) mu + tauTimeDependent) {
                 // SELECTED!
                 selectedKeys.add(key);
-                // Flush accumulated buffer to histogram tree
-                updateHistogramTree(key);
+                selectedThisStep = true;
+                // Reset the key selection state so a fresh round begins after this release
+                resetKeySelectionState(key);
             } else {
                 // NOT SELECTED
                 // Run Prediction (Algo 3): check if noise alone will trigger it in future
                 runEmptyKeyPrediction(key, keyTree);
+            }
+
+            // Hierarchical perturbation (Algo 2): once a key has ever been selected, keep updating the histogram
+            if (alreadySelected || selectedThisStep) {
+                updateHistogramTree(key);
             }
         }
 
@@ -190,11 +207,12 @@ public class StreamingDPMechanism {
         for (int t = timeStep + 1; t < maxTimeSteps; t++) {
             // "Simulate" adding 0 to the tree and querying
             double predictedNoisyCount = keyTree.query(t);
-            
-            // Reverting to previous heuristic: 5 * sigma covers very high confidence
+
+            // compute future tau in the same way as before
             double futureVariance = keyTree.getHonakerVariance(t);
             double futureTau = computeTau(futureVariance, this.beta);
-            
+
+            // check if predicted noisy count exceeds threshold (selection threshold)
             if (predictedNoisyCount >= (double) mu + futureTau) {
                 predictedReleaseTimes.put(key, t);
                 break; // Found the earliest release time
@@ -226,5 +244,11 @@ public class StreamingDPMechanism {
                 .forEach(entry -> sortedHistogram.put(entry.getKey(), Math.round(entry.getValue())));
 
         return sortedHistogram;
+    }
+
+    private void resetKeySelectionState(String key) {
+        keySelectionForest.remove(key);
+        observedUsersForKeySelection.remove(key);
+        predictedReleaseTimes.remove(key);
     }
 }
