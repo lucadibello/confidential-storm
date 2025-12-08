@@ -212,7 +212,8 @@ public class StreamingDPMechanism {
      * @return The computed tau value
      */
     private static double computeTau(double lambda_square, double beta) {
-        NormalDistribution distribution = new NormalDistribution(0, lambda_square);
+        double std_dev = Math.sqrt(lambda_square);
+        NormalDistribution distribution = new NormalDistribution(0, std_dev);
         return distribution.inverseCumulativeProbability(1.0 - beta);
     }
 
