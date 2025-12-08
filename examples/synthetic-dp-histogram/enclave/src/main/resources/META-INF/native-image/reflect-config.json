@@ -18,6 +18,15 @@
     "allPublicFields": true
   },
   {
+    "name": "ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticEncryptedRecord",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true
+  },
+  {
     "name": "java.security.MessageDigestSpi"
   },
   {

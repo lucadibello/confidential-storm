@@ -1,4 +1,5 @@
 [
+  { "name": "ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticEncryptedRecord" },
   { "name": "ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticUpdateRequest" },
   { "name": "ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticSnapshotResponse" },
 

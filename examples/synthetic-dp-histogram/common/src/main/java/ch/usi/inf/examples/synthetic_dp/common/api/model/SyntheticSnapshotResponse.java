@@ -8,7 +8,7 @@ import java.util.Map;
 
 public record SyntheticSnapshotResponse(Map<String, Long> counts) implements Serializable {
     @Serial
-    private static final long serialVersionUID = 2L;
+    private static final long serialVersionUID = 1L;
 
     public SyntheticSnapshotResponse {
         if (counts == null) {
@@ -16,5 +16,4 @@ public record SyntheticSnapshotResponse(Map<String, Long> counts) implements Ser
         }
         counts = Collections.unmodifiableMap(new LinkedHashMap<>(counts));
     }
-
 }
