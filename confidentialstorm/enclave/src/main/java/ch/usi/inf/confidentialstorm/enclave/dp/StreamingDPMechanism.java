@@ -193,7 +193,6 @@ public class StreamingDPMechanism {
             
             // Reverting to previous heuristic: 5 * sigma covers very high confidence
             double futureVariance = keyTree.getHonakerVariance(t);
-            // double futureTau = 5.0 * Math.sqrt(futureVariance); -> previous heuristic
             double futureTau = computeTau(futureVariance, this.beta);
             
             if (predictedNoisyCount >= (double) mu + futureTau) {
@@ -203,11 +202,11 @@ public class StreamingDPMechanism {
         }
     }
 
-    // tau is computed as the inverse of the Gaussian CDF at 1 - beta
-    // NOTE: refer to Appendix D of the "Differentially Private Stream Processing at Scale" paper for details
-
     /**
      * Computes the tau value based on the Gaussian distribution.
+     * <p>
+     * Refer to Appendix D of the "Differentially Private Stream Processing at Scale" paper.
+     *
      * @param lambda_square The total Honaker variance at time step i
      * @param beta       The desired confidence level
      * @return The computed tau value
@@ -223,14 +222,7 @@ public class StreamingDPMechanism {
         // Sort by value descending
         currentSums.entrySet().stream()
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
-                .forEach(entry -> {
-                    long rounded = Math.round(entry.getValue());
-                    // Clamp negative counts to 0
-                    if (rounded < 0L) {
-                        rounded = 0L;
-                    }
-                    sortedHistogram.put(entry.getKey(), rounded);
-                });
+                .forEach(entry -> sortedHistogram.put(entry.getKey(), Math.round(entry.getValue())));
 
         return sortedHistogram;
     }
