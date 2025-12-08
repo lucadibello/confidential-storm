@@ -7,6 +7,7 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecificationBuilder;
+import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.examples.confidential_word_count.common.api.WordCountService;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.*;
 import com.google.auto.service.AutoService;
@@ -16,7 +17,8 @@ import java.util.*;
 @AutoService(WordCountService.class)
 public final class WordCountServiceImpl extends WordCountVerifier {
     private final String producerId = UUID.randomUUID().toString();
-    private final Map<String, Long> buffer = new HashMap<>();
+    // buffer: Word -> (UserId -> Count)
+    private final Map<String, Map<String, Long>> buffer = new HashMap<>();
     private long sequenceCounter = 0L;
 
     @Override
@@ -24,8 +26,14 @@ public final class WordCountServiceImpl extends WordCountVerifier {
         // Decrypt the word from the request
         String word = sealedPayload.decryptToString(request.word());
 
-        // Update buffer
-        buffer.merge(word, 1L, Long::sum);
+        // Extract user_id from input AAD
+        DecodedAAD inputAad = DecodedAAD.fromBytes(request.word().associatedData());
+        Object userIdObj = inputAad.attributes().get("user_id");
+        String userId = userIdObj != null ? userIdObj.toString() : "unknown_user";
+
+        // Update buffer (per user)
+        buffer.computeIfAbsent(word, k -> new HashMap<>())
+              .merge(userId, 1L, Long::sum);
 
         // Return acknowledgment to indicate successful buffering
         return new WordCountAckResponse();
@@ -36,28 +44,37 @@ public final class WordCountServiceImpl extends WordCountVerifier {
         // Prepare list to hold WordCountResponses
         List<WordCountResponse> responses = new ArrayList<>();
 
-        // Create basic structure for AAD
-        AADSpecificationBuilder aadBuilder = AADSpecification.builder()
-                .sourceComponent(TopologySpecification.Component.WORD_COUNT)
-                .destinationComponent(TopologySpecification.Component.HISTOGRAM_GLOBAL)
-                .put("producer_id", producerId);
+        // for each entry in the buffer, create a WordCountResponse
+        for (Map.Entry<String, Map<String, Long>> wordEntry : buffer.entrySet()) {
+            String word = wordEntry.getKey();
+            Map<String, Long> userCounts = wordEntry.getValue();
 
-        // for each entry in the buffer, create a WordCountResponse with sealed word and sealed count
-        for (Map.Entry<String, Long> entry : buffer.entrySet()) {
-            String word = entry.getKey();
-            Long count = entry.getValue();
+            for (Map.Entry<String, Long> userEntry : userCounts.entrySet()) {
+                String userId = userEntry.getKey();
+                Long count = userEntry.getValue();
 
-            // Create AAD for both sealed values
-            // NOTE: the `user_id` attribute is lost during aggregation (expected behavior)
-            long sequence = sequenceCounter++;
-            AADSpecification aad = aadBuilder.put("seq", sequence).build();
+                // Create AAD
+                long sequence = sequenceCounter++;
+                AADSpecificationBuilder entryAadBuilder = AADSpecification.builder()
+                        .sourceComponent(TopologySpecification.Component.WORD_COUNT)
+                        .destinationComponent(TopologySpecification.Component.HISTOGRAM_GLOBAL)
+                        .put("producer_id", producerId)
+                        .put("seq", sequence);
+                
+                // Propagate user_id if known
+                if (!"unknown_user".equals(userId)) {
+                    entryAadBuilder.put("user_id", userId);
+                }
+                
+                AADSpecification aad = entryAadBuilder.build();
 
-            // Seal the word and the new count
-            EncryptedValue sealedWord = sealedPayload.encryptString(word, aad);
-            EncryptedValue sealedCount = sealedPayload.encryptString(Long.toString(count), aad);
+                // Seal the word and the count
+                EncryptedValue sealedWord = sealedPayload.encryptString(word, aad);
+                EncryptedValue sealedCount = sealedPayload.encryptString(Long.toString(count), aad);
 
-            // Create WordCountResponse and add to responses
-            responses.add(new WordCountResponse(sealedWord, sealedCount));
+                // Create WordCountResponse and add to responses
+                responses.add(new WordCountResponse(sealedWord, sealedCount));
+            }
         }
 
         // clear the buffer after flushing
