@@ -55,10 +55,6 @@
         </dependency>
         <dependency>
             <groupId>ch.usi.inf.confidentialstorm</groupId>
-            <artifactId>enclave</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>ch.usi.inf.confidentialstorm</groupId>
             <artifactId>common</artifactId>
         </dependency>
         <dependency>
