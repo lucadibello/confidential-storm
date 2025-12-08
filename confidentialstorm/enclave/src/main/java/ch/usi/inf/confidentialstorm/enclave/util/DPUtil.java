@@ -72,6 +72,8 @@ public class DPUtil {
      * @return standard deviation for the Gaussian noise
      */
     public static double calculateSigma(double rho, double T, double L) {
-        return Math.sqrt((Math.log(T) * L * L) / ((2 * rho)));
+        // use log base 2 for tree height calculation as per theorem C.1
+        double log2T = Math.log(T) / Math.log(2);
+        return Math.sqrt((log2T * L * L) / ((2 * rho)));
     }
 }
