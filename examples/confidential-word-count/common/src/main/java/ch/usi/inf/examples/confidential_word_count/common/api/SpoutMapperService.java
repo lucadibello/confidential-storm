@@ -1,4 +1,4 @@
-package ch.usi.inf.confidentialstorm.common.api;
+package ch.usi.inf.examples.confidential_word_count.common.api;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
