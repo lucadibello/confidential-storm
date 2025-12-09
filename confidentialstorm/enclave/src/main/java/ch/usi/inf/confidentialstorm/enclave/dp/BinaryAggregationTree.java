@@ -40,13 +40,13 @@ public final class BinaryAggregationTree {
     /**
      * Constructs a binary aggregation tree for differential privacy.
      *
-     * @param T     the number of time steps or data points to process
+     * @param n     the number of data points in the data stream D = {x_1, ..., x_n} each x_i \in [0,L]
      * @param sigma the standard deviation of the Gaussian noise to be added to each node
      */
-    public BinaryAggregationTree(int T, double sigma) {
+    public BinaryAggregationTree(int n, double sigma) {
         // precompute tree parameters
-        height = (int) FastMath.ceil(FastMath.log(T) / FastMath.log(2)); // H = ceil(log2(T))
-        num_leaves = (int) FastMath.pow(2, height); // L = 2^log2(H)
+        height = (int) FastMath.ceil(FastMath.log(n) / FastMath.log(2)); // H = ceil(log2(n))
+        num_leaves = (int) FastMath.pow(2, height); // L = 2^ceil(log2(n))
 
         // store sigma for Honaker variance computation
         this.sigma = sigma;
@@ -163,21 +163,22 @@ public final class BinaryAggregationTree {
             if (levelBit == 1) {
                 int leftSibling;
                 if (nodeIndex == 0) {
-                    leftSibling = 0; // root has no siblings (should not happen in loop if logic is correct)
+                    leftSibling = 0; // root has no siblings
                 } else if (nodeIndex % 2 == 0) {
                     leftSibling = nodeIndex - 1; // node_i is a right child
                 } else {
                     leftSibling = nodeIndex; // node_i is a left child, so its left sibling is itself
                 }
                 
-                // Calculate kappa (subtree height) for the sibling
-                // The sibling is at level 'j'. The total tree height is 'height'.
-                // - If j = height (leaf), kappa = 1.
-                // - If j = 0 (root), kappa = height + 1.
+                // Calculate kappa (subtree height) for the sibling (NOTE: currently at level j)
+                // - If j = height (leaf), kappa = 1 (only the leaf node)
+                // - If j = 0 (root), kappa = height + 1 (entire tree)
                 int kappa = height - j + 1;
 
                 // Add the Honaker variance-reduced estimate for this node
-                // NOTE: from paper Appendix C, "Honaker estimation for variance reduction", weights c_j
+                // (refer to appendix C subsection 1, "Honaker estimation for variance reduction")
+
+                // Formula: sum_{j=0 to kappa-1} (c_j * Sum(level_j))
                 sPriv += computeHonakerEstimate(leftSibling, kappa);
             }
 
@@ -201,52 +202,66 @@ public final class BinaryAggregationTree {
      * Computes the Honaker estimate for a given node.
      * The estimate is a weighted sum of the sums of levels in the subtree rooted at nodeIndex.
      * <p>
-     * Formula: Sum_{k=0 to kappa-1} (c_k * Sum(level_k))
-     * where c_k = (1/2^k) / Sum_{m=0 to kappa-1} (1/2^m)
-     * The denominator is 2 * (1 - 2^-kappa).
+     * FORMULA:
+     *  Sum_{j=0 to k-1} (c_j * Sum(level_j)) where:
+     *  c_j = (1/2^j) / (Sum_{j=0 to k-1} (1/2^j))
      * <p>
      * Refer to Appendix C subsection "Honaker estimation for variance reduction" for details.
      *
      * @param nodeIndex The root of the subtree.
-     * @param kappa     The height of the subtree (number of levels).
+     * @param k     The height of the subtree (number of levels from nodeIndex to leaves).
      * @return The weighted estimate.
      */
-    private double computeHonakerEstimate(int nodeIndex, int kappa) {
-        double weightedSum = 0.0;
-        // formula denominator for weights c_k
-        double normalization = 2.0 * (1.0 - FastMath.pow(2.0, -kappa));
+    private double computeHonakerEstimate(int nodeIndex, int k) {
+        double honaker_estimate = 0.0;
 
-        // We need to traverse levels 0 to kappa-1 of the subtree.
-        // Level 0 contains just nodeIndex.
-        // Level k contains 2^k nodes.
-        
+        // We need to traverse levels j in [0, ..., k-1] of the subtree and compute c_j * Sum(level_j)
+        // - Level 0 contains just nodeIndex (subtree root)
+        // - Level k contains 2^k nodes (a subtree of a complete binary tree is still complete)
+
+        // keep track of nodes at the current level
         List<Integer> currentLevelNodes = new ArrayList<>();
         currentLevelNodes.add(nodeIndex);
 
-        for (int k = 0; k < kappa; k++) {
-            double levelSum = 0.0;
+        for (int j = 0; j < k; j++) {
+            double sum_level_j = 0; // Sum(level_j) = sum of values at level j
+
+            // keep track of nodes for the next level
             List<Integer> nextLevelNodes = new ArrayList<>();
 
+            // for each node in the current level, add its value and prepare its children for the next level
             for (int idx : currentLevelNodes) {
+                // check if idx is within bounds of the tree
                 if (idx < tree.size()) {
-                    levelSum += tree.get(idx);
-                    
+                    sum_level_j += tree.get(idx);
+
                     // Prepare children for next level
-                    if (k < kappa - 1) {
+                    if (j < k - 1) {
                         nextLevelNodes.add(2 * idx + 1);
                         nextLevelNodes.add(2 * idx + 2);
                     }
                 }
             }
 
-            // Calculate weight c_k
-            double weight = FastMath.pow(2.0, -k) / normalization;
-            weightedSum += levelSum * weight;
+            // Calculate weight c_j
+            // FORMULA:
+            //  c_j = (1/2^j) / (Sum_{j=0 to k-1} (1/2^j)) -> Sum_{j=0 to k-1} (1/2^j) is a finite geometric series
+            //  c_j = (1/2^j) / [(1 - (1/2)^k) / (1 - 1/2)]  -> simplification
+            //  c_j = (1/2^j) / [ (1 - 2^-k) / (1/2) ] -> simplification
+            //  c_j = (1/2^j) * (2 * (1 - 2^-k)) -> simplification
+            //  c_j = 2^-j / (2 * (1 - 2^-k))
+            double c_j = FastMath.pow(2.0, -j) / (2.0 * (1.0 - FastMath.pow(2.0, -k)));
 
+            // accumulate weighted sum
+            // FORMULA: estimate = Sum_{j=0 to k-1} (c_j * Sum(level_j)) =
+            honaker_estimate += c_j * sum_level_j;
+
+            // move to the next level and bring its children
             currentLevelNodes = nextLevelNodes;
         }
 
-        return weightedSum;
+        // return the final Honaker estimate
+        return honaker_estimate;
     }
 
     /**
@@ -263,6 +278,11 @@ public final class BinaryAggregationTree {
         // fill the tree with Gaussian noise
         SecureRandom rnd = new SecureRandom();
         for (int i = 0; i < 2 * num_leaves - 1; i++) {
+            // NOTE: nextGaussian() samples from N(0,1)
+            // If X ~ N(mu, 1) => Y = aX ~ N(a*mu, a^2)
+            // Here: mu=0 and a=sigma => Y ~ N(0, sigma^2)
+
+            // sample noise from N(0, sigma^2)
             double noise = rnd.nextGaussian() * sigma;
             tree.add(noise);
         }
