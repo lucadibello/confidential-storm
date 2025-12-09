@@ -8,7 +8,8 @@ import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 
 /**
- * This class implements Differentially Private Stream Aggregation mechanism (DP-SQLP) from the paper: "Differentially Private Stream Processing at Scale".
+ * This class implements Differentially Private Stream Aggregation mechanism (DP-SQLP) from the paper:
+ * "Differentially Private Stream Processing at Scale".
  * <p>
  * This class encapsulates:
  * 1. Streaming Key Selection (Algorithm 1): Identifying keys with sufficient unique user contributions.
@@ -20,20 +21,45 @@ public class StreamingDPMechanism {
     private static final EnclaveLogger log = EnclaveLoggerFactory.getLogger(StreamingDPMechanism.class);
 
     // Aggregation trees for key selection and histogram (algorithm 4)
+
+    /**
+     * Forest of binary aggregation trees for key selection.
+     * <p>
+     * For each key detected during the key selection phase, we maintain a separate binary aggregation tree to track
+     * the number of unique users contributing to that key over time.
+     * <p>
+     * FIXME: this statement needs to be double-checked!
+     * This guarantees p-zCDP for each of the trees for each key.
+     */
     private final Map<String, BinaryAggregationTree> keySelectionForest = new HashMap<>();
+
+
     private final Map<String, BinaryAggregationTree> histogramForest = new HashMap<>();
     
-    // keys that have been selected for release so far (throughout the entire stream)
+    /**
+     * Set of keys that have been selected for release so far (from the beginning of the stream until now).
+     */
     private final Set<String> selectedKeys = new HashSet<>();
 
     // sum of released noisy counts for each key (algorithm 2)
     private final Map<String, Double> currentSums = new HashMap<>();
 
     // keep track of predicted release times for keys (algorithm 3)
+
+    /**
+     * Map that links each key to its predicted release time step.
+     * <p>
+     * This is used in the Empty Key Release Prediction (Algorithm 3) to determine when a key is expected to be
+     * released.
+     */
     private final Map<String, Integer> predictedReleaseTimes = new HashMap<>();
 
-    // keep track of all users that have contributed to each key so far (map of key:set of userIds)
-    // NOTE: this is needed to ensure sensitivity = 1 for key selection
+    /**
+     * Map that links each key to the set of unique user IDs that have contributed to it so far.
+     * <p>
+     * This is essential for ensuring that the sensitivity of the key selection process remains 1, as required by
+     * the DP mechanism.
+     */
     private final Map<String, Set<String>> observedUsersForKeySelection = new HashMap<>();
 
     // Buffer for hierarchical perturbation (Algorithm 2)
@@ -44,13 +70,39 @@ public class StreamingDPMechanism {
     private final Map<String, Double> currentWindowCounts = new HashMap<>();
     private final Map<String, Set<String>> currentWindowUniqueUsers = new HashMap<>();
 
+    /**
+     * The noise scale parameters for the Gaussian noise added during key selection.
+     */
     private final double sigmaKey;
+
+    /**
+     * The noise scale parameters for the Gaussian noise added during histogram release.
+     */
     private final double sigmaHist;
+
+    /**
+     * The maximum number of time steps to process in the stream.
+     */
     private final int maxTimeSteps;
+
+    /**
+     * The base threshold for key selection.
+     * <p>
+     * A key is selected for release if the noisy count of unique users exceeds mu + tau,
+     * where tau is a time-dependant threshold computed based on the variance of the noise.
+     */
     private final long mu;
 
+    /**
+     * The confidence level for tau computation.
+     * <p>
+     * FIXME: add description of beta and its role in the mechanism.
+     */
     private final double beta = 1e-5; // Confidence level for tau computation
 
+    /**
+     * The current time step in the stream processing.
+     */
     private int timeStep = 0;
 
     /**

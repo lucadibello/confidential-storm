@@ -13,7 +13,8 @@ import org.apache.commons.math3.util.FastMath;
  * added along paths from leaves to the root to maintain differential privacy guarantees.
  *
  * <p>
- * Refer to Algorithm 4 in "Differentially Private Stream Processing at Scale"
+ * Refer to Algorithm 4 in "Differentially Private Stream Processing at Scale" and Appendix C
+ * for additional information on the Honaker variance reduction technique.
  */
 public final class BinaryAggregationTree {
     /**
