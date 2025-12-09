@@ -40,7 +40,7 @@ enclave: install-framework
 host: install-framework
 	$(MVN) -f $(ROOT_POM) -pl host -am $(MAVEN_FLAGS) $(MAVEN_GOALS)
 
-run-local: build
+run-local:
 	@echo "Running Synthetic DP topology locally with debug logging (60 seconds)..."
 	@sudo storm local -c topology.debug=true --local-ttl 60 host/target/synthetic-dp-histogram-host-1.0-SNAPSHOT.jar \
 	  ch.usi.inf.examples.synthetic_dp.host.SyntheticTopology -- --local

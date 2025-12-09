@@ -8,5 +8,5 @@ import org.apache.teaclave.javasdk.common.annotations.EnclaveService;
 @EnclaveService
 public interface SyntheticHistogramService {
     void update(SyntheticUpdateRequest request) throws EnclaveServiceException;
-    SyntheticSnapshotResponse snapshot();
+    SyntheticSnapshotResponse snapshot() throws EnclaveServiceException;
 }

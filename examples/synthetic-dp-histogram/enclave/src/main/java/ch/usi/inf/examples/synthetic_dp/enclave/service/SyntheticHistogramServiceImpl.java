@@ -2,7 +2,6 @@ package ch.usi.inf.examples.synthetic_dp.enclave.service;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
-import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.enclave.dp.ContributionLimiter;
 import ch.usi.inf.confidentialstorm.enclave.dp.StreamingDPMechanism;
 import ch.usi.inf.examples.synthetic_dp.common.api.SyntheticHistogramService;
@@ -27,6 +26,7 @@ public final class SyntheticHistogramServiceImpl extends SyntheticHistogramServi
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(SyntheticHistogramServiceImpl.class);
 
     public SyntheticHistogramServiceImpl() {
+        log.info("Initializing SyntheticHistogramServiceImpl with DPConfig: {}", DPConfig.describe());
         double rhoK = DPUtil.cdpRho(DPConfig.EPSILON_K, DPConfig.DELTA_K);
         double sigmaKey = DPUtil.calculateSigma(rhoK, DPConfig.MAX_TIME_STEPS, 1.0);
 
