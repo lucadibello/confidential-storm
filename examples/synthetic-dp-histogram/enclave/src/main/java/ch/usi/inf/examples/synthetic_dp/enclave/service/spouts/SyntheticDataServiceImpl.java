@@ -21,21 +21,14 @@ import java.util.UUID;
 public final class SyntheticDataServiceImpl implements SyntheticDataService {
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(SyntheticDataServiceImpl.class);
     private final EnclaveExceptionContext exceptionCtx = EnclaveExceptionContext.getInstance();
-    private final SealedPayload sealedPayload;
+    private final SealedPayload sealedPayload = SealedPayload.fromConfig();
     private final String producerId = UUID.randomUUID().toString();
     private long seq = 0L;
-
-    public SyntheticDataServiceImpl() {
-        this(SealedPayload.fromConfig());
-    }
-
-    SyntheticDataServiceImpl(SealedPayload sealedPayload) {
-        this.sealedPayload = Objects.requireNonNull(sealedPayload);
-    }
 
     @Override
     public SyntheticEncryptedRecord encryptRecord(String key, String count, String userId) throws EnclaveServiceException {
         try {
+            // build AAD using metadata
             AADSpecification aad = AADSpecification.builder()
                     .sourceComponent(ComponentConstants.SPOUT)
                     .destinationComponent(ComponentConstants.HISTOGRAM_GLOBAL)
@@ -44,9 +37,12 @@ public final class SyntheticDataServiceImpl implements SyntheticDataService {
                     .put("user_id", userId)
                     .build();
 
+            // encrypt each field separately
             EncryptedValue k = sealedPayload.encryptString(key, aad);
             EncryptedValue c = sealedPayload.encryptString(count, aad);
             EncryptedValue u = sealedPayload.encryptString(userId, aad);
+
+            // return the encrypted record
             return new SyntheticEncryptedRecord(k, c, u);
         } catch (SealedPayloadProcessingException | CipherInitializationException | AADEncodingException e) {
             exceptionCtx.handleException(e);
