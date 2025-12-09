@@ -38,6 +38,12 @@ public final class BinaryAggregationTree {
     private final double sigma;
 
     /**
+     * Pre-computed Honaker variances for each leaf index.
+     * NOTE: varianceCache[i] = variance for prefix sum at leaf i
+     */
+    private final double[] varianceCache;
+
+    /**
      * Constructs a binary aggregation tree for differential privacy.
      *
      * @param n     the number of data points in the data stream D = {x_1, ..., x_n} each x_i \in [0,L]
@@ -53,69 +59,34 @@ public final class BinaryAggregationTree {
 
         // initialize tree with Gaussian noise
         this.tree = initializeTree(sigma);
+
+        // pre-compute and cache Honaker variances for all leaf indices
+        this.varianceCache = precomputeTotalVariances();
     }
 
     /**
-     * Computes the variance of the Honaker estimate for a specific leaf index (time step).
+     * Returns the pre-computed Honaker variance for a specific leaf index (time step).
      * The variance depends on the number of levels involved in the prefix sum.
-     * <p>
-     * From the paper: Variance(node) = sigma^2 * (1 / (2 * (1 - 2^-kappa)))
-     * where kappa is the height of the subtree rooted at node_i.
-     * <p>
-     * The total variance is the sum of variances of all nodes in the path for the prefix sum.
-     * <p>
-     * Refer to Appendix C subsection "Honaker estimation for variance reduction"
      *
      * @param i the zero-based index of the leaf
      * @return the variance of the prefix sum at step i
      */
     public double getHonakerVariance(int i) {
-        // NOTE: same traversal logic of query(i) to identify which nodes are summed
-        int indexBinary = i + 1;
-        int nodeIndex = 0;
-        double totalVariance = 0.0;
-
-        // FIXME: remove useless comments as soon as this works as expected
-
-        // Tree height H (root is level 0, leaves are level H)
-        // NOTE: "level_0...level_kappa are levels of subtree rooted at node_i".
-
-        // A node at depth 'j' (j=0 => root) covers 2^(height - j) leaves
-        // kappa = height - j + 1. (Leaves have height 1).
-
-        for (int j = 0; j <= height; j++) {
-            int levelBit = (indexBinary >> (height - j)) & 1;
-
-            if (levelBit == 1) {
-                int kappa = height - j + 1;
-                
-                // Variance contribution for this node (using Honaker formula)
-                // Formula: Variance(node_i) = sigma^2 / (2 * (1 - 2^-kappa))
-                // NOTE: refer to Appendix C of the paper, equation 1
-                double nodeVariance = (sigma * sigma) / (2.0 * (1.0 - FastMath.pow(2.0, -kappa)));
-                totalVariance += nodeVariance;
-            }
-
-            if (j < height) {
-                int pathBit = (i >> (height - 1 - j)) & 1;
-                int leftChild = 2 * nodeIndex + 1;
-                int rightChild = leftChild + 1;
-                nodeIndex = (pathBit == 0) ? leftChild : rightChild;
-            }
-        }
-        return totalVariance;
+        return varianceCache[i];
     }
 
     /**
      * Adds a value c to all the nodes on the path from leaf i to the root of the tree and computes the DP prefix sum S_i^priv.
+     * <p>
+     * NOTE: This implements steps 2-10 of Algorithm 4 in the paper.
      *
      * @param i the index of the leaf
-     * @param c the value to add
+     * @param x_i the value to add at leaf i, where x_i \in D = {x_1, ..., x_i, ..., x_n} (data stream)
      */
-    public double addToTree(int i, double c) {
-        // 1. Update tree on path leaf_i -> root
-        add(i, c);
-        // 2. Compute DP prefix sum
+    public double addToTree(int i, double x_i) {
+        // 1. Add value x_i to all nodes on the path from leaf i to the root
+        add(i, x_i);
+        // 2. Sum the Honaker variance-reduced estimates for each node in the path from the root to leaf i to compute S_i^priv
         return query(i);
     }
 
@@ -289,6 +260,56 @@ public final class BinaryAggregationTree {
 
         // return the initialized tree
         return tree;
+    }
+
+    /**
+     * Pre-computes Honaker total variance for all leaf indices (0 to num_leaves-1).
+     * <p>
+     * FORMULA:
+     *  Variance(node_i) = sigma^2 * (1 / (2 * (1 - 2^-k)))
+     *      where
+     *  k = height of the subtree rooted at node_i
+     * <p>
+     * The total variance is the sum of variances of all nodes in the path for the prefix sum.
+     * <p>
+     * Refer to Appendix C subsection "Honaker estimation for variance reduction"
+     *
+     * @return array where varianceCache[i] = total variance for prefix sum at leaf i
+     */
+    private double[] precomputeTotalVariances() {
+        double[] cache = new double[num_leaves];
+
+        for (int i = 0; i < num_leaves; i++) {
+            int indexBinary = i + 1;
+            int nodeIndex = 0;
+            double totalVariance = 0.0;
+
+            // Traverse from root to leaf i, accumulating variance contributions
+            for (int j = 0; j <= height; j++) {
+                int levelBit = (indexBinary >> (height - j)) & 1;
+
+                if (levelBit == 1) {
+                    int kappa = height - j + 1;
+
+                    // Variance contribution for this node (using Honaker formula)
+                    // Formula: Variance(node_i) = sigma^2 / (2 * (1 - 2^-kappa))
+                    // Refer to Appendix C of the paper, equation 1
+                    double nodeVariance = (sigma * sigma) / (2.0 * (1.0 - FastMath.pow(2.0, -kappa)));
+                    totalVariance += nodeVariance;
+                }
+
+                if (j < height) {
+                    int pathBit = (i >> (height - 1 - j)) & 1;
+                    int leftChild = 2 * nodeIndex + 1;
+                    int rightChild = leftChild + 1;
+                    nodeIndex = (pathBit == 0) ? leftChild : rightChild;
+                }
+            }
+
+            cache[i] = totalVariance;
+        }
+
+        return cache;
     }
 
 }
