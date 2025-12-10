@@ -1,6 +1,7 @@
 package ch.usi.inf.examples.confidential_word_count.enclave.service.bolts.histogram;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.enclave.dp.StreamingDPMechanism;
@@ -58,9 +59,14 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
     }
 
     @Override
-    public HistogramSnapshotResponse snapshot() {
+    public HistogramSnapshotResponse snapshot() throws EnclaveServiceException {
         // Advance time step and get the latest noisy histogram
-        Map<String, Long> histogram = mechanism.snapshot();
-        return new HistogramSnapshotResponse(histogram);
+        try {
+            Map<String, Long> histogram = mechanism.snapshot();
+            return new HistogramSnapshotResponse(histogram);
+        } catch (Throwable t) {
+            this.exceptionCtx.handleException(t);
+            return null; // signal error if using the default exception handler
+        }
     }
 }
