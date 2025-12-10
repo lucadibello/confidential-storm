@@ -119,15 +119,4 @@ public class ZipfMandelbrotDistribution {
         double H_N_q_s_minus_1 = computeHarmonicNumber(N, q, s - 1);
         return (H_N_q_s_minus_1 / H_N_q_s) - q;
     }
-
-    /**
-     * Creates a distribution with the parameters used in the paper: "Differentially Private Stream Processing at Scale".
-     * FIXME: ensure that parametrs are correct!!!!! (section 5.1)
-     *
-     * @param random Random number generator
-     * @return Zipf-Mandelbrot distribution with N=10^5, q=26, s=6.738
-     */
-    public static ZipfMandelbrotDistribution createForPaper(Random random) {
-        return new ZipfMandelbrotDistribution(100_000, 5.0, 2.5, random);
-    }
 }
