@@ -9,5 +9,6 @@ import org.apache.teaclave.javasdk.common.annotations.EnclaveService;
 @EnclaveService
 public interface HistogramService {
     HistogramUpdateAckResponse update(HistogramUpdateRequest update) throws EnclaveServiceException;
+
     HistogramSnapshotResponse snapshot() throws EnclaveServiceException;
 }

@@ -4,8 +4,6 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.*;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
-import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
-import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import ch.usi.inf.examples.confidential_word_count.common.api.SplitSentenceService;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.SplitSentenceRequest;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.SplitSentenceResponse;

@@ -22,10 +22,9 @@ import java.util.stream.Collectors;
 public final class SplitSentenceServiceImpl extends SplitSentenceVerifier {
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(SplitSentenceServiceImpl.class);
     private final String producerId = UUID.randomUUID().toString();
-    private long sequenceCounter = 0;
-
     // for development purposes, we define the expected JSON fields here to validate the input
-    private final Set<String> expectedJsonFields= new HashSet<>(List.of("body", "category", "id", "rating", "user_id"));
+    private final Set<String> expectedJsonFields = new HashSet<>(List.of("body", "category", "id", "rating", "user_id"));
+    private long sequenceCounter = 0;
 
     @Override
     public SplitSentenceResponse splitImpl(SplitSentenceRequest request) throws SealedPayloadProcessingException, CipherInitializationException, AADEncodingException {
@@ -74,7 +73,7 @@ public final class SplitSentenceServiceImpl extends SplitSentenceVerifier {
                     .destinationComponent(ComponentConstants.WORD_COUNT)
                     .put("producer_id", producerId)
                     .put("seq", sequence);
-            
+
             // Prepare payload JSON: { "word": "...", "user_id": "..." }
             Map<String, Object> payloadMap = new HashMap<>();
             payloadMap.put("word", plainWord);

@@ -2,7 +2,6 @@ package ch.usi.inf.examples.confidential_word_count.host.spouts;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
-import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.host.spouts.ConfidentialSpout;
 import ch.usi.inf.examples.confidential_word_count.common.api.SpoutMapperService;
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;

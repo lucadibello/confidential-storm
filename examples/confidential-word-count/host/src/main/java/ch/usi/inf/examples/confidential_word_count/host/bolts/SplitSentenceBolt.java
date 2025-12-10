@@ -15,7 +15,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
-import java.util.Objects;
 
 public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
     private static final Logger LOG = LoggerFactory.getLogger(SplitSentenceBolt.class);

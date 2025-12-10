@@ -20,13 +20,11 @@ import java.util.*;
 public final class WordCountServiceImpl extends WordCountVerifier {
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(WordCountService.class);
     private final String producerId = UUID.randomUUID().toString();
-    private long sequenceCounter = 0;
-
     // buffer: Word -> (UserId -> Count)
     private final Map<String, Map<String, Long>> buffer = new HashMap<>();
-
     // for development purposes, we define the expected JSON fields here to validate the input
     private final Set<String> expectedJsonFields = new HashSet<>(List.of("word", "user_id"));
+    private long sequenceCounter = 0;
 
     @Override
     public WordCountAckResponse countImpl(WordCountRequest request) throws SealedPayloadProcessingException, CipherInitializationException {
@@ -39,7 +37,7 @@ public final class WordCountServiceImpl extends WordCountVerifier {
             log.warn("Invalid payload structure: {}", jsonPayload);
             throw new RuntimeException("Invalid payload structure");
         }
-        
+
         // Extract word from payload
         String word = (String) jsonMap.get("word");
         if (word == null) {
@@ -56,7 +54,7 @@ public final class WordCountServiceImpl extends WordCountVerifier {
 
         // Update buffer (per user)
         buffer.computeIfAbsent(word, k -> new HashMap<>())
-              .merge(userId, 1L, Long::sum);
+                .merge(userId, 1L, Long::sum);
 
         // Return acknowledgment to indicate successful buffering
         return new WordCountAckResponse();

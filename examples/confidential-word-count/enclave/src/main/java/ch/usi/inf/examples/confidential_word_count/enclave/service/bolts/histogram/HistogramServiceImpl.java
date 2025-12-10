@@ -15,7 +15,10 @@ import ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramUpd
 import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
 import com.google.auto.service.AutoService;
 
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @AutoService(HistogramService.class)
 public final class HistogramServiceImpl extends HistogramServiceVerifier {
@@ -77,7 +80,7 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
             log.warn("Invalid count value: {} in payload: {}", count, jsonPayload);
             throw new RuntimeException("Invalid count value in payload");
         }
-        
+
         // Handle aggregated counts by treating them as multiple unit contributions (ensure contribution bounding is applied)
         for (int i = 0; i < count; i++) {
             mechanism.addContribution(word, 1.0, userId); // record unit contribution

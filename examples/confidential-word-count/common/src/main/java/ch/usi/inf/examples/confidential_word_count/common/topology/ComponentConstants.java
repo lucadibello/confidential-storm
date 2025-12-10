@@ -10,5 +10,6 @@ public final class ComponentConstants {
     public static final TopologySpecification.Component DATASET = TopologySpecification.Component.of("_DATASET");
     public static final TopologySpecification.Component MAPPER = TopologySpecification.Component.of("_MAPPER");
 
-    private ComponentConstants() {}
+    private ComponentConstants() {
+    }
 }
