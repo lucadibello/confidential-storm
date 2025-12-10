@@ -263,9 +263,28 @@ public class StreamingDPMechanism {
                 log.debug("[DP-MECHANISM] Key {} in S^(i)\\S^(i-1) - created new tree and caught up to timeStep {}",
                          key, timeStep);
             } else {
-                // Key was in S^(i-1) - reuse existing tree
+                // Key was in S^(i-1) - reuse existing tree (if it exists)
                 t_key = keySelectionForest.get(key);
-                log.debug("[DP-MECHANISM] Key {} in both S^(i) and S^(i-1) - reusing existing tree", key);
+
+                // If tree was removed (key was selected and resetKeySelectionState was called), create a new tree.
+                if (t_key == null) {
+                    /*
+                     FIXME: happens when a key is in selectedKeys (always included in s_i) but the relative tree was removed after being selected in a previous time step. We should refactor this.
+                     */
+
+                    log.warn("[DP-MECHANISM] Key {} was in S^(i-1) but tree is missing (likely selected previously) - creating new tree", key);
+                    t_key = new BinaryAggregationTree(maxTimeSteps, sigmaKey);
+
+                    // Catch up to current time step
+                    for (int t = 0; t < timeStep; t++) {
+                        t_key.addToTree(t, 0.0);
+                    }
+
+                    keySelectionForest.put(key, t_key);
+                    observedUsersForKeySelection.remove(key);
+                } else {
+                    log.debug("[DP-MECHANISM] Key {} in both S^(i) and S^(i-1) - reusing existing tree", key);
+                }
             }
 
             // Step 7 of Algo 1: Add count_key(D_tr_i) - count_key(D_tr_(i-1)) to the tree
