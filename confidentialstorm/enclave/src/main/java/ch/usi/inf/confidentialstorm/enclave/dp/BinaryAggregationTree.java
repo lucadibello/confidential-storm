@@ -84,11 +84,9 @@ public final class BinaryAggregationTree {
      * @param i the index of the leaf
      * @param x_i the value to add at leaf i, where x_i \in D = {x_1, ..., x_i, ..., x_n} (data stream)
      */
-    public double addToTree(int i, double x_i) {
+    public void addToTree(int i, double x_i) {
         // 1. Add value x_i to all nodes on the path from leaf i to the root
         add(i, x_i);
-        // 2. Sum the Honaker variance-reduced estimates for each node in the path from the root to leaf i to compute S_i^priv
-        return query(i);
     }
 
     /**
@@ -118,7 +116,7 @@ public final class BinaryAggregationTree {
      * @param i the zero-based index of the leaf
      * @return the differentially private prefix sum S_i^priv
      */
-    public double query(int i) {
+    public double getTotalSum(int i) {
         // now compute DP prefix sum S_i^priv
         int indexBinary = i + 1; // convert from 0-based to 1-based index
 
