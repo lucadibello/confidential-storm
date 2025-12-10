@@ -41,7 +41,8 @@ class BinaryAggregationTreeTest {
             double value = rand.nextDouble() * 1000 - 500; // Random value between -500 and 500
 
             double theirOutput = theirTree.addToTree(i, value);
-            double mineOutput = myTree.addToTree(i, value);
+            myTree.addToTree(i, value);
+            double mineOutput = myTree.getTotalSum(i);
 
             Assertions.assertEquals(theirOutput, mineOutput, TOL,
                     String.format("Mismatch at index %d for tree size %d", i, treeSize));
@@ -62,7 +63,12 @@ class BinaryAggregationTreeTest {
 
         double[] inputs = {1.0, 2.0};
         for (int i = 0; i < treeSize; i++) {
-            Assertions.assertEquals(theirTree.addToTree(i, inputs[i]), myTree.addToTree(i, inputs[i]), TOL);
+            theirTree.addToTree(i, inputs[i]);
+            myTree.addToTree(i, inputs[i]);
+
+            double theirSum = theirTree.getTotalSum();
+            double mySum = myTree.getTotalSum(i);
+            Assertions.assertEquals(theirSum, mySum, TOL);
         }
     }
 
