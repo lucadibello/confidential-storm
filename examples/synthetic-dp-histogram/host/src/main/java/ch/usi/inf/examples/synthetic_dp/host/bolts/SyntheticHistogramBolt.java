@@ -22,15 +22,20 @@ import org.slf4j.LoggerFactory;
 
 public class SyntheticHistogramBolt extends ConfidentialBolt<SyntheticHistogramService> {
     private static final Logger LOG = LoggerFactory.getLogger(SyntheticHistogramBolt.class);
-    private final String OUTPUT_FILE = "data/synthetic-report.txt";
+    private static final String OUTPUT_DIR = System.getProperty("synthetic.output.dir", "data");
+    private static final int RUN_ID = Integer.getInteger("synthetic.run.id", 1);
+
+    private final String outputFile;
+    private int tickCount = 0;
+    private long totalTuples = 0;
 
     public SyntheticHistogramBolt() {
         super(SyntheticHistogramService.class);
+        this.outputFile = String.format("%s/synthetic-report-run%d.txt", OUTPUT_DIR, RUN_ID);
     }
 
-    @Override
     public Map<String, Object> getComponentConfiguration() {
-        return Map.of(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, 5);
+        return Map.of(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, 2);
     }
 
     @Override
@@ -64,7 +69,8 @@ public class SyntheticHistogramBolt extends ConfidentialBolt<SyntheticHistogramS
         EncryptedValue key = (EncryptedValue) input.getValueByField("key");
         EncryptedValue count = (EncryptedValue) input.getValueByField("count");
         EncryptedValue user = (EncryptedValue) input.getValueByField("user");
-        LOG.debug("Updating histogram for encrypted key tuple");
+
+        // pass encrypted values to service for update
         service.update(new SyntheticUpdateRequest(key, count, user));
 
         // acknowledge tuple
@@ -104,18 +110,28 @@ public class SyntheticHistogramBolt extends ConfidentialBolt<SyntheticHistogramS
                     return diff * diff;
                 }).sum());
 
-        File file = new File(OUTPUT_FILE);
+        // Write to file in append mode
+        File file = new File(outputFile);
         file.getParentFile().mkdirs();
 
-        try (PrintWriter out = new PrintWriter(new FileWriter(file, false))) {
-            out.println("=== " + Instant.now() + " ===");
-            out.printf("keys_retained=%d%n", l0);
-            out.printf("l_inf=%d%n", lInf);
-            out.printf("l_1=%d%n", l1);
-            out.printf("l_2=%.2f%n", l2);
-            LOG.info("Reported metrics: keys_retained={}, l_inf={}, l_1={}, l_2={}", l0, lInf, l1, l2);
+        // Write header on first tick
+        boolean isFirstTick = tickCount == 1;
+        try (PrintWriter out = new PrintWriter(new FileWriter(file, !isFirstTick))) {
+            if (isFirstTick) {
+                out.println("# Synthetic DP Histogram Benchmark - Run " + RUN_ID);
+                out.println("# Timestamp: " + Instant.now());
+                out.println("# Format: tick, timestamp, keys_retained(l0), l_inf, l_1, l_2, dp_keys, gt_keys");
+                out.println("#");
+            }
+
+            out.printf("tick_%04d,%s,%d,%d,%d,%.2f,%d,%d%n",
+                    tickCount, Instant.now(), l0, lInf, l1, l2, dp.size(), gt.size());
+            out.flush();
+
+            LOG.info("Tick {} metrics: l0={}, l_inf={}, l_1={}, l_2={:.2f}",
+                    tickCount, l0, lInf, l1, l2);
         } catch (IOException e) {
-            LOG.error("Error writing report", e);
+            LOG.error("Error writing report to {}", outputFile, e);
         }
     }
 
