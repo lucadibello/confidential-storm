@@ -14,7 +14,7 @@ public final class WordCountEnclaveConfigProvider implements EnclaveConfiguratio
 
     @Override
     public LogLevel getLogLevel() {
-        return LogLevel.DEBUG;
+        return LogLevel.INFO;
     }
 
     @Override
