@@ -64,11 +64,11 @@ public class WordCounterBolt extends ConfidentialBolt<WordCountService> {
         // otherwise ingest normal tuple (event-time)
 
         // extract encrypted word from the input tuple
-        EncryptedValue word = (EncryptedValue) input.getValueByField("encryptedWord");
-        LOG.debug("[WordCounterBolt {}] Received tuple", boltId);
+        EncryptedValue wordEntry = (EncryptedValue) input.getValueByField("encryptedWord");
+        LOG.debug("[WordCounterBolt {}] Received encrypted word", boltId);
 
         // confidentially count the occurrences of the word
-        WordCountRequest req = new WordCountRequest(word);
+        WordCountRequest req = new WordCountRequest(wordEntry);
         WordCountAckResponse ack = service.count(req); // Receive and store the ack
         LOG.debug("[WordCounterBolt {}] Word counted and buffered. Received ack: {}", boltId, ack); // Log the ack
 

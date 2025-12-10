@@ -108,7 +108,6 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
         // in any case -> update the histogram with the new values
         EncryptedValue word = (EncryptedValue) input.getValueByField("word");
         EncryptedValue newCount = (EncryptedValue) input.getValueByField("count");
-        LOG.info("[HistogramBolt {}] Updating histogram with encrypted tuple", boltId);
         service.update(new HistogramUpdateRequest(word, newCount));
 
         // acknowledge the tuple

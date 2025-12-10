@@ -7,6 +7,7 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 import ch.usi.inf.examples.confidential_word_count.common.api.HistogramService;
+import ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramUpdateAckResponse;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramUpdateRequest;
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 
@@ -15,16 +16,17 @@ import java.util.List;
 
 public abstract sealed class HistogramServiceVerifier extends ConfidentialBoltService<HistogramUpdateRequest> implements HistogramService permits HistogramServiceImpl {
     @Override
-    public void update(HistogramUpdateRequest update) throws EnclaveServiceException {
+    public HistogramUpdateAckResponse update(HistogramUpdateRequest update) throws EnclaveServiceException {
         try {
             super.verify(update);
-            updateImpl(update);
+            return updateImpl(update);
         } catch (Throwable t) {
             super.exceptionCtx.handleException(t);
+            return null;
         }
     }
 
-    public abstract void updateImpl(HistogramUpdateRequest update) throws SealedPayloadProcessingException, CipherInitializationException;
+    public abstract HistogramUpdateAckResponse updateImpl(HistogramUpdateRequest update) throws SealedPayloadProcessingException, CipherInitializationException;
 
     @Override
     public TopologySpecification.Component expectedSourceComponent() {

@@ -1,7 +1,6 @@
 package ch.usi.inf.examples.confidential_word_count.host;
 
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
-import ch.usi.inf.confidentialstorm.host.bolts.UserContributionBoundingBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.SplitSentenceBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.WordCounterBolt;
@@ -29,34 +28,27 @@ public class WordCountTopology extends ConfigurableTopology {
         boolean isProd = isProdEnvironment(args);
         LOG.info("Starting WordCountTopology in {} mode", isProd ? "PROD" : "LOCAL");
 
-        // WordSpout: stream of phrases from a book
+        // RandomJokeSpout: emits random jokes (json entries with "body" field)
         builder.setSpout(
                 ComponentConstants.RANDOM_JOKE_SPOUT.toString(),
                 new RandomJokeSpout(),
                 1
         );
 
-        // SplitSentenceBolt: splits each sentence into a stream of words
+        // SplitSentenceBolt: splits body into words
         builder.setBolt(
                 ComponentConstants.SENTENCE_SPLIT.toString(),
                 new SplitSentenceBolt(),
-                1
+                2
         ).shuffleGrouping(ComponentConstants.RANDOM_JOKE_SPOUT.toString());
 
-        // UserContributionBoundingBolt: filters words based on per-user contribution limits
-        builder.setBolt(
-                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString(),
-                new UserContributionBoundingBolt(),
-                1
-        ).shuffleGrouping(ComponentConstants.SENTENCE_SPLIT.toString());
-
-        // WordCountBolt: counts the words that are emitted (now stateless forwarding for DP)
+        // WordCountBolt: counts the words that are emitted
         builder.setBolt(
                 ComponentConstants.WORD_COUNT.toString(),
                 new WordCounterBolt(),
-                1
+                2
         ).shuffleGrouping(
-                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString()
+                ComponentConstants.SENTENCE_SPLIT.toString()
         );
 
         // HistogramBolt: merges partial counters into a single (global) histogram

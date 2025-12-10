@@ -55,15 +55,15 @@ public class RandomJokeSpout extends ConfidentialSpout<SpoutMapperService> {
     public void executeNextTuple() throws EnclaveServiceException {
         // generate the next random joke
         int idx = rand.nextInt(encryptedJokes.size());
-        EncryptedValue currentJoke = encryptedJokes.get(idx);
+        EncryptedValue currentJokeEntry = encryptedJokes.get(idx);
 
-        // make test call to check what's crashing
+        // use service to configure route for the joke entry (spout -> splitter)
         LOG.debug("[RandomJokeSpout {}] Testing route for joke index {}", this.state.getTaskId(), idx);
+        EncryptedValue routedJokeEntry = getService().setupRoute(ComponentConstants.RANDOM_JOKE_SPOUT, currentJokeEntry);
 
-        EncryptedValue routedJoke = getService().setupRoute(ComponentConstants.RANDOM_JOKE_SPOUT, currentJoke);
-
-        LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJoke);
-        getCollector().emit(new Values(routedJoke));
+        // NOTE: each joke is a JSON entry with fields: ["body", "category", "id", "rating", "user_id"]
+        LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJokeEntry);
+        getCollector().emit(new Values(routedJokeEntry));
 
         // sleep for a while to avoid starving the topology
         try {
@@ -75,6 +75,6 @@ public class RandomJokeSpout extends ConfidentialSpout<SpoutMapperService> {
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        declarer.declare(new Fields("body"));
+        declarer.declare(new Fields("entry"));
     }
 }

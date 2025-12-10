@@ -15,15 +15,11 @@ import java.util.Collection;
 import java.util.List;
 
 public abstract sealed class SplitSentenceVerifier extends ConfidentialBoltService<SplitSentenceRequest> implements SplitSentenceService permits SplitSentenceServiceImpl {
-    private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(SplitSentenceVerifier.class);
-
     abstract public SplitSentenceResponse splitImpl(SplitSentenceRequest request) throws SealedPayloadProcessingException, CipherInitializationException, RoutingKeyDerivationException, AADEncodingException;
 
     @Override
     public SplitSentenceResponse split(SplitSentenceRequest request) throws EnclaveServiceException {
         try {
-            log.info("SplitSentenceVerifier: split called");
-
             // verify the request
             super.verify(request);
             // call the implementation
@@ -46,6 +42,6 @@ public abstract sealed class SplitSentenceVerifier extends ConfidentialBoltServi
 
     @Override
     public Collection<EncryptedValue> valuesToVerify(SplitSentenceRequest request) {
-        return List.of(request.body());
+        return List.of(request.jokeEntry());
     }
 }

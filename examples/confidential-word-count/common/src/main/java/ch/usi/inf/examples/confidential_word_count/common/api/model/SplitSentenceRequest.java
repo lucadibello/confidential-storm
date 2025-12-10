@@ -6,11 +6,11 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-public record SplitSentenceRequest(EncryptedValue body) implements Serializable {
+public record SplitSentenceRequest(EncryptedValue jokeEntry) implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
     public SplitSentenceRequest {
-        Objects.requireNonNull(body, "Encrypted body cannot be null");
+        Objects.requireNonNull(jokeEntry, "Encrypted body cannot be null");
     }
 }

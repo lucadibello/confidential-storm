@@ -35,23 +35,20 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
     @Override
     protected void processTuple(Tuple input, SplitSentenceService service) throws EnclaveServiceException {
         // read encrypted body
-        EncryptedValue encryptedBody = (EncryptedValue) input.getValueByField("body");
-        LOG.debug("[SplitSentenceBolt {}] Received encrypted joke payload {}", boltId, encryptedBody);
+        EncryptedValue encryptedJokeEntry = (EncryptedValue) input.getValueByField("entry");
+        LOG.debug("[SplitSentenceBolt {}] Received encrypted joke entry {}", boltId, encryptedJokeEntry);
 
         // request enclave to split the sentence
-        SplitSentenceResponse response = service.split(new SplitSentenceRequest(encryptedBody));
-        LOG.info("[SplitSentenceBolt {}] Emitting {} encrypted words for encrypted joke {}", boltId, response.words().size(), encryptedBody);
+        SplitSentenceResponse response = service.split(new SplitSentenceRequest(encryptedJokeEntry));
+        LOG.info("[SplitSentenceBolt {}] Emitting {} encrypted words for encrypted joke {}", boltId, response.words().size(), encryptedJokeEntry);
 
-        // Ensure that the response contains words
-        Objects.requireNonNull(response, "SplitSentenceResponse is null. Enclave service has failed.");
-
-        // send out each encrypted word
+        // send out each encrypted word as a separate tuple
         for (EncryptedValue word : response.words()) {
             // NOTE: word seems like a random blob of data => hides frequency distribution from host
             getCollector().emit(input, new Values(word));
         }
         getCollector().ack(input);
-        LOG.debug("[SplitSentenceBolt {}] Acked encrypted joke {}", boltId, encryptedBody);
+        LOG.debug("[SplitSentenceBolt {}] Acked encrypted joke {}", boltId, encryptedJokeEntry);
     }
 
     @Override

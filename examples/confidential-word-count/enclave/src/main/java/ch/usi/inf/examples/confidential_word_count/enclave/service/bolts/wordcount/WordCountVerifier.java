@@ -44,7 +44,7 @@ public abstract sealed class WordCountVerifier extends ConfidentialBoltService<W
 
     @Override
     public TopologySpecification.Component expectedSourceComponent() {
-        return ComponentConstants.USER_CONTRIBUTION_BOUNDING;
+        return ComponentConstants.SENTENCE_SPLIT;
     }
 
     @Override

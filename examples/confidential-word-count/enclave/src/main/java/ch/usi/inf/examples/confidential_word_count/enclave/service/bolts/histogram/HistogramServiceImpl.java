@@ -3,21 +3,27 @@ package ch.usi.inf.examples.confidential_word_count.enclave.service.bolts.histog
 import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
-import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.enclave.dp.StreamingDPMechanism;
 import ch.usi.inf.confidentialstorm.enclave.util.DPUtil;
+import ch.usi.inf.confidentialstorm.enclave.util.EnclaveJsonUtil;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import ch.usi.inf.examples.confidential_word_count.common.api.HistogramService;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramSnapshotResponse;
+import ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramUpdateAckResponse;
 import ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramUpdateRequest;
 import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
 import com.google.auto.service.AutoService;
 
-import java.util.Map;
-import org.apache.commons.math3.util.FastMath;
+import java.util.*;
 
 @AutoService(HistogramService.class)
 public final class HistogramServiceImpl extends HistogramServiceVerifier {
+    private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(HistogramService.class);
     private final StreamingDPMechanism mechanism;
+
+    // for development purposes, we define the expected JSON fields here to validate the input
+    private final Set<String> expectedJsonFields = new HashSet<>(List.of("word", "user_id"));
 
     @SuppressWarnings("unused")
     public HistogramServiceImpl() {
@@ -41,21 +47,44 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
     }
 
     @Override
-    public void updateImpl(HistogramUpdateRequest update) throws SealedPayloadProcessingException, CipherInitializationException {
-        String word = sealedPayload.decryptToString(update.word());
-        double rawCount = Double.parseDouble(sealedPayload.decryptToString(update.count()));
+    public HistogramUpdateAckResponse updateImpl(HistogramUpdateRequest update) throws SealedPayloadProcessingException, CipherInitializationException {
+        // Decrypt payload to get word and user_id
+        String jsonPayload = sealedPayload.decryptToString(update.word());
+        Map<String, Object> jsonMap = EnclaveJsonUtil.parseJson(jsonPayload);
 
-        // clamp the contribution to [-C, C]
-        double clamp = DPConfig.PER_RECORD_CLAMP;
-        double count = FastMath.max(-clamp, FastMath.min(rawCount, clamp));
+        // Validate expected fields
+        if (!jsonMap.keySet().containsAll(expectedJsonFields)) {
+            log.warn("Invalid payload structure: {}", jsonPayload);
+        }
 
-        // Extract user_id from AAD
-        DecodedAAD aad = DecodedAAD.fromBytes(update.word().associatedData());
-        Object userIdObj = aad.attributes().get("user_id");
-        String userId = userIdObj != null ? userIdObj.toString() : "unknown";
+        // Extract word from payload
+        String word = (String) jsonMap.get("word");
+        if (word == null) {
+            log.warn("Missing 'word' field in payload: {}", jsonPayload);
+            throw new RuntimeException("Missing 'word' field in payload");
+        }
 
-        // Buffer the contribution
-        mechanism.addContribution(word, count, userId);
+        // Extract user_id from payload
+        String userId = String.valueOf(jsonMap.get("user_id")); // long to string
+        if (userId == null) {
+            log.warn("Missing 'user_id' field in payload: {}", jsonPayload);
+            throw new RuntimeException("Missing 'user_id' field in payload");
+        }
+
+        // Decrypt count (which is already pre-aggregated -> count >= 1)
+        long count = Long.parseLong(sealedPayload.decryptToString(update.count()));
+        if (count < 1) {
+            log.warn("Invalid count value: {} in payload: {}", count, jsonPayload);
+            throw new RuntimeException("Invalid count value in payload");
+        }
+        
+        // Handle aggregated counts by treating them as multiple unit contributions (ensure contribution bounding is applied)
+        for (int i = 0; i < count; i++) {
+            mechanism.addContribution(word, 1.0, userId); // record unit contribution
+        }
+
+        // return acknowledgment to indicate successful processing
+        return new HistogramUpdateAckResponse();
     }
 
     @Override
