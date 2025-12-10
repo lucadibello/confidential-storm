@@ -13,8 +13,6 @@ import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import com.google.auto.service.AutoService;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 @AutoService(SyntheticHistogramService.class)
 public final class SyntheticHistogramServiceImpl extends SyntheticHistogramServiceVerifier
@@ -22,7 +20,6 @@ public final class SyntheticHistogramServiceImpl extends SyntheticHistogramServi
 
     private final StreamingDPMechanism mechanism;
     private final ContributionLimiter limiter = new ContributionLimiter();
-    private final Map<String, Set<String>> windowUsers = new ConcurrentHashMap<>();
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(SyntheticHistogramServiceImpl.class);
 
     public SyntheticHistogramServiceImpl() {
@@ -40,7 +37,8 @@ public final class SyntheticHistogramServiceImpl extends SyntheticHistogramServi
                 sigmaKey,
                 sigmaHist,
                 DPConfig.MAX_TIME_STEPS,
-                DPConfig.MU
+                DPConfig.MU,
+                DPConfig.MAX_CONTRIBUTIONS_PER_USER
         );
     }
 
