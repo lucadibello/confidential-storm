@@ -211,8 +211,9 @@ public class StreamingDPMechanism {
             }
         }
 
-        // NOTE: add also all previously selected keys to keep updating their histograms
-        // s_i.addAll(selectedKeys); --> this is not part of the private key selection algorithm
+        // Step 3 of Algo 2 - ensure all previously selected keys are included (S^(i) includes all selected keys)
+        s_i.addAll(selectedKeys);
+
         log.debug("[DP-MECHANISM] Total keys to process: {} (contributions={}, predicted={}, selected={})",
                 s_i.size(), currentWindowCounts.size(), predictedReleaseTimes.size(), selectedKeys.size());
 
