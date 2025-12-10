@@ -267,7 +267,6 @@ public class StreamingDPMechanism {
             // Step 7 of Algo 1: Add count_key(D_tr_i) - count_key(D_tr_(i-1)) to the tree
             //
             // D_tr_i = cumulative sub-stream from time 0 to i -> need to track unique users across all time steps
-            // Why cumulative? ->
             Set<String> observedUsers = observedUsersForKeySelection.computeIfAbsent(key, k -> new HashSet<>());
             Set<String> windowUsers = currentWindowUniqueUsers.getOrDefault(key, Collections.emptySet());
 
@@ -375,7 +374,15 @@ public class StreamingDPMechanism {
         unreleasedHistogramBuffer.put(key, 0.0);
     }
 
+    /**
+     * Algorithm 3: Empty Key Release Prediction
+     * Predicts if a key (not selected at current time) will be selected in future due to noise alone.
+     *
+     * @param key The key to run prediction for (must be in S_tr_j but NOT selected)
+     * @param keyTree The binary aggregation tree for this key's unique user counts
+     */
     private void runEmptyKeyPrediction(String key, BinaryAggregationTree keyTree) {
+        // Skip if prediction already exists for this key
         if (predictedReleaseTimes.containsKey(key)) {
             log.debug("[PREDICTION] Key {} already has prediction, skipping", key);
             return;
@@ -384,25 +391,24 @@ public class StreamingDPMechanism {
         int futureSteps = maxTimeSteps - timeStep - 1;
         log.debug("[PREDICTION] Starting prediction for key {} ({} future steps to check)", key, futureSteps);
 
-        // Simulate future steps -> we add 0 contribution for each future step and check if it would be selected
+        // Step 4 of Algo 3 - for tr_p from tr_j+1 (which is the next time step) to tr_|Trw| (the final time step)
         int iterationCount = 0;
-        for (int t = timeStep + 1; t < maxTimeSteps; t++) {
+        for (int tr_p = timeStep + 1; tr_p < maxTimeSteps; tr_p++) {
             iterationCount++;
+            // Step 5 of Algo 3 - D_tr_p = D_tr_j -> we assume no new contributions for this key in future steps
 
-            // compute predicted noisy unique count at future step t
-            double predictedNoisyCount = keyTree.getTotalSum(t);
-
-            // compute future tau in the same way as before
-            double futureVariance = keyTree.getHonakerVariance(t);
+            // Step 6 of Algo 3 - Perform streaming private key selection via Algorithm 1 at time tr_p
+            double predictedNoisyCount = keyTree.getTotalSum(tr_p);
+            double futureVariance = keyTree.getHonakerVariance(tr_p);
             double futureTau = computeTau(futureVariance, this.BETA);
 
-            // check if predicted noisy count exceeds threshold (selection threshold)
+            // Step 7 of Algo 3 - if key is selected, then write <key, tr_p> to state store and break
             if (predictedNoisyCount >= (double) mu + futureTau) {
-                predictedReleaseTimes.put(key, t);
+                // Key predicted to be selected at future time tr_p due to noise
+                predictedReleaseTimes.put(key, tr_p);
 
-                // log for debugging
-                log.info("[PREDICTION] Key {} will be released at future step t={} (checked {} iterations)",
-                        key, t, iterationCount);
+                log.info("[PREDICTION] Key {} will be released at future step tr_p={} (checked {} iterations)",
+                        key, tr_p, iterationCount);
                 break; // Found the earliest release time
             }
         }
