@@ -53,6 +53,8 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
             }
             GroundTruthCollector.record(key, 1L);
 
+            // Encrypt record using enclave service
+            LOG.trace("Encrypting record for user {}: key={}", userId, key);
             SyntheticEncryptedRecord rec = getService().encryptRecord(key, "1", Long.toString(userId));
             if (rec == null) {
                 continue;
@@ -62,9 +64,19 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
             EncryptedValue u = rec.userId();
             getCollector().emit(new Values(k, c, u));
         }
-        try {
-            Thread.sleep(100);
-        } catch (InterruptedException ignored) {
+
+        // Log statistics periodically (every 100 batches)
+        if (totalRecordsEmitted.get() % (BATCH_SIZE * 100) == 0) {
+            logStatistics();
+        }
+
+        // Small delay between batches to avoid overwhelming the system
+        if (SLEEP_MS > 0) {
+            try {
+                Thread.sleep(SLEEP_MS);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

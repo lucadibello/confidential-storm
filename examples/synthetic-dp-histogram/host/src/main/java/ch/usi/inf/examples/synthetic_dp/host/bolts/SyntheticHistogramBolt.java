@@ -37,16 +37,30 @@ public class SyntheticHistogramBolt extends ConfidentialBolt<SyntheticHistogramS
     protected void processTuple(Tuple input, SyntheticHistogramService service) throws EnclaveServiceException {
         // if tick tuple (processing-time) produce snapshot and write report
         if (isTick(input)) {
-            LOG.debug("Processing tick tuple - producing snapshot");
+            tickCount++;
+            LOG.info("Processing tick #{} - producing DP snapshot", tickCount);
+
+            // ask enclave to produce snapshot + write report
             SyntheticSnapshotResponse resp = service.snapshot();
-            writeReport(resp.counts(), GroundTruthCollector.snapshot());
+
+            // log response and ground truth
+            LOG.info("Received DP snapshot with {} keys", resp.counts().size());
+
+            Map<String, Long> groundTruth = GroundTruthCollector.snapshot();
+            writeReport(resp.counts(), groundTruth);
+
+            LOG.info("Tick #{}: Processed {} total tuples, DP keys={}, GT keys={}",
+                    tickCount, totalTuples, resp.counts().size(), groundTruth.size());
+
             // acknowledge tuple
             getCollector().ack(input);
             return;
         }
 
         // if data tuple (event-time) process update
-        LOG.debug("Processing data tuple - updating histogram");
+        totalTuples++;
+        LOG.trace("Processing data tuple #{} - updating histogram", totalTuples);
+
         EncryptedValue key = (EncryptedValue) input.getValueByField("key");
         EncryptedValue count = (EncryptedValue) input.getValueByField("count");
         EncryptedValue user = (EncryptedValue) input.getValueByField("user");
@@ -63,17 +77,27 @@ public class SyntheticHistogramBolt extends ConfidentialBolt<SyntheticHistogramS
     }
 
     private void writeReport(Map<String, Long> dp, Map<String, Long> gt) {
+        LOG.debug("Computing metrics comparing DP histogram with ground truth");
+
+        // L0: Number of retained keys (keys with count > 0)
         long l0 = dp.values().stream().filter(v -> v > 0).count();
+
+        // Union of all keys from both histograms
         var union = new java.util.HashSet<String>();
         union.addAll(dp.keySet());
         union.addAll(gt.keySet());
 
+        // L_inf: Maximum absolute error
         long lInf = union.stream()
                 .mapToLong(k -> Math.abs(dp.getOrDefault(k, 0L) - gt.getOrDefault(k, 0L)))
                 .max().orElse(0L);
+
+        // L1: Sum of absolute errors
         long l1 = union.stream()
                 .mapToLong(k -> Math.abs(dp.getOrDefault(k, 0L) - gt.getOrDefault(k, 0L)))
                 .sum();
+
+        // L2: Euclidean distance (RMS error)
         double l2 = Math.sqrt(union.stream()
                 .mapToLong(k -> {
                     long diff = dp.getOrDefault(k, 0L) - gt.getOrDefault(k, 0L);

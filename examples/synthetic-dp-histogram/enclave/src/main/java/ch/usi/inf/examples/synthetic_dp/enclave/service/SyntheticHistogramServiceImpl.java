@@ -26,10 +26,13 @@ public final class SyntheticHistogramServiceImpl extends SyntheticHistogramServi
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(SyntheticHistogramServiceImpl.class);
 
     public SyntheticHistogramServiceImpl() {
-        log.info("Initializing SyntheticHistogramServiceImpl with DPConfig: {}", DPConfig.describe());
+        log.debug("Initializing SyntheticHistogramServiceImpl with DPConfig: {}", DPConfig.describe());
+
+        // get privacy parameters for keys
         double rhoK = DPUtil.cdpRho(DPConfig.EPSILON_K, DPConfig.DELTA_K);
         double sigmaKey = DPUtil.calculateSigma(rhoK, DPConfig.MAX_TIME_STEPS, 1.0);
 
+        // get privacy parameters for histogram
         double rhoH = DPUtil.cdpRho(DPConfig.EPSILON_H, DPConfig.DELTA_H);
         double sigmaHist = DPUtil.calculateSigma(rhoH, DPConfig.MAX_TIME_STEPS, DPConfig.l1Sensitivity());
 
@@ -58,8 +61,11 @@ public final class SyntheticHistogramServiceImpl extends SyntheticHistogramServi
 
     @Override
     public SyntheticSnapshotResponse snapshot() {
+        log.debug("[ENCLAVE] snapshot() called - entering StreamingDPMechanism.snapshot()");
         Map<String, Long> snap = mechanism.snapshot();
-        log.info("Emitted DP snapshot with {} keys", snap.size());
+        log.debug("[ENCLAVE] snapshot() completed - returning {} keys", snap.size());
+
+        // return response
         return new SyntheticSnapshotResponse(snap);
     }
 

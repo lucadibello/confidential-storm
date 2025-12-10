@@ -28,4 +28,16 @@ public final class DPConfig {
     public static double l1Sensitivity() {
         return MAX_CONTRIBUTIONS_PER_USER * PER_RECORD_CLAMP;
     }
+
+
+    public static String describe() {
+        return "DPConfig{" +
+                "EPSILON=" + EPSILON +
+                ", DELTA=" + DELTA +
+                ", MAX_CONTRIBUTIONS_PER_USER=" + MAX_CONTRIBUTIONS_PER_USER +
+                ", PER_RECORD_CLAMP=" + PER_RECORD_CLAMP +
+                ", MU=" + MU +
+                ", MAX_TIME_STEPS=" + MAX_TIME_STEPS +
+                '}';
+    }
 }

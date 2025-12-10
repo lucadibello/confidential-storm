@@ -21,7 +21,13 @@ public class SyntheticTopology {
 
         Config conf = new Config();
         conf.setDebug(false);
-        conf.put("confidentialstorm.enclave.proxy.enable", "true");
+
+        // Enclave proxy to detect enclave-side errors (disabled for max performance)
+        conf.put("confidentialstorm.enclave.proxy.enable", "false");
+
+        // start local cluster
+        LOG.info("Starting topology for {} seconds...", RUNTIME_SECONDS);
+        long startTime = System.currentTimeMillis();
         try (LocalCluster cluster = new LocalCluster()) {
             StormTopology topo = builder.createTopology();
             cluster.submitTopology("SyntheticDP", conf, topo);
