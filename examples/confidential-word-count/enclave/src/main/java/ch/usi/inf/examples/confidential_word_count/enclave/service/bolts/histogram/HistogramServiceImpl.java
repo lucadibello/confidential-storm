@@ -34,7 +34,8 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
                 sigmaKey,
                 sigmaHist,
                 DPConfig.MAX_TIME_STEPS,
-                DPConfig.MU
+                DPConfig.MU,
+                DPConfig.MAX_CONTRIBUTIONS_PER_USER
         );
     }
 
