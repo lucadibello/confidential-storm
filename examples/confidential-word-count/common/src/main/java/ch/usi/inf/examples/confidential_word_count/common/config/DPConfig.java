@@ -13,7 +13,7 @@ public final class DPConfig {
     /**
      * Privacy budget for the (epsilon, delta)-DP guarantee.
      */
-    public static final double EPSILON = 4.0;
+    public static final double EPSILON = 8.0;
 
     /**
      * Failure probability (delta) for the (epsilon, delta)-DP guarantee.
@@ -28,21 +28,25 @@ public final class DPConfig {
 
     /**
      * The minimum number of unique user contributions required for releasing a key in the histogram.
+     * <p>
+     * NOTE: higher mu = fewer keys selected, but higher quality (fewer 0 counts).
      */
-    public static final long MU = 5L;
+    public static final long MU = Long.getLong("dp.mu", 15L);
 
     /**
      * The maximum number of time steps to consider for the data stream.
      * <p>
-     * NOTE: * this example runs for 120 seconds, and we trigger a release every 5 seconds:
-     *  120 / 5 = 24 time steps.
+     * NOTE: This example runs for 120 seconds with releases every 5 seconds = 24 time steps.
+     * However, using fewer time steps (10-12) reduces noise accumulation and improves utility.
+     * <p>
+     * NOTE: lower maxTimeSteps = less noise, faster prediction, better histogram quality.
      */
-    public static final int MAX_TIME_STEPS = 24;
+    public static final int MAX_TIME_STEPS = Integer.getInteger("dp.max.time.steps", 12);
 
     /**
      * The maximum number of contributions a single user can make across all time steps.
      */
-    public static final long MAX_CONTRIBUTIONS_PER_USER = 25L;
+    public static final long MAX_CONTRIBUTIONS_PER_USER = 100L;
 
     /**
      * The maximum absolute value for each individual record contribution.
@@ -62,5 +66,21 @@ public final class DPConfig {
      */
     public static double l1Sensitivity() {
         return MAX_CONTRIBUTIONS_PER_USER * PER_RECORD_CLAMP;
+    }
+
+    /**
+     * Returns a string description of the DP configuration for logging.
+     */
+    public static String describe() {
+        return "DPConfig{" +
+                "EPSILON=" + EPSILON +
+                ", DELTA=" + DELTA +
+                ", MU=" + MU +
+                ", MAX_TIME_STEPS=" + MAX_TIME_STEPS +
+                ", MAX_CONTRIBUTIONS_PER_USER=" + MAX_CONTRIBUTIONS_PER_USER +
+                ", PER_RECORD_CLAMP=" + PER_RECORD_CLAMP +
+                ", L1_SENSITIVITY=" + l1Sensitivity() +
+                ", USER_LEVEL_PRIVACY=" + ENABLE_USER_LEVEL_PRIVACY +
+                '}';
     }
 }
