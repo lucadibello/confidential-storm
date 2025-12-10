@@ -83,7 +83,6 @@ def main(dataset_path: str, output_path: str):
         header = {
             "source": SOURCE_NAME,
             "destination": DESTINATION_NAME,
-            "user_id": entry["user_id"],
         }
 
         # serialize header as JSON
