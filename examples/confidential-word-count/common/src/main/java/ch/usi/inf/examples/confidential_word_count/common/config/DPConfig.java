@@ -46,6 +46,7 @@ public final class DPConfig {
 
     /**
      * The maximum absolute value for each individual record contribution.
+     * NOTE: we set L=1 since the aggregation function is COUNT.
      */
     public static final double PER_RECORD_CLAMP = 1.0;
 

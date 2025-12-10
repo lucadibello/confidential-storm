@@ -38,8 +38,6 @@ public final class DPConfig {
      */
     public static final int MAX_TIME_STEPS = Integer.getInteger("dp.max.time.steps", 100);
 
-    // Contribution bounding (C, L_m)
-
     /**
      * The maximum number of contributions a single user can make across all time steps.
      */
@@ -47,6 +45,7 @@ public final class DPConfig {
 
     /**
      * The maximum absolute value for each individual record contribution.
+     * NOTE: we set L=1 since the aggregation function is COUNT.
      */
     public static final double PER_RECORD_CLAMP = 1.0;
 
