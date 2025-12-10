@@ -11,7 +11,7 @@ import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
  * This class implements Differentially Private Stream Aggregation mechanism (DP-SQLP) from the paper:
  * "Differentially Private Stream Processing at Scale".
  * <p>
- * This class encapsulates:
+ * This DP mechanism includes the following components as described in the paper:
  * 1. Streaming Key Selection (Algorithm 1): Identifying keys with sufficient unique user contributions.
  * 2. Hierarchical Perturbation (Algorithm 2): Releasing noisy aggregate counts for selected keys.
  * 3. Empty Key Release Prediction (Algorithm 3): Predicting when keys might be released due to noise.
@@ -195,19 +195,21 @@ public class StreamingDPMechanism {
 
         // 1. Identify all keys that need processing in this step
         // a) Unique set of keys in this stream window D_tr_i (Step 4 of Algo 1)
-        // b) Keys predicted to be released at this specific timeStep (Case 2 of Algo 3)
+        // b) Keys predicted to be released at this specific timeStep (Algo 3 Case 2)
 
-        // Case a
+        // Step 1 of Algo 3 - DeltaD_tr_j = D_tr_j − D_tr_(j-1) (data in current micro-batch)
+        // NOTE: currentWindowCounts represents DeltaD_tr_j (keys with contributions this window)
         Set<String> s_i = new HashSet<>(currentWindowCounts.keySet());
         log.info("[DP-MECHANISM] Keys with contributions this window: {}", s_i.size());
 
-        // Case b
+        // Algo 3 Case 2 - Load keys with predicted release time = current time step
+        // "DP-SQLP loaded system states for key k at predicted time tr_p"
         Iterator<Map.Entry<String, Integer>> predictionIt = predictedReleaseTimes.entrySet().iterator();
         while (predictionIt.hasNext()) {
             Map.Entry<String, Integer> entry = predictionIt.next();
             if (entry.getValue() == timeStep) {
                 s_i.add(entry.getKey());
-                predictionIt.remove();  // remove prediction as we are processing it now
+                predictionIt.remove(); // remove prediction as we are processing it now
             }
         }
 
@@ -229,12 +231,14 @@ public class StreamingDPMechanism {
             unreleasedHistogramBuffer.merge(key, countInput, Double::sum);
 
             // --- Key Selection Logic (Algo 1 & 3) ---
-            
-            // Check if key is predicted to be released in the future, but we process it now instead
+
+            // Algo 3 Case 1 - Key appears before predicted time (j < n < p)
+            // "The prior prediction result is discarded"
             if (predictedReleaseTimes.containsKey(key)) {
                 int predictedTime = predictedReleaseTimes.get(key);
                 if (predictedTime > timeStep) {
-                    predictedReleaseTimes.remove(key); // remove wrong prediction
+                    // Key appeared before prediction - discard stale prediction
+                    predictedReleaseTimes.remove(key);
                 }
             }
 
@@ -302,7 +306,10 @@ public class StreamingDPMechanism {
             } else {
                 // NOT SELECTED
 
-                // Predict if this key will be selected in future time steps (Algo 3)
+                // Step 2-3 of Algo 3 - For keys in S_tr_j not selected, run prediction
+                // NOTE: S_tr_j = All key \in DeltaD_tr_j not selected via Algorithm 1
+
+                // Predict if this key will be selected in future time steps due to noise
                 runEmptyKeyPrediction(key, t_key);
             }
 
