@@ -65,7 +65,7 @@ public class ZipfMandelbrotDistribution {
     /**
      * Computes the cumulative distribution function (CDF) for the Zipf-Mandelbrot distribution.
      */
-    private double[] cumulativeProbabilities() {
+    private double[] computeCumulativeProbabilities() {
         double[] cdf = new double[N];
         double H_k_q_s = 0.0; // compute H_{k,q,s} incrementally for normalization
 
@@ -90,7 +90,7 @@ public class ZipfMandelbrotDistribution {
     public int sample() {
         // Lazy initialization of cumulative probabilities
         if (cumulativeProbabilities == null) {
-            cumulativeProbabilities = cumulativeProbabilities();
+            cumulativeProbabilities = computeCumulativeProbabilities();
         }
 
         // Generate a uniform random number in [0, 1)
