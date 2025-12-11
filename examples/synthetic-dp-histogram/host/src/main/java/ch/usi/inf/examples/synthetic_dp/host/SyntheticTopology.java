@@ -1,8 +1,11 @@
 package ch.usi.inf.examples.synthetic_dp.host;
 
 import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
+import ch.usi.inf.examples.synthetic_dp.common.config.DPConfig;
 import ch.usi.inf.examples.synthetic_dp.host.bolts.SyntheticHistogramBolt;
 import ch.usi.inf.examples.synthetic_dp.host.spouts.SyntheticSpout;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.storm.Config;
 import org.apache.storm.LocalCluster;
 import org.apache.storm.generated.StormTopology;
@@ -27,21 +30,54 @@ import org.slf4j.LoggerFactory;
 public class SyntheticTopology {
     private static final Logger LOG = LoggerFactory.getLogger(SyntheticTopology.class);
 
-    // Runtime configuration
-    private static final int RUNTIME_SECONDS = Integer.getInteger("synthetic.runtime.seconds", 120);
-    private static final int RUN_ID = Integer.getInteger("synthetic.run.id", 1);
-
     public static void main(String[] args) throws Exception {
+        // Parse command line arguments to override system properties
+        Map<String, String> cliArgs = new HashMap<>();
+        for (int i = 0; i < args.length; i++) {
+            if (args[i].startsWith("--") && i + 1 < args.length) {
+                String key = args[i].substring(2);
+                String value = args[i + 1];
+                cliArgs.put(key, value);
+                i++; // skip value
+            }
+        }
+
+        int numUsers = cliArgs.containsKey("num-users") ? Integer.parseInt(cliArgs.get("num-users")) : Integer.getInteger("synthetic.num.users", 10_000_000);
+        int numKeys = cliArgs.containsKey("num-keys") ? Integer.parseInt(cliArgs.get("num-keys")) : Integer.getInteger("synthetic.num.keys", 1_000_000);
+        int batchSize = cliArgs.containsKey("batch-size") ? Integer.parseInt(cliArgs.get("batch-size")) : Integer.getInteger("synthetic.batch.size", 20_000);
+        long sleepMs = cliArgs.containsKey("sleep-ms") ? Long.parseLong(cliArgs.get("sleep-ms")) : Long.getLong("synthetic.sleep.ms", 100L);
+        long seed = cliArgs.containsKey("seed") ? Long.parseLong(cliArgs.get("seed")) : Long.getLong("synthetic.seed", 42L);
+        // Also support run-id and runtime from args / system properties
+        int runId = cliArgs.containsKey("run-id") ? Integer.parseInt(cliArgs.get("run-id")) : Integer.getInteger("synthetic.run.id", 1);
+        int runtimeSeconds = cliArgs.containsKey("runtime-seconds")
+                ? Integer.parseInt(cliArgs.get("runtime-seconds"))
+                : Integer.getInteger("synthetic.runtime.seconds", 120);
+
         LOG.info("=== Synthetic DP Histogram Topology ===");
-        LOG.info("Run ID: {}", RUN_ID);
-        LOG.info("Runtime: {} seconds ({} minutes)", RUNTIME_SECONDS, RUNTIME_SECONDS / 60.0);
-        LOG.info("DP Config: {}", ch.usi.inf.examples.synthetic_dp.common.config.DPConfig.describe());
+        LOG.info("Run ID: {}", runId);
+        LOG.info("Runtime: {} seconds ({} minutes)", runtimeSeconds, runtimeSeconds / 60.0);
+        LOG.info("DP Config: {}", DPConfig.describe());
         LOG.info("=======================================");
 
         // build topology: spout -> histogram bolt
         TopologyBuilder builder = new TopologyBuilder();
+        // Tick frequency chosen so that roughly `maxTimeSteps` ticks occur during runtime.
+        int maxTimeSteps = Integer.getInteger("dp.max.time.steps", 100);
+        int tickSeconds = Integer.getInteger(
+                "synthetic.tick.seconds",
+                Math.max(1, (int) Math.ceil(runtimeSeconds / (double) maxTimeSteps))
+        );
+
+        // Ensure runtime covers all expected ticks; pad if needed.
+        int minRuntime = tickSeconds * maxTimeSteps + 1;
+        if (runtimeSeconds < minRuntime) {
+            LOG.warn("runtimeSeconds={} too short for maxTimeSteps={} at tickSeconds={}; extending to {} seconds",
+                    runtimeSeconds, maxTimeSteps, tickSeconds, minRuntime);
+            runtimeSeconds = minRuntime;
+        }
+
         builder.setSpout(ComponentConstants.SPOUT.toString(), new SyntheticSpout(), 1);
-        builder.setBolt(ComponentConstants.HISTOGRAM_GLOBAL.toString(), new SyntheticHistogramBolt(), 1)
+        builder.setBolt(ComponentConstants.HISTOGRAM_GLOBAL.toString(), new SyntheticHistogramBolt(tickSeconds), 1)
                 .globalGrouping(ComponentConstants.SPOUT.toString());
 
         // configure topology
@@ -51,18 +87,34 @@ public class SyntheticTopology {
         // Enclave proxy to detect enclave-side errors (disabled for max performance)
         conf.put("confidentialstorm.enclave.proxy.enable", "false");
 
+        // Pass synthetic configuration to topology config
+        conf.put("synthetic.sleep.ms", sleepMs);
+        conf.put("synthetic.seed", seed);
+        conf.put("synthetic.runtime.seconds", runtimeSeconds);
+        conf.put("synthetic.tick.seconds", tickSeconds);
+        // Also pass run-id for the Bolt to use
+        conf.put("synthetic.run.id", runId); 
+
+        // Pass DP configuration
+        long mu = Long.getLong("dp.mu", 50L);
+        conf.put("dp.max.time.steps", maxTimeSteps);
+        conf.put("dp.mu", mu);
+
+        LOG.info("Topology Config: numUsers={}, numKeys={}, batchSize={}, sleepMs={}, seed={}, maxTimeSteps={}, tickSeconds={}, mu={}",
+                numUsers, numKeys, batchSize, sleepMs, seed, maxTimeSteps, tickSeconds, mu);
+
         // start local cluster
-        LOG.info("Starting topology for {} seconds...", RUNTIME_SECONDS);
+        LOG.info("Starting topology for {} seconds...", runtimeSeconds);
         long startTime = System.currentTimeMillis();
         try (LocalCluster cluster = new LocalCluster()) {
             StormTopology topo = builder.createTopology();
-            cluster.submitTopology("SyntheticDP" + RUN_ID, conf, topo);
-            Thread.sleep(RUNTIME_SECONDS * 1000L); // run for specified time
-            cluster.killTopology("SyntheticDP" + RUN_ID);
+            cluster.submitTopology("SyntheticDP" + runId, conf, topo);
+            Thread.sleep(runtimeSeconds * 1000L); // run for specified time
+            cluster.killTopology("SyntheticDP" + runId);
         }
 
         long elapsed = (System.currentTimeMillis() - startTime) / 1000;
         LOG.info("Topology completed after {} seconds", elapsed);
-        LOG.info("Results written to: data/synthetic-report-run{}.txt", RUN_ID);
+        LOG.info("Results written to: data/synthetic-report-run{}.txt", runId);
     }
 }

@@ -25,17 +25,33 @@ public class SyntheticHistogramBolt extends ConfidentialBolt<SyntheticHistogramS
     private static final String OUTPUT_DIR = System.getProperty("synthetic.output.dir", "data");
     private static final int RUN_ID = Integer.getInteger("synthetic.run.id", 1);
 
+    private final int tickSeconds;
     private final String outputFile;
     private int tickCount = 0;
     private long totalTuples = 0;
 
-    public SyntheticHistogramBolt() {
+    public SyntheticHistogramBolt(int tickSeconds) {
         super(SyntheticHistogramService.class);
+        this.tickSeconds = tickSeconds;
         this.outputFile = String.format("%s/synthetic-report-run%d.txt", OUTPUT_DIR, RUN_ID);
     }
 
     public Map<String, Object> getComponentConfiguration() {
-        return Map.of(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, 2);
+        return Map.of(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, tickSeconds);
+    }
+
+    @Override
+    protected void afterPrepare(Map<String, Object> topoConf, org.apache.storm.task.TopologyContext context) {
+        int maxTimeSteps = ((Number) topoConf.getOrDefault("dp.max.time.steps", 100)).intValue();
+        long mu = ((Number) topoConf.getOrDefault("dp.mu", 50L)).longValue();
+        
+        LOG.info("Configuring enclave service with maxTimeSteps={}, mu={}", maxTimeSteps, mu);
+        try {
+            state.getEnclaveManager().getService().configure(maxTimeSteps, mu);
+        } catch (EnclaveServiceException e) {
+            LOG.error("Failed to configure enclave service", e);
+            throw new RuntimeException("Failed to configure enclave service", e);
+        }
     }
 
     @Override

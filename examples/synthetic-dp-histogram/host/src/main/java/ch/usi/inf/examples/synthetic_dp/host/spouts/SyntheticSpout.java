@@ -30,31 +30,11 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
     private static final Logger LOG = LoggerFactory.getLogger(SyntheticSpout.class);
 
     // Paper specifications (Section 5.1)
-
-    /**
-     * Number of unique users. Default: 10 million (paper specification).
-     */
-    private static final int NUM_USERS = Integer.getInteger("synthetic.num.users", 10_000_000);
-
-    /**
-     * Number of distinct keys. Default: 1 million (paper specification).
-     */
-    private static final int NUM_KEYS = Integer.getInteger("synthetic.num.keys", 1_000_000);
-
-    /**
-     * The number of records to emit in each batch. Default: 20000.
-     */
-    private static final int BATCH_SIZE = Integer.getInteger("synthetic.batch.size", 20_000);
-
-    /**
-     * Sleep time (in milliseconds) between batches to avoid overwhelming the system. Default: 100 ms.
-     */
-    private static final long SLEEP_MS = Long.getLong("synthetic.sleep.ms", 100L);
-
-    /**
-     * Random seed for reproducibility. Default: 42.
-     */
-    private static final long RANDOM_SEED = Long.getLong("synthetic.seed", 42L);
+    private int numUsers;
+    private int numKeys;
+    private int batchSize;
+    private long sleepMs;
+    private long randomSeed;
 
     /**
      * The Zipf-Mandelbrot distribution for key selection and user record contribution counts.
@@ -92,23 +72,33 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
 
     @Override
     protected void afterOpen(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector) {
-        this.rng = new Random(RANDOM_SEED);
+        // Initialize configuration from topology config (safely handling types)
+        this.numUsers = ((Number) conf.getOrDefault("synthetic.num.users", 10_000_000)).intValue();
+        this.numKeys = ((Number) conf.getOrDefault("synthetic.num.keys", 1_000_000)).intValue();
+        this.batchSize = ((Number) conf.getOrDefault("synthetic.batch.size", 20_000)).intValue();
+        this.sleepMs = ((Number) conf.getOrDefault("synthetic.sleep.ms", 100L)).longValue();
+        this.randomSeed = ((Number) conf.getOrDefault("synthetic.seed", 42L)).longValue();
+
+        LOG.info("SyntheticSpout initialized with: numUsers={}, numKeys={}, batchSize={}, sleepMs={}, seed={}",
+                numUsers, numKeys, batchSize, sleepMs, randomSeed);
+
+        this.rng = new Random(randomSeed);
 
         // create distributions based on paper specifications (Section 5.1)
 
         // Key distribution: zipf-mandelbrot with N=10^6, q=1000, s=1.4
-        this.keyDistribution = new ZipfMandelbrotDistribution(NUM_KEYS, 1000, 1.4, rng);
+        this.keyDistribution = new ZipfMandelbrotDistribution(numKeys, 1000, 1.4, rng);
         // User record contribution count distribution: zipf-mandelbrot with N=10^5, q=26, s=6.738
         this.userRecordDistribution = new ZipfMandelbrotDistribution(100_000, 26, 6.738, rng);
     }
 
     @Override
     protected void executeNextTuple() throws EnclaveServiceException {
-        LOG.debug("Emitting batch of {} records", BATCH_SIZE);
+        LOG.debug("Emitting batch of {} records", batchSize);
 
-        for (int i = 0; i < BATCH_SIZE; i++) {
+        for (int i = 0; i < batchSize; i++) {
             // Select random user
-            long userId = rng.nextInt(NUM_USERS);
+            long userId = rng.nextInt(numUsers);
 
             // Determine target record count for this user (if not already set)
             int targetRecords = userTargetRecords.computeIfAbsent(userId,
@@ -155,14 +145,14 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
         }
 
         // Log statistics periodically (every 100 batches)
-        if (totalRecordsEmitted.get() % (BATCH_SIZE * 100L) == 0) {
+        if (totalRecordsEmitted.get() % (batchSize * 100L) == 0) {
             logStatistics();
         }
 
         // Small delay between batches to avoid overwhelming the system
-        if (SLEEP_MS > 0) {
+        if (sleepMs > 0) {
             try {
-                Thread.sleep(SLEEP_MS);
+                Thread.sleep(sleepMs);
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             }
