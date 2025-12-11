@@ -45,7 +45,8 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
                 sigmaHist,
                 DPConfig.MAX_TIME_STEPS,
                 DPConfig.MU,
-                DPConfig.MAX_CONTRIBUTIONS_PER_USER
+                DPConfig.MAX_CONTRIBUTIONS_PER_USER,
+                DPConfig.PER_RECORD_CLAMP
         );
     }
 
@@ -83,7 +84,10 @@ public final class HistogramServiceImpl extends HistogramServiceVerifier {
 
         // Handle aggregated counts by treating them as multiple unit contributions (ensure contribution bounding is applied)
         for (int i = 0; i < count; i++) {
-            mechanism.addContribution(word, 1.0, userId); // record unit contribution
+            // record unit contribution
+            if (!mechanism.addContribution(word, 1.0, userId)) {
+                log.warn("Contribution for word '{}' from user '{}' was not added (contribution bounding has been exceeded)", word, userId);
+            }
         }
 
         // return acknowledgment to indicate successful processing

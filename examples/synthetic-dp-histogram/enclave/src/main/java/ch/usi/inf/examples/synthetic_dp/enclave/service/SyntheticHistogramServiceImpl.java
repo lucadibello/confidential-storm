@@ -18,43 +18,51 @@ import java.util.Map;
 public final class SyntheticHistogramServiceImpl extends SyntheticHistogramServiceVerifier
         implements SyntheticHistogramService {
 
-    private final StreamingDPMechanism mechanism;
-    private final ContributionLimiter limiter = new ContributionLimiter();
+    private StreamingDPMechanism mechanism;
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(SyntheticHistogramServiceImpl.class);
 
     public SyntheticHistogramServiceImpl() {
-        log.debug("Initializing SyntheticHistogramServiceImpl with DPConfig: {}", DPConfig.describe());
+        log.debug("Initializing SyntheticHistogramServiceImpl with default DPConfig: {}", DPConfig.describe());
+        // Initialize with defaults from DPConfig (these might be overridden by configure)
+        initMechanism(DPConfig.MAX_TIME_STEPS, DPConfig.MU);
+    }
 
+    @Override
+    public void configure(int maxTimeSteps, long mu) {
+        log.info("Configuring SyntheticHistogramServiceImpl: maxTimeSteps={}, mu={}", maxTimeSteps, mu);
+        initMechanism(maxTimeSteps, mu);
+    }
+
+    private void initMechanism(int maxTimeSteps, long mu) {
         // get privacy parameters for keys
         double rhoK = DPUtil.cdpRho(DPConfig.EPSILON_K, DPConfig.DELTA_K);
-        double sigmaKey = DPUtil.calculateSigma(rhoK, DPConfig.MAX_TIME_STEPS, 1.0);
+        double sigmaKey = DPUtil.calculateSigma(rhoK, maxTimeSteps, 1.0);
 
         // get privacy parameters for histogram
         double rhoH = DPUtil.cdpRho(DPConfig.EPSILON_H, DPConfig.DELTA_H);
-        double sigmaHist = DPUtil.calculateSigma(rhoH, DPConfig.MAX_TIME_STEPS, DPConfig.l1Sensitivity());
+        double sigmaHist = DPUtil.calculateSigma(rhoH, maxTimeSteps, DPConfig.l1Sensitivity());
 
+        // initialize DP mechanism
         this.mechanism = new StreamingDPMechanism(
                 sigmaKey,
                 sigmaHist,
-                DPConfig.MAX_TIME_STEPS,
-                DPConfig.MU,
-                DPConfig.MAX_CONTRIBUTIONS_PER_USER
+                maxTimeSteps,
+                mu,
+                DPConfig.MAX_CONTRIBUTIONS_PER_USER,
+                DPConfig.PER_RECORD_CLAMP
         );
     }
 
     @Override
     public void updateImpl(SyntheticUpdateRequest request) throws SealedPayloadProcessingException, CipherInitializationException {
         String key = sealedPayload.decryptToString(request.key());
-        double raw = Double.parseDouble(sealedPayload.decryptToString(request.count()));
+        double count = Double.parseDouble(sealedPayload.decryptToString(request.count()));
         String userId = sealedPayload.decryptToString(request.userId());
 
-        double clamped = Math.max(-DPConfig.PER_RECORD_CLAMP, Math.min(raw, DPConfig.PER_RECORD_CLAMP));
-        if (!limiter.allow(userId, DPConfig.MAX_CONTRIBUTIONS_PER_USER)) {
-            log.info("Dropping contribution for user {} due to bounding", userId);
-            return;
+        // record contribution to DP mechanism
+        if (!mechanism.addContribution(key, count, userId)) {
+            log.warn("Contribution from user '{}' for key '{}' was not added (contribution bounding has been exceeded)", userId, key);
         }
-        log.debug("Adding contribution key={}, user={}, value={}", key, userId, clamped);
-        mechanism.addContribution(key, clamped, userId);
     }
 
     @Override
