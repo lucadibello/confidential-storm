@@ -12,6 +12,9 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.Instant;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Map;
 import org.apache.storm.Config;
 import org.apache.storm.Constants;
@@ -30,6 +33,11 @@ public class SyntheticHistogramBolt extends ConfidentialBolt<SyntheticHistogramS
     private int tickCount = 0;
     private long totalTuples = 0;
 
+    // Async snapshot handling to avoid blocking the bolt on ticks (initialized in afterPrepare)
+    private transient ExecutorService snapshotExecutor;
+    private final AtomicBoolean snapshotRunning = new AtomicBoolean(false);
+    private final AtomicBoolean pendingTick = new AtomicBoolean(false);
+
     public SyntheticHistogramBolt(int tickSeconds) {
         super(SyntheticHistogramService.class);
         this.tickSeconds = tickSeconds;
@@ -42,6 +50,8 @@ public class SyntheticHistogramBolt extends ConfidentialBolt<SyntheticHistogramS
 
     @Override
     protected void afterPrepare(Map<String, Object> topoConf, org.apache.storm.task.TopologyContext context) {
+        this.snapshotExecutor = Executors.newSingleThreadExecutor();
+
         int maxTimeSteps = ((Number) topoConf.getOrDefault("dp.max.time.steps", 100)).intValue();
         long mu = ((Number) topoConf.getOrDefault("dp.mu", 50L)).longValue();
         
@@ -58,23 +68,58 @@ public class SyntheticHistogramBolt extends ConfidentialBolt<SyntheticHistogramS
     protected void processTuple(Tuple input, SyntheticHistogramService service) throws EnclaveServiceException {
         // if tick tuple (processing-time) produce snapshot and write report
         if (isTick(input)) {
-            tickCount++;
-            LOG.info("Processing tick #{} - producing DP snapshot", tickCount);
+            // If a snapshot is already running, coalesce this tick and ack immediately.
+            if (!snapshotRunning.compareAndSet(false, true)) {
+                pendingTick.set(true);
+                getCollector().ack(input);
+                return;
+            }
 
-            // ask enclave to produce snapshot + write report
-            SyntheticSnapshotResponse resp = service.snapshot();
+            // Run snapshot asynchronously to avoid blocking the bolt's execute thread
+            snapshotExecutor.submit(() -> {
+                try {
+                    tickCount++;
+                    LOG.info("Processing tick #{} - producing DP snapshot", tickCount);
 
-            // log response and ground truth
-            LOG.info("Received DP snapshot with {} keys", resp.counts().size());
+                    SyntheticSnapshotResponse resp = service.snapshot();
+                    LOG.info("Received DP snapshot with {} keys", resp.counts().size());
 
-            Map<String, Long> groundTruth = GroundTruthCollector.snapshot();
-            writeReport(resp.counts(), groundTruth);
+                    Map<String, Long> groundTruth = GroundTruthCollector.snapshot();
+                    writeReport(resp.counts(), groundTruth);
 
-            LOG.info("Tick #{}: Processed {} total tuples, DP keys={}, GT keys={}",
-                    tickCount, totalTuples, resp.counts().size(), groundTruth.size());
+                    LOG.info("Tick #{}: Processed {} total tuples, DP keys={}, GT keys={}",
+                            tickCount, totalTuples, resp.counts().size(), groundTruth.size());
+                } catch (Exception e) {
+                    LOG.error("Error during asynchronous snapshot", e);
+                } finally {
+                    // Ack the original tick tuple
+                    getCollector().ack(input);
+                    snapshotRunning.set(false);
 
-            // acknowledge tuple
-            getCollector().ack(input);
+                    // If ticks arrived while running, trigger one more snapshot run
+                    if (pendingTick.compareAndSet(true, false)) {
+                        try {
+                            // Submit a follow-up snapshot task (no tuple to ack here)
+                            snapshotExecutor.submit(() -> {
+                                try {
+                                    tickCount++;
+                                    LOG.info("Processing coalesced tick #{} - producing DP snapshot", tickCount);
+                                    SyntheticSnapshotResponse resp = service.snapshot();
+                                    LOG.info("Received DP snapshot with {} keys", resp.counts().size());
+                                    Map<String, Long> groundTruth = GroundTruthCollector.snapshot();
+                                    writeReport(resp.counts(), groundTruth);
+                                    LOG.info("Tick #{}: Processed {} total tuples, DP keys={}, GT keys={}",
+                                            tickCount, totalTuples, resp.counts().size(), groundTruth.size());
+                                } catch (Exception ex) {
+                                    LOG.error("Error during coalesced snapshot", ex);
+                                }
+                            });
+                        } catch (Exception ex) {
+                            LOG.error("Failed to submit coalesced snapshot task", ex);
+                        }
+                    }
+                }
+            });
             return;
         }
 
@@ -144,8 +189,8 @@ public class SyntheticHistogramBolt extends ConfidentialBolt<SyntheticHistogramS
                     tickCount, Instant.now(), l0, lInf, l1, l2, dp.size(), gt.size());
             out.flush();
 
-            LOG.info("Tick {} metrics: l0={}, l_inf={}, l_1={}, l_2={:.2f}",
-                    tickCount, l0, lInf, l1, l2);
+            LOG.info("Tick {} metrics: l0={}, l_inf={}, l_1={}, l_2={}",
+                    tickCount, l0, lInf, l1, String.format("%.2f", l2));
         } catch (IOException e) {
             LOG.error("Error writing report to {}", outputFile, e);
         }

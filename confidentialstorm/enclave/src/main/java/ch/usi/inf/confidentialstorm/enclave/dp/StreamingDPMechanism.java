@@ -220,7 +220,7 @@ public class StreamingDPMechanism {
         // Step 1 of Algo 3 - DeltaD_tr_j = D_tr_j − D_tr_(j-1) (data in current micro-batch)
         // NOTE: currentWindowCounts represents DeltaD_tr_j (keys with contributions this window)
         Set<String> s_i = new HashSet<>(currentWindowCounts.keySet());
-        log.info("[DP-MECHANISM] Keys with contributions this window: {}", s_i.size());
+        log.info("[DP-MECHANISM] Keys with new contributions this window (DeltaD_tr_i): {}", s_i.size());
 
         // Algo 3 Case 2 - Load keys with predicted release time = current time step
         // "DP-SQLP loaded system states for key k at predicted time tr_p"
@@ -237,8 +237,8 @@ public class StreamingDPMechanism {
         log.warn("[DP-MECHANISM] Including previously selected keys: {}", selectedKeys.size());
         s_i.addAll(selectedKeys);
 
-        log.debug("[DP-MECHANISM] Keys with contributions this window: {}, predicted releases: {}, total selected keys: {}",
-                    currentWindowCounts.size(), predictedReleaseTimes.size(), selectedKeys.size());
+        log.debug("[DP-MECHANISM] Window keys={}, predicted releases queued={}, selected keys={}, total processed this step={}",
+                    currentWindowCounts.size(), predictedReleaseTimes.size(), selectedKeys.size(), s_i.size());
 
         // 2. Process each key
         for (String key : s_i) {

@@ -19,7 +19,7 @@ public final class SyntheticEnclaveConfigProvider implements EnclaveConfiguratio
 
     @Override
     public LogLevel getLogLevel() {
-        return LogLevel.DEBUG;
+        return LogLevel.INFO;
     }
 
     @Override

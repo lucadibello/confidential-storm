@@ -6,6 +6,7 @@ Implements the synthetic experiment from Section 5.1 of the paper with the full 
 - Privacy: `epsilon=6.0`, `delta=1e-9`, split 50/50 between key selection and histogram.
 - Bounding: `C=32`, `L_m=1`, `mu=50`.
 - Workload: Zipf key space 100k, 100k users, 20k records per tick, seed 42.
+- Micro-batches: `dp.max.time.steps` (100 or 1000). Tick frequency is auto-set so the runtime spans the requested number of micro-batches.
 
 ## Build & Run (local Storm)
 ```bash

@@ -88,6 +88,9 @@ public class SyntheticTopology {
         conf.put("confidentialstorm.enclave.proxy.enable", "false");
 
         // Pass synthetic configuration to topology config
+        conf.put("synthetic.num.users", numUsers);
+        conf.put("synthetic.num.keys", numKeys);
+        conf.put("synthetic.batch.size", batchSize);
         conf.put("synthetic.sleep.ms", sleepMs);
         conf.put("synthetic.seed", seed);
         conf.put("synthetic.runtime.seconds", runtimeSeconds);
