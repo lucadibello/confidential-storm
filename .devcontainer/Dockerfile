@@ -17,11 +17,11 @@ ARG GRAALVM_VERSION=22.2.0
 ARG GRAALVM_ARCH=amd64
 ARG OPENJDK_VERSION=17
 ARG NEOVIM_VERSION=0.11.4
-ARG NODE_VERSION=22.20.0
+ARG NODE_VERSION=22
 ARG NODE_ARCH=x64
-ARG STORM_VERSION=2.8.2
+ARG STORM_VERSION=2.8.3
 ARG APACHE_MIRROR=https://dlcdn.apache.org/storm
-ARG MAVEN_VERSION=3.9.11
+ARG MAVEN_VERSION=3.9.12
 
 ENV DEBIAN_FRONTEND=noninteractive \
   NVIM_LISTEN_ADDRESS=127.0.0.1:6666 \
@@ -102,11 +102,15 @@ RUN mkdir -p /var/run/sshd \
   && ssh-keygen -A \
   && sed -i 's/^#\?Port .*/Port 2222/' /etc/ssh/sshd_config \
   && sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
-  && sed -i 's/^#\?PubkeyAuthentication .*/PubkeyAuthentication no/' /etc/ssh/sshd_config \
+  && sed -i 's/^#\?PubkeyAuthentication .*/PubkeyAuthentication yes/' /etc/ssh/sshd_config \
   && sed -i 's/^#\?PermitRootLogin .*/PermitRootLogin no/' /etc/ssh/sshd_config \
   && sed -i 's/^#\?UsePAM .*/UsePAM yes/' /etc/ssh/sshd_config \
   && grep -qxF 'AllowTcpForwarding yes' /etc/ssh/sshd_config || echo 'AllowTcpForwarding yes' >> /etc/ssh/sshd_config \
-  && grep -qxF 'X11Forwarding yes' /etc/ssh/sshd_config || echo 'X11Forwarding yes' >> /etc/ssh/sshd_config
+  && grep -qxF 'X11Forwarding yes' /etc/ssh/sshd_config || echo 'X11Forwarding yes' >> /etc/ssh/sshd_config \
+  && mkdir -p "${REMOTE_HOME}/.ssh" \
+  && chmod 700 "${REMOTE_HOME}/.ssh" \
+  && touch "${REMOTE_HOME}/.ssh/authorized_keys" \
+  && chmod 600 "${REMOTE_HOME}/.ssh/authorized_keys"
 
 # Install ripgrep
 RUN curl -fsSL https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep_14.1.1-1_amd64.deb -o /tmp/ripgrep.deb \
@@ -118,6 +122,7 @@ RUN set -eux; \
   url="https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-${GRAALVM_VERSION}/graalvm-ce-java17-linux-${GRAALVM_ARCH}-${GRAALVM_VERSION}.tar.gz"; \
   curl -fsSL -o /tmp/graalvm.tgz "$url"; \
   tar -xzf /tmp/graalvm.tgz -C /root/tools; \
+  rm -f /tmp/graalvm.tgz; \
   /root/tools/graalvm-ce-java17-${GRAALVM_VERSION}/bin/gu install native-image; \
   ln -s /root/tools/graalvm-ce-java17-${GRAALVM_VERSION}/bin/native-image /usr/local/bin/native-image; \
   echo "GraalVM ${GRAALVM_VERSION} installed successfully."
@@ -141,23 +146,23 @@ RUN set -eux; \
 # lazygit (binary release)
 RUN set -eux; \
   LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | \grep -Po '"tag_name": *"v\K[^"]*'); \
-  curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz"; \
-  tar xf lazygit.tar.gz lazygit; \
-  install lazygit -D -t /usr/local/bin/; \
+  curl -Lo /tmp/lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz"; \
+  tar xf /tmp/lazygit.tar.gz -C /tmp lazygit; \
+  install /tmp/lazygit -D -t /usr/local/bin/; \
+  rm -f /tmp/lazygit.tar.gz /tmp/lazygit; \
   echo "LazyGit installed successfully."
 
-# Install Node.JS LST (useful for tools!)
+# Install Node.js LTS (useful for tools!)
 RUN set -eux; \
-  curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"; \
-  tar -xf "node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"; \
-  mv "node-v${NODE_VERSION}-linux-${NODE_ARCH}" /usr/local/node-v${NODE_VERSION}; \
-  ln -sf /usr/local/node-v${NODE_VERSION}/bin/node /usr/local/bin/node; \
-  ln -sf /usr/local/node-v${NODE_VERSION}/bin/npm /usr/local/bin/npm; \
-  ln -sf /usr/local/node-v${NODE_VERSION}/bin/npx /usr/local/bin/npx; \
-  echo "Verifying Node.js installation..."; \
-  node -v; npm -v; \
-  rm -rf /tmp/node-v${NODE_VERSION}-linux-${NODE_ARCH}*; \
-  echo "Node.js installed successfully."
+  NODE_FULL_VERSION=$(curl -fsSL "https://nodejs.org/dist/latest-v${NODE_VERSION}.x/SHASUMS256.txt" | grep -oP "node-v\K[0-9.]+" | head -1); \
+  curl -fsSL "https://nodejs.org/dist/v${NODE_FULL_VERSION}/node-v${NODE_FULL_VERSION}-linux-${NODE_ARCH}.tar.xz" -o /tmp/node.tar.xz; \
+  tar -xf /tmp/node.tar.xz -C /usr/local; \
+  mv /usr/local/node-v${NODE_FULL_VERSION}-linux-${NODE_ARCH} /usr/local/node; \
+  ln -sf /usr/local/node/bin/node /usr/local/bin/node; \
+  ln -sf /usr/local/node/bin/npm /usr/local/bin/npm; \
+  ln -sf /usr/local/node/bin/npx /usr/local/bin/npx; \
+  rm -f /tmp/node.tar.xz; \
+  echo "Node.js $(node -v) installed successfully."
 
 # Install Neovim 0.11 (nightly channel)
 RUN set -eux; \
@@ -171,11 +176,11 @@ RUN set -eux; \
 COPY .devcontainer/devcontainer-entrypoint.sh /usr/local/bin/devcontainer-entrypoint
 RUN chmod +x /usr/local/bin/devcontainer-entrypoint
 
-# Install apache storm cli
+# Install Apache Storm CLI
 RUN set -eux; \
   curl -fL "${APACHE_MIRROR}/apache-storm-${STORM_VERSION}/apache-storm-${STORM_VERSION}.tar.gz" -o /tmp/storm.tgz; \
-  tar -xzf /tmp/storm.tgz; \
-  rm -f storm.tgz; \
+  tar -xzf /tmp/storm.tgz -C /opt; \
+  rm -f /tmp/storm.tgz; \
   ln -s "/opt/apache-storm-${STORM_VERSION}" "${STORM_HOME}"; \
   ln -s "${STORM_HOME}/bin/storm" /usr/local/bin/storm
 
@@ -192,6 +197,9 @@ RUN TARGET_GROUP="$(cat /etc/devcontainer-group 2>/dev/null || echo "${REMOTE_GR
   && chown "${REMOTE_USER}:${TARGET_GROUP}" "${REMOTE_HOME}"/.cache
 
 EXPOSE 2222 6666
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD pgrep -x sshd >/dev/null && pgrep -f 'nvim --headless' >/dev/null || exit 1
 
 ENTRYPOINT ["/usr/local/bin/devcontainer-entrypoint"]
 CMD ["/usr/sbin/sshd", "-D", "-e"]

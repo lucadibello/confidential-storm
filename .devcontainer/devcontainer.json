@@ -1,42 +1,64 @@
 {
-  "name": "Teaclave+Storm devcontainer",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": "..",
-    "args": {
-      "REMOTE_USER": "dev",
-      "REMOTE_UID": "1010",
-      "REMOTE_GID": "1010",
-      "NODE_VERSION": "16.20.2",
-      "NEOVIM_VERSION": "0.11.4",
-      "STORM_VERSION": "2.8.3",
-      "GIT_EMAIL": "lucadibello@proton.me",
-      "GIT_NAME": "Luca Di Bello"
+    "name": "Teaclave+Storm devcontainer",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "..",
+        "args": {
+            "REMOTE_USER": "dev",
+            "REMOTE_UID": "1010",
+            "REMOTE_GID": "1010",
+            "NODE_VERSION": "22",
+            "NEOVIM_VERSION": "0.11.4",
+            "STORM_VERSION": "2.8.3",
+            "GIT_EMAIL": "lucadibello@proton.me",
+            "GIT_NAME": "Luca Di Bello"
+        }
+    },
+    "remoteUser": "dev",
+    "runArgs": [
+        "--name=confidential-storm-devcontainer",
+        "--privileged",
+        "--device=/dev/sgx_enclave:/dev/sgx/enclave",
+        "--device=/dev/sgx_provision:/dev/sgx/provision",
+        "--device=/dev/sgx_vepc:/dev/sgx/vepc",
+        "--env-file",
+        ".env",
+        "--network",
+        "storm-net",
+        "--publish",
+        "127.0.0.1:2222:2222",
+        "--publish",
+        "127.0.0.1:6666:6666"
+    ],
+    "overrideCommand": false,
+    "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+    "mounts": [
+        "source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind,consistency=cached"
+    ],
+    "containerEnv": {
+        "SSH_AUTH_SOCK": "/ssh-agent",
+        "NVIM_LISTEN_ADDRESS": "0.0.0.0:6666"
+    },
+    "postCreateCommand": "sudo chown -R dev:dev /home/dev/.ssh && echo 'Container ready. Set password with: sudo passwd dev'",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vscjava.vscode-java-pack",
+                "redhat.vscode-xml",
+                "asvetliakov.vscode-neovim"
+            ],
+            "settings": {
+                "java.configuration.runtimes": [
+                    {
+                        "name": "JavaSE-17",
+                        "path": "/usr/lib/jvm/java-17-openjdk-amd64",
+                        "default": true
+                    }
+                ],
+                "java.jdt.ls.java.home": "/usr/lib/jvm/java-17-openjdk-amd64",
+                "terminal.integrated.defaultProfile.linux": "zsh"
+            }
+        }
     }
-  },
-  "remoteUser": "dev",
-  "runArgs": [
-    "--name=confidential-storm-devcontainer",
-    "--privileged",
-    "--device=/dev/sgx_enclave:/dev/sgx/enclave",
-    "--device=/dev/sgx_provision:/dev/sgx/provision",
-    "--device=/dev/sgx_vepc:/dev/sgx/vepc",
-    "--env-file",
-    ".env",
-    "--network",
-    "storm-net",
-    "--publish",
-    "127.0.0.1:2222:2222",
-    "--publish",
-    "127.0.0.1:6666:6666"
-  ],
-  "overrideCommand": false,
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-  "forwardPorts": [2222],
-  "mounts": ["source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind"],
-  "containerEnv": {
-    "SSH_AUTH_SOCK": "/ssh-agent",
-    "NVIM_LISTEN_ADDRESS": "0.0.0.0:6666"
-  },
-  "postCreateCommand": "sudo passwd dev"
 }
