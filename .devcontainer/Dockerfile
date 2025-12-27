@@ -204,6 +204,7 @@ RUN set -eux; \
 
 # custom script to automatically pull + rebuild + reinstall TeaClave SDK
 COPY .devcontainer/teaclave-rebuild-install.sh /usr/local/bin/teaclave-rebuild-install
+RUN chmod +x /usr/local/bin/teaclave-rebuild-install
 
 # Ensure dev user owns the Java TEE SDK installation
 RUN chown -R "${REMOTE_USER}:$(cat /etc/devcontainer-group)" /opt
