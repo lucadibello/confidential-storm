@@ -202,6 +202,12 @@ RUN set -eux; \
     cp -r /tmp/teaclave-java-tee-sdk/sdk/native/script/build_app /opt/javaenclave; \
     rm -rf /tmp/teaclave-java-tee-sdk
 
+# custom script to automatically pull + rebuild + reinstall TeaClave SDK
+COPY .devcontainer/teaclave-rebuild-install.sh /usr/local/bin/teaclave-rebuild-install
+
+# Ensure dev user owns the Java TEE SDK installation
+RUN chown -R "${REMOTE_USER}:$(cat /etc/devcontainer-group)" /opt
+
 # Copy Maven repository to dev user (includes graal-processor and cached dependencies)
 RUN mkdir -p "${REMOTE_HOME}/.m2" \
     && cp -r /root/.m2/repository "${REMOTE_HOME}/.m2/" \
