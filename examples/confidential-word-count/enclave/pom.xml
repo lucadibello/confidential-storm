@@ -98,7 +98,7 @@
                                 <configuration>
                                     <executable>bash</executable>
                                     <arguments>
-                                        <argument>${project.basedir}/../../../tools/javaenclave/build_app/make.sh
+                                        <argument>/opt/javaenclave/build_app/make.sh
                                         </argument>
                                         <argument>${project.basedir}</argument>
                                         <argument>${org.apache.teaclave.javasdk.platform}</argument>
