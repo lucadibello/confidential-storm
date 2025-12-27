@@ -3,57 +3,62 @@ version: "3"
 dotenv: [".env"]
 
 vars:
-  WORKSPACE: .
-  SESSION: dev
-  CONTAINER_NAME: confidential-storm-devcontainer
-  TUNNEL_SRV: sws01
-  TUNNEL_USER: luca
-  SSH_TUNNEL_REMOTE_PORT: 2222
-  NVIM_TUNNEL_REMOTE_PORT: 6666
-  SSH_TUNNEL_LOCAL_PORT: 8022
-  NVIM_TUNNEL_LOCAL_PORT: 8066
+    WORKSPACE: .
+    SESSION: dev
+    CONTAINER_NAME: confidential-storm-devcontainer
+    TUNNEL_SRV: sws01
+    TUNNEL_USER: luca
+    SSH_TUNNEL_REMOTE_PORT: 2222
+    NVIM_TUNNEL_REMOTE_PORT: 6666
+    SSH_TUNNEL_LOCAL_PORT: 8022
+    NVIM_TUNNEL_LOCAL_PORT: 8066
 
 tasks:
-  devcontainer:
-    desc: Build, start, and attach to the devcontainer
-    cmds:
-      - task: devcontainer-build
-      - task: devcontainer-up
-      - task: devcontainer-attach
+    devcontainer:
+        desc: Build, start, and attach to the devcontainer
+        cmds:
+            - task: devcontainer-build
+            - task: devcontainer-up
+            - task: devcontainer-attach
 
-  devcontainer-recreate:
-    desc: Recreates a devcontainer from scratch to ensure a clean environment
-    cmds:
-      - task: devcontainer-down
-      - task: devcontainer
+    devcontainer-recreate:
+        desc: Recreates a devcontainer from scratch to ensure a clean environment
+        cmds:
+            - task: devcontainer-down
+            - task: devcontainer
 
-  devcontainer-build:
-    desc: Build the devcontainer image for this workspace
-    cmds:
-      - devcontainer build --workspace-folder {{.WORKSPACE}}
+    devcontainer-build:
+        desc: Build the devcontainer image for this workspace
+        cmds:
+            - devcontainer build --workspace-folder {{.WORKSPACE}}
 
-  devcontainer-up:
-    desc: Start (or reuse) the devcontainer for this workspace
-    cmds:
-      - devcontainer up --workspace-folder {{.WORKSPACE}}
+    devcontainer-up:
+        desc: Start (or reuse) the devcontainer for this workspace
+        cmds:
+            - devcontainer up --workspace-folder {{.WORKSPACE}}
 
-  devcontainer-attach:
-    desc: Exec into the devcontainer and start/attach tmux
-    cmds:
-      - devcontainer exec --workspace-folder {{.WORKSPACE}} tmux new-session -A -s {{.SESSION}}
+    devcontainer-attach-tmux:
+        desc: Exec into the devcontainer and start/attach tmux
+        cmds:
+            - devcontainer exec --workspace-folder {{.WORKSPACE}} tmux new-session -A -s {{.SESSION}}
 
-  devcontainer-down:
-    desc: Stop and remove the devcontainer for this workspace
-    cmds:
-      - docker stop {{.CONTAINER_NAME}} || true
-      - docker rm -f -v {{.CONTAINER_NAME}} || true
+    devcontainer-attach:
+        desc: Exec into the devcontainer and start a zsh shell
+        cmds:
+            - devcontainer exec --workspace-folder {{.WORKSPACE}} zsh
 
-  tunnel-ssh:
-    desc: Expose the devcontainer’s SSH port locally so you can connect via SSH without extra steps
-    cmds:
-      - ssh -N -L {{.SSH_TUNNEL_LOCAL_PORT}}:127.0.0.1:{{.SSH_TUNNEL_REMOTE_PORT}} {{.TUNNEL_USER}}@{{.TUNNEL_SRV}}
+    devcontainer-down:
+        desc: Stop and remove the devcontainer for this workspace
+        cmds:
+            - docker stop {{.CONTAINER_NAME}} || true
+            - docker rm -f -v {{.CONTAINER_NAME}} || true
 
-  tunnel-nvim:
-    desc: Forward the devcontainer’s Neovim headless server port to your machine for remote-UI access
-    cmds:
-      - ssh -N -L {{.NVIM_TUNNEL_LOCAL_PORT}}:127.0.0.1:{{.NVIM_TUNNEL_REMOTE_PORT}} {{.TUNNEL_USER}}@{{.TUNNEL_SRV}}
+    tunnel-ssh:
+        desc: Expose the devcontainer’s SSH port locally so you can connect via SSH without extra steps
+        cmds:
+            - ssh -N -L {{.SSH_TUNNEL_LOCAL_PORT}}:127.0.0.1:{{.SSH_TUNNEL_REMOTE_PORT}} {{.TUNNEL_USER}}@{{.TUNNEL_SRV}}
+
+    tunnel-nvim:
+        desc: Forward the devcontainer’s Neovim headless server port to your machine for remote-UI access
+        cmds:
+            - ssh -N -L {{.NVIM_TUNNEL_LOCAL_PORT}}:127.0.0.1:{{.NVIM_TUNNEL_REMOTE_PORT}} {{.TUNNEL_USER}}@{{.TUNNEL_SRV}}
