@@ -51,6 +51,7 @@
                                     <buildArgs>
                                         <buildArg>--shared</buildArg>
                                         <buildArg>--no-fallback</buildArg>
+                                        <buildArg>-H:+AllowDeprecatedBuilderClassesOnImageClasspath</buildArg>
                                         <buildArg>-H:Path=svm-output</buildArg>
                                         <buildArg>-H:Path=${project.build.directory}/svm-output</buildArg>
                                         <buildArg>-o ${project.build.directory}/svm-output/lib_mock_svm_load</buildArg>
@@ -68,6 +69,7 @@
                                     <buildArgs>
                                         <buildArg>--shared</buildArg>
                                         <buildArg>--no-fallback</buildArg>
+                                        <buildArg>-H:+AllowDeprecatedBuilderClassesOnImageClasspath</buildArg>
                                         <buildArg>-H:-AllowVMInternalThreads</buildArg>
                                         <buildArg>-H:+RunInEnclave</buildArg>
                                         <buildArg>-H:+TraceSecurityServices</buildArg>
@@ -98,8 +100,7 @@
                                 <configuration>
                                     <executable>bash</executable>
                                     <arguments>
-                                        <argument>/opt/javaenclave/build_app/make.sh
-                                        </argument>
+                                        <argument>/opt/javaenclave/build_app/make.sh</argument>
                                         <argument>${project.basedir}</argument>
                                         <argument>${org.apache.teaclave.javasdk.platform}</argument>
                                         <argument>${org.apache.teaclave.javasdk.enclave.privatePem.path}</argument>

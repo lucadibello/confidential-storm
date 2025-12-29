@@ -13,8 +13,9 @@ ARG GIT_EMAIL=${GIT_EMAIL:-""}
 ARG GIT_NAME=${GIT_NAME:-"Dev User"}
 
 # Settings for additional tools
-ARG GRAALVM_VERSION=22.2.0
-ARG GRAALVM_ARCH=amd64
+# SOURCE: https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-17.0.9/graalvm-community-jdk-17.0.9_linux-x64_bin.tar.gz
+ARG GRAALVM_VERSION=17.0.9 # GraalVM 17.0.9 uses new naming: graalvm-community-jdk-<version>
+ARG GRAALVM_ARCH=x64
 ARG OPENJDK_VERSION=17
 ARG NEOVIM_VERSION=0.11.4
 ARG NODE_VERSION=22
@@ -31,8 +32,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GIT_NAME=${GIT_NAME} \
     GIT_EMAIL=${GIT_EMAIL} \
     STORM_HOME=/opt/storm \
-    GRAALVM_HOME=/root/tools/graalvm-ce-java17-${GRAALVM_VERSION} \
-    JAVA_HOME=/root/tools/graalvm-ce-java17-${GRAALVM_VERSION}
+    GRAALVM_HOME=/root/tools/graalvm-community-openjdk-${GRAALVM_VERSION}+9.1 \
+    JAVA_HOME=/root/tools/graalvm-community-openjdk-${GRAALVM_VERSION}+9.1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends software-properties-common \
@@ -56,8 +57,6 @@ RUN apt-get update \
     \
     # Shells & terminal
     sudo tmux zsh \
-    # Newer Java version
-    openjdk-${OPENJDK_VERSION}-jdk \
     # jq to parse JSON
     jq \
     # fd-find for file searching
@@ -155,16 +154,22 @@ ENV PATH="${SGX_SDK}/bin:${SGX_SDK}/bin/x64:${PATH}" \
 RUN printf '%s\n' /opt/teesdk/sgxsdk/sdk_libs > /etc/ld.so.conf.d/sgxsdk.conf && ldconfig
 
 # === configure Java toolchain ===
-# Install newer GraalVM version (Java 17) for native-image support.
+# Install GraalVM Community Edition JDK 17.0.9
 RUN set -eux; \
     mkdir -p /root/tools; \
-    url="https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-${GRAALVM_VERSION}/graalvm-ce-java17-linux-${GRAALVM_ARCH}-${GRAALVM_VERSION}.tar.gz"; \
+    url="https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-${GRAALVM_VERSION}/graalvm-community-jdk-${GRAALVM_VERSION}_linux-${GRAALVM_ARCH}_bin.tar.gz"; \
     curl -fsSL -o /tmp/graalvm.tgz "$url"; \
     tar -xzf /tmp/graalvm.tgz -C /root/tools; \
     rm -f /tmp/graalvm.tgz; \
-    /root/tools/graalvm-ce-java17-${GRAALVM_VERSION}/bin/gu install native-image; \
-    ln -s /root/tools/graalvm-ce-java17-${GRAALVM_VERSION}/bin/native-image /usr/local/bin/native-image; \
+    ${GRAALVM_HOME}/bin/native-image --version; \
+    ln -s ${GRAALVM_HOME}/bin/native-image /usr/local/bin/native-image; \
     echo "GraalVM ${GRAALVM_VERSION} installed successfully."
+
+# Add GraalVM to alternatives
+RUN update-alternatives --install /usr/bin/java java ${GRAALVM_HOME}/bin/java 1 \
+    && update-alternatives --install /usr/bin/javac javac ${GRAALVM_HOME}/bin/javac 1 \
+    && update-alternatives --set java ${GRAALVM_HOME}/bin/java \
+    && update-alternatives --set javac ${GRAALVM_HOME}/bin/javac
 
 # Install newer Maven version (to support Java 17)
 RUN set -eux; \
@@ -179,11 +184,11 @@ RUN set -eux; \
 # Download patched Teaclave Java TEE SDK source code from GitHub
 RUN git clone --branch master --depth 1 https://github.com/lucadibello/teaclave-java-tee-sdk.git /tmp/teaclave-java-tee-sdk
 
-# Install GraalVM processor as Maven artifact
+# Install GraalVM graal-processor as Maven artifact
 RUN /usr/local/bin/mvn install:install-file \
     -DgroupId=org.graalvm.compiler \
     -DartifactId=graal-processor \
-    -Dversion=22.2.0 \
+    -Dversion=${GRAALVM_VERSION} \
     -Dpackaging=jar \
     -Dfile="${GRAALVM_HOME}/lib/graal/graal-processor.jar"
 
@@ -252,6 +257,9 @@ RUN set -eux; \
     ln -sf /usr/local/node/bin/npx /usr/local/bin/npx; \
     rm -f /tmp/node.tar.xz; \
     echo "Node.js $(node -v) installed successfully."
+
+# Add Node.js bin directory to PATH for globally installed npm packages
+ENV PATH="/usr/local/node/bin:${PATH}"
 
 # Install Neovim 0.11 (nightly channel)
 RUN set -eux; \
