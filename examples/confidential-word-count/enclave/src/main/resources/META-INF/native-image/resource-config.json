@@ -1,6 +1,8 @@
 {
   "resources": {
-    "includes": []
+    "includes": [
+      {"pattern": "META-INF/services/.*"}
+    ]
   },
   "bundles": []
 }

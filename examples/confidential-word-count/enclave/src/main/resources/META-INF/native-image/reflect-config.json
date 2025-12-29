@@ -1,5 +1,75 @@
 [
   {
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.HistogramService",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.SplitSentenceService",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.SpoutMapperService",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.WordCountService",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "ch.usi.inf.examples.confidential_word_count.enclave.service.bolts.histogram.HistogramServiceImpl",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "ch.usi.inf.examples.confidential_word_count.enclave.service.bolts.split.SplitSentenceServiceImpl",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "ch.usi.inf.examples.confidential_word_count.enclave.service.bolts.wordcount.WordCountServiceImpl",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "ch.usi.inf.examples.confidential_word_count.enclave.service.spouts.SpoutMapperServiceImpl",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "ch.usi.inf.examples.confidential_word_count.enclave.WordCountEnclaveConfigProvider",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "ch.usi.inf.confidentialstorm.enclave.EnclaveConfiguration",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
     "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramSnapshotResponse",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
