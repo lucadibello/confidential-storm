@@ -14,7 +14,7 @@
     <name>Synthetic DP Histogram - Enclave</name>
 
     <properties>
-        <svm.maven.version>0.11.2</svm.maven.version>
+        <svm.maven.version>0.11.3</svm.maven.version>
         <org.apache.teaclave.javasdk.enclave.privatePem.path></org.apache.teaclave.javasdk.enclave.privatePem.path>
     </properties>
 
@@ -51,6 +51,8 @@
                                     <buildArgs>
                                         <buildArg>--shared</buildArg>
                                         <buildArg>--no-fallback</buildArg>
+                                        <buildArg>-H:+AllowDeprecatedBuilderClassesOnImageClasspath</buildArg>
+                                        <buildArg>--features=org.apache.teaclave.javasdk.enclave.EnclaveGlobalDataFeature,org.apache.teaclave.javasdk.enclave.EnclaveFeature,org.apache.teaclave.javasdk.enclave.system.EnclaveMemoryFeature,org.apache.teaclave.javasdk.enclave.cpufeatures.EnclaveAMD64CPUFeatureAccessFeature</buildArg>
                                         <buildArg>-H:Path=svm-output</buildArg>
                                         <buildArg>-H:Path=${project.build.directory}/svm-output</buildArg>
                                         <buildArg>-o ${project.build.directory}/svm-output/lib_mock_svm_load</buildArg>
@@ -68,6 +70,8 @@
                                     <buildArgs>
                                         <buildArg>--shared</buildArg>
                                         <buildArg>--no-fallback</buildArg>
+                                        <buildArg>-H:+AllowDeprecatedBuilderClassesOnImageClasspath</buildArg>
+                                        <buildArg>--features=org.apache.teaclave.javasdk.enclave.EnclaveGlobalDataFeature,org.apache.teaclave.javasdk.enclave.EnclaveFeature,org.apache.teaclave.javasdk.enclave.system.EnclaveMemoryFeature,org.apache.teaclave.javasdk.enclave.cpufeatures.EnclaveAMD64CPUFeatureAccessFeature</buildArg>
                                         <buildArg>-H:-AllowVMInternalThreads</buildArg>
                                         <buildArg>-H:+RunInEnclave</buildArg>
                                         <buildArg>-H:+TraceSecurityServices</buildArg>

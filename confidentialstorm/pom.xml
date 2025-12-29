@@ -17,6 +17,7 @@
         <junit.jupiter.version>5.10.2</junit.jupiter.version>
         <junit.pioneer.version>2.2.0</junit.pioneer.version>
         <org.apache.teaclave.javasdk.platform>MOCK_IN_SVM:TEE_SDK</org.apache.teaclave.javasdk.platform>
+        <graalvm.version>23.0.1</graalvm.version>
     </properties>
 
     <dependencyManagement>

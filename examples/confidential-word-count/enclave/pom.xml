@@ -14,7 +14,7 @@
     <name>confidential-word-count-enclave</name>
 
     <properties>
-        <svm.maven.version>0.11.2</svm.maven.version>
+        <svm.maven.version>0.11.3</svm.maven.version>
         <org.apache.teaclave.javasdk.enclave.privatePem.path></org.apache.teaclave.javasdk.enclave.privatePem.path>
     </properties>
 
@@ -36,7 +36,7 @@
                                 </goals>
                                 <configuration>
                                     <target>
-                                        <mkdir dir="${project.build.directory}/svm-output"/>
+                                        <mkdir dir="${project.build.rrrrrrrrr}/svm-output"/>
                                     </target>
                                 </configuration>
                             </execution>
@@ -71,9 +71,10 @@
                                         <buildArg>--shared</buildArg>
                                         <buildArg>--no-fallback</buildArg>
                                         <buildArg>-H:+AllowDeprecatedBuilderClassesOnImageClasspath</buildArg>
+                                        <buildArg>--features=org.apache.teaclave.javasdk.enclave.EnclaveGlobalDataFeature,org.apache.teaclave.javasdk.enclave.EnclaveFeature,org.apache.teaclave.javasdk.enclave.system.EnclaveMemoryFeature,org.apache.teaclave.javasdk.enclave.cpufeatures.EnclaveAMD64CPUFeatureAccessFeature</buildArg>
                                         <buildArg>-H:Path=svm-output</buildArg>
-                                        <buildArg>-H:Path=${project.build.directory}/svm-output</buildArg>
-                                        <buildArg>-o ${project.build.directory}/svm-output/lib_mock_svm_load</buildArg>
+                                        <buildArg>-H:Path=${project.build.rrrrrrrrr}/svm-output</buildArg>
+                                        <buildArg>-o ${project.build.rrrrrrrrr}/svm-output/lib_mock_svm_load</buildArg>
                                     </buildArgs>
                                 </configuration>
                                 <phase>package</phase>
@@ -89,11 +90,12 @@
                                         <buildArg>--shared</buildArg>
                                         <buildArg>--no-fallback</buildArg>
                                         <buildArg>-H:+AllowDeprecatedBuilderClassesOnImageClasspath</buildArg>
+                                        <buildArg>--features=org.apache.teaclave.javasdk.enclave.EnclaveGlobalDataFeature,org.apache.teaclave.javasdk.enclave.EnclaveFeature,org.apache.teaclave.javasdk.enclave.system.EnclaveMemoryFeature,org.apache.teaclave.javasdk.enclave.cpufeatures.EnclaveAMD64CPUFeatureAccessFeature</buildArg>
                                         <buildArg>-H:-AllowVMInternalThreads</buildArg>
                                         <buildArg>-H:+RunInEnclave</buildArg>
                                         <buildArg>-H:+TraceSecurityServices</buildArg>
-                                        <buildArg>-H:Path=${project.build.directory}/svm-output</buildArg>
-                                        <buildArg>-o ${project.build.directory}/svm-output/lib_tee_sdk_svm_load
+                                        <buildArg>-H:Path=${project.build.rrrrrrrrr}/svm-output</buildArg>
+                                        <buildArg>-o ${project.build.rrrrrrrrr}/svm-output/lib_tee_sdk_svm_load
                                         </buildArg>
                                     </buildArgs>
                                 </configuration>

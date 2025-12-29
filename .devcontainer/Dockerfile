@@ -136,6 +136,12 @@ RUN set -eux; \
     libsgx-dcap-ql-dev \
     libsgx-dcap-quote-verify-dev \
     libsgx-dcap-default-qpl \
+    # additional dependencies \
+    sgx-aesm-service \
+    libsgx-aesm-launch-plugin \
+    libsgx-aesm-quote-ex-plugin \
+    libsgx-aesm-ecdsa-plugin \
+    libsgx-dcap-quote-verify \
     && rm -rf /var/lib/apt/lists/*
 # a) Intel SGX SDK (.bin installer)
 RUN set -eux; \
