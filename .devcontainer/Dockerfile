@@ -127,17 +127,11 @@ RUN chown -R "${REMOTE_USER}:${GROUP_NAME}" /root
 # Set python3 as default python (required by Intel(R) SGX SDK build scripts)
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 1
 
-# Create SGX groups and aesmd user matching the host machine
-# sgx: GID 107 (primary SGX device group)
-# sgx_prv: GID 1011 (privileged SGX operations)
-# aesmd: user for running AESM (Architectural Enclave Service Manager) daemon
-RUN groupadd --gid 107 sgx || true \
-    && groupadd --gid 1011 sgx_prv || true \
-    && useradd --system --no-create-home --shell /bin/false --gid sgx --groups sgx_prv aesmd || true \
-    && usermod -aG sgx root \
-    && usermod -aG sgx_prv root \
-    && usermod -aG sgx "${REMOTE_USER}" \
-    && usermod -aG sgx_prv "${REMOTE_USER}"
+# Create SGX groups matching host GIDs for better visibility (names will show in 'groups' command)
+# Note: --group-add in devcontainer.json still required for runtime group membership
+# Create aesmd user BEFORE installing sgx-aesm-service package (package expects to create it)
+RUN groupadd --gid 107 sgx 2>/dev/null || groupadd sgx \
+    && groupadd --gid 1011 sgx_prv 2>/dev/null || groupadd sgx_prv
 
 # Intel SGX runtime libs from Intel apt repo (ubuntu noble = 24.04)
 RUN set -eux; \
