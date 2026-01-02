@@ -31,6 +31,28 @@ if [ -d "/home/${REMOTE_USER}/.ssh" ]; then
   chown -R "${REMOTE_USER}:${REMOTE_USER}" "/home/${REMOTE_USER}/.ssh" 2>/dev/null || true
 fi
 
+# Start AESM service (Intel SGX)
+if [ -x /opt/intel/sgx-aesm-service/aesm/aesm_service ]; then
+  log "starting AESM service"
+  # Ensure runtime directory exists with correct permissions
+  mkdir -p /var/run/aesmd
+  chown aesmd:aesmd /var/run/aesmd
+  chmod 755 /var/run/aesmd
+
+  # Start AESM service in background
+  LD_LIBRARY_PATH=/opt/intel/sgx-aesm-service/aesm /opt/intel/sgx-aesm-service/aesm/aesm_service &
+
+  # Wait briefly for service to start
+  sleep 2
+
+  # Verify service is running
+  if pgrep -x aesm_service >/dev/null 2>&1; then
+    log "AESM service started successfully"
+  else
+    log "WARNING: AESM service failed to start" >&2
+  fi
+fi
+
 # Bootstrap headless Neovim watchdog script
 cat >/usr/local/bin/nvim-server.sh <<'EOS'
 #!/usr/bin/env bash

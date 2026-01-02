@@ -41,7 +41,7 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
     # Build & toolchain
-    autoconf automake build-essential cmake g++ gcc make zlib1g-dev \
+    autoconf automake cmake g++ gcc make zlib1g-dev \
     # musl toolchain for GraalVM native-image with --libc=musl
     musl musl-dev musl-tools \
     \
@@ -49,7 +49,7 @@ RUN apt-get update \
     git \
     \
     # Networking & crypto
-    ca-certificates curl openssh-client openssh-server \
+    ca-certificates curl wget openssh-client openssh-server \
     openssl \
     \
     # Archiving & compression
@@ -61,6 +61,10 @@ RUN apt-get update \
     jq \
     # fd-find for file searching
     fd-find \
+    # Intel(R) SGX SDK dependencies
+    build-essential python3 \
+    # Intel(R) SGX PSW dependencies
+    libssl-dev libcurl4-openssl-dev libprotobuf-dev \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
     && ln -sf /usr/bin/musl-gcc /usr/local/bin/x86_64-linux-musl-gcc
@@ -118,6 +122,22 @@ RUN set -eux; \
 RUN chown -R "${REMOTE_USER}:${GROUP_NAME}" /root
 
 # === Install Intel SGX SDK and runtime libraries ===
+# Help guide: https://cc-enabling.trustedservices.intel.com/intel-sgx-sw-installation-guide-linux/02/installation_instructions
+
+# Set python3 as default python (required by Intel(R) SGX SDK build scripts)
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 1
+
+# Create SGX groups and aesmd user matching the host machine
+# sgx: GID 107 (primary SGX device group)
+# sgx_prv: GID 1011 (privileged SGX operations)
+# aesmd: user for running AESM (Architectural Enclave Service Manager) daemon
+RUN groupadd --gid 107 sgx || true \
+    && groupadd --gid 1011 sgx_prv || true \
+    && useradd --system --no-create-home --shell /bin/false --gid sgx --groups sgx_prv aesmd || true \
+    && usermod -aG sgx root \
+    && usermod -aG sgx_prv root \
+    && usermod -aG sgx "${REMOTE_USER}" \
+    && usermod -aG sgx_prv "${REMOTE_USER}"
 
 # Intel SGX runtime libs from Intel apt repo (ubuntu noble = 24.04)
 RUN set -eux; \
@@ -126,38 +146,69 @@ RUN set -eux; \
     echo 'deb [signed-by=/etc/apt/keyrings/intel-sgx-keyring.asc arch=amd64] https://download.01.org/intel-sgx/sgx_repo/ubuntu noble main' > /etc/apt/sources.list.d/intel-sgx.list; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
+    # launch service \
+    libsgx-launch \
     libsgx-launch-dev \
     libsgx-urts \
+    # EPID-based attestation service
+    libsgx-epid \
+    # Algorithm agnostic attestation service \
+    libsgx-quote-ex \
+    # DCAP ECDSA-based service \
+    libsgx-dcap-ql
+
+# Install dependencies for sgx-dbg
+RUN set -eux; \
+    apt-get install -y --no-install-recommends \
+    libsgx-aesm-ecdsa-plugin-dbgsym \
+    libsgx-aesm-launch-plugin-dbgsym \
+    libsgx-aesm-pce-plugin-dbgsym \
+    libsgx-aesm-quote-ex-plugin-dbgsym \
+    libsgx-dcap-default-qpl-dbgsym \
+    libsgx-dcap-ql-dbgsym \
+    libsgx-dcap-quote-verify-dbgsym \
+    libsgx-enclave-common-dbgsym \
+    libsgx-launch-dbgsym \
+    libsgx-pce-logic-dbgsym \
+    libsgx-qe3-logic-dbgsym \
+    libsgx-quote-ex-dbgsym \
+    libsgx-ra-network-dbgsym \
+    libsgx-ra-uefi-dbgsym \
+    libsgx-tdx-logic-dbgsym \
+    libsgx-uae-service-dbgsym \
     libsgx-urts-dbgsym \
-    libsgx-uae-service \
-    libsgx-enclave-common \
-    libsgx-enclave-common-dev \
-    libsgx-dcap-ql \
-    libsgx-dcap-ql-dev \
-    libsgx-dcap-quote-verify-dev \
-    libsgx-dcap-default-qpl \
-    # additional dependencies \
-    sgx-aesm-service \
-    libsgx-aesm-launch-plugin \
-    libsgx-aesm-quote-ex-plugin \
-    libsgx-aesm-ecdsa-plugin \
-    libsgx-dcap-quote-verify \
-    && rm -rf /var/lib/apt/lists/*
-# a) Intel SGX SDK (.bin installer)
+    libtdx-attest-dbgsym \
+    sgx-aesm-service-dbgsym \
+    sgx-pck-id-retrieval-tool-dbgsym \
+    sgx-ra-service-dbgsym \
+    tdx-qgs-dbgsym \
+    tee-appraisal-tool-dbgsym
+
+# Install Intel SGX SDK (.bin installer)
 RUN set -eux; \
     url="https://download.01.org/intel-sgx/sgx-linux/2.26/distro/ubuntu24.04-server/sgx_linux_x64_sdk_2.26.100.0.bin"; \
     curl -fsSL -o /tmp/sgx_sdk.bin "$url"; \
     chmod +x /tmp/sgx_sdk.bin; \
     mkdir -p /opt/teesdk; \
     /tmp/sgx_sdk.bin --prefix /opt/teesdk; \
-    rm -f /tmp/sgx_sdk.bin;
-# b) configure environment (avoid sourcing environment file)
+    rm -f /tmp/sgx_sdk.bin
+
+# configure environment (avoid sourcing environment file)
 ENV SGX_SDK=/opt/teesdk/sgxsdk
 ENV PATH="${SGX_SDK}/bin:${SGX_SDK}/bin/x64:${PATH}" \
     PKG_CONFIG_PATH="${SGX_SDK}/pkgconfig:${PKG_CONFIG_PATH}" \
     LD_LIBRARY_PATH="${SGX_SDK}/sdk_libs:${LD_LIBRARY_PATH}"
 
 RUN printf '%s\n' /opt/teesdk/sgxsdk/sdk_libs > /etc/ld.so.conf.d/sgxsdk.conf && ldconfig
+
+# additional developer packages
+RUN apt-get install -y --no-install-recommends \
+    libsgx-dcap-ql-dev \
+    libsgx-dcap-default-qpl-dev \
+    tee-appraisal-tool
+
+# Cleanup apt cache
+RUN rm -rf /var/lib/apt/lists/*
 
 # === configure Java toolchain ===
 # Install GraalVM Community Edition JDK 17.0.9
@@ -307,6 +358,6 @@ RUN TARGET_GROUP="$(cat /etc/devcontainer-group 2>/dev/null || echo "${REMOTE_GR
 # === Final configurations ===
 EXPOSE 2222 6666
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD pgrep -x sshd >/dev/null && pgrep -f 'nvim --headless' >/dev/null || exit 1
+    CMD pgrep -x sshd >/dev/null && pgrep -f 'nvim --headless' >/dev/null && pgrep -x aesm_service >/dev/null || exit 1
 ENTRYPOINT ["/usr/local/bin/devcontainer-entrypoint"]
 CMD ["/usr/sbin/sshd", "-D", "-e"]
