@@ -1,130 +1,173 @@
-# confidential-storm-starter
+# Confidential Storm
 
-Everything you need to prototype a secure Apache Storm topology with confidential computing, powered by Apache Teaclave SGX enclaves. This repository adapts the [`apache-storm-starter`](https://github.com/lucadibello/apache-storm-starter/) word-count example so every sensitive operation runs inside Intel SGX enclaves while the host topology stays unchanged.
+Confidential Storm is a robust library designed to enable confidential stream processing applications. By seamlessly integrating [Apache Storm](https://storm.apache.org/) with [Intel SGX](https://www.intel.com/content/www/us/en/developer/tools/software-guard-extensions/overview.html) (via the [Apache Teaclave Java TEE SDK](https://teaclave.apache.org/)), it facilitates the execution of sensitive data processing tasks within secure enclaves. This ensures data privacy and integrity, allowing for secure computation even in potentially untrusted cloud environments.
 
-## Example topology
+This library transforms standard stream processing paradigms by providing the necessary primitives to offload sensitive operations to hardware-protected memory regions (enclaves), whilst maintaining the scalability and fault tolerance of Apache Storm.
 
-- `RandomJokeSpout` (2 executors) reads the bundled `jokes.json` dataset and emits random jokes (id, category, rating, body).
-- `SplitSentenceBolt` (3 executors) tokenizes each joke body into lowercase words **inside an SGX enclave**.
-- `WordCounterBolt` (3 executors) maintains per-word counters **inside an SGX enclave** and emits the running total.
-- `HistogramBolt` (single executor) collects the counts into a global histogram **inside an SGX enclave** and writes a timestamped snapshot to `data/histogram.txt` every 5 seconds.
+## Key Features
 
-`WordCountTopology` wires these components with shuffle and fields groupings. Each bolt that processes sensitive data inherits from `ConfidentialBolt` and delegates computation to a Teaclave service that executes inside hardware-protected memory. Production mode can be toggled via the `STORM_PROD` environment variable or the `-Dstorm.prod` system property (both default to `false`).
+- **Secure Stream Processing**: Specialized implementations of Storm Bolts and Spouts (`ConfidentialBolt`, `ConfidentialSpout`) that seamlessly delegate processing to secure enclaves.
+- **Teaclave Integration**: A streamlined abstraction layer over the Apache Teaclave Java TEE SDK, simplifying the lifecycle management and invocation of SGX enclaves from Java.
+- **Differential Privacy**: Built-in implementations of differentially private algorithms (e.g., Binary Aggregation Tree mechanisms) for secure data aggregation and analytics. This implementation is based on the paper _"Differentially Private Stream Processing at Scale"_ (DOI: [10.48550/arXiv.2303.18086](https://doi.org/10.48550/arXiv.2303.18086)).
+- **Cryptographic Utilities**: Comprehensive set of tools for secure serialization, encryption, and authenticated communication between the untrusted Host and the trusted Enclave.
 
-## Topology diagram
+## Security Features
 
-![Confidential Storm topology](assets/diagram.svg)
+Confidential Storm includes active defenses against global adversaries controlling the infrastructure:
 
-The double arrows show each bolt invoking its dedicated Teaclave service running inside an SGX enclave before emitting downstream tuples.
+- **Packet Replay Protection**: Implements a sliding window mechanism (default size: 128) to track sequence numbers for each producer. This effectively prevents adversaries from replaying old, valid encrypted tuples to skew computation results.
+- **Routing Validation**: leverages Authenticated Encryption with Associated Data (AEAD) to cryptographically bind tuples to their specific source and destination components. The Enclave verifies this metadata (AAD) upon decryption to ensure the topology has not been tampered with and that data is flowing along the authorized path.
 
-Dataset source: <https://github.com/taivop/joke-dataset/blob/master/stupidstuff.json>
+## Project Structure
 
-## Run it locally
+The project is organized into a modular architecture to ensure separation of concerns between trusted and untrusted components:
 
-1. Build the multi-module Maven project (this compiles the host, common APIs, and enclave images):
+- **`confidentialstorm/common`**: Contains shared interfaces, API models, and topology specifications used by both Host and Enclave. This ensures API consistency across the trust boundary.
+- **`confidentialstorm/host`**: Provides the host-side infrastructure, including the Storm topology components (Bolts/Spouts) and the Enclave Bridge logic for managing enclave lifecycles and proxying calls.
+- **`confidentialstorm/enclave`**: Houses the trusted logic that executes within the SGX Enclave. This includes service implementations, cryptographic operations, and differential privacy mechanisms.
+- **`examples/`**: A collection of reference implementations demonstrating various use cases (e.g., `confidential-word-count`, `synthetic-dp-histogram`).
 
-   ```bash
-   cd confidentialstorm
-   mvn clean package -DskipTests -Pnative
-   ```
+## Architecture and SGX Integration
 
-2. Launch the word-count topology with the Storm CLI (requires the topology jar produced in step 1):
+This library relies on the Apache `teaclave-java-tee-sdk` to execute Java code within an isolated environment using [SubstrateVM](https://github.com/oracle/graal/tree/master/substratevm).
 
-   ```bash
-   cd confidentialstorm
-   sudo storm local --local-ttl 120 host/target/confidentialstorm-topology.jar \
-     ch.usi.inf.examples.confidential_word_count.host.WordCountTopology \
-     -- --local
-   ```
+### 1. Storm Integration & Enclave Lifecycle
 
-   The `Makefile` exposes the same command as `make run-local`, which handles the path and `--local-ttl` defaults for you.
+Confidential Storm is designed to fit naturally into the Apache Storm architecture.
 
-3. Watch the console logs; each bolt uses SLF4J to report the tuples it processes, and enclave calls are tagged with `[ENCLAVE]`.
+*   **Topology Structure**: An application is defined as a standard Storm **Topology**, a graph of computation where nodes are **Spouts** (data sources) and **Bolts** (data processors).
+*   **Confidential Components**: Developers extend `ConfidentialBolt` or `ConfidentialSpout` instead of the standard classes. These components act as gateways to the secure world.
+*   **Parallelism Mapping (1:1)**:
+    *   In Storm, parallelism is achieved by spawning multiple **Executors** (threads) across multiple **Worker Processes** (JVMs).
+    *   Confidential Storm maintains a strict **1:1 mapping between a Storm Task and an SGX Enclave**.
+    *   When a `ConfidentialBolt` is initialized (during the `prepare()` phase of a Task), it spins up its own isolated SGX Enclave instance.
+    *   This ensures that parallelism in the trusted world scales linearly with the parallelism defined in the Storm topology.
 
-4. While the topology is running (or right after it stops), open `data/histogram.txt` to inspect the aggregated word frequencies.
+### 2. Module Interconnection
 
-Tip: remove `data/histogram.txt` between runs if you prefer a clean snapshot.
+> **Note**: This project utilizes a custom adaptation of the `teaclave-java-tee-sdk` build scripts to support **Java 17** (originally limited to Java 11). This involves specific handling of GraalVM 22.2.0 native image generation and linking against updated static libraries.
 
-## Devcontainer tasks
+An application built with Confidential Storm typically consists of three main modules:
 
-> [!IMPORTANT]  
-> These commands rely on the [go-task](https://taskfile.dev/) runner. Install it locally (`brew install go-task`, `scoop install task`, or download a binary) or run the commands from inside the devcontainer where it is already available.
+- **Enclave**
+  - Contains sensitive business logic (e.g., `ServiceImpl`).
+  - **Build Time**: Compiled into a native shared object (`.so`) using [GraalVM](https://www.graalvm.org/) via the native-maven-plugin.
+  - **Signing**: The build process signs the `.so` file to produce a `.signed` enclave binary.
+  - **Packaging**: The signed binary is embedded as a resource within the Host JAR or placed on the classpath.
 
-- `task devcontainer`: build, start, and attach to the devcontainer (runs build → up → attach). The container ships with the SGX SDK, Teaclave runtime, and Storm CLI preconfigured.
-- `task devcontainer-recreate`: tear down the existing container and rebuild from scratch.
-- `task devcontainer-build`: build the devcontainer image only.
-- `task devcontainer-up`: start (or reuse) the container.
-- `task devcontainer-attach`: exec into the container and attach to the tmux session.
-- `task devcontainer-down`: stop and remove the container plus its volumes.
+- **Host**:
+  - Standard Java application running on the Host JVM.
+  - **Context**: In Confidential Storm, this module primarily contains the **Topology Specification** and related configurations.
+  - Contains the **Enclave Bridge** (`TeeSdkEnclave.java`), acting as the controller.
+  - Manages the lifecycle of the enclave (creation, destruction) and proxies method calls to it.
 
-## Submit to a remote Storm cluster
+- **Common (`common.jar`)**:
+  - Contains Service Interfaces annotated with `@EnclaveService`.
+  - Shared by Host and Enclave to define the API contract.
 
-1. Build the shaded topology jar as before:
+### 3. Execution Flow (Host-Enclave Bridge)
 
-   ```bash
-   cd confidentialstorm
-   mvn clean package -DskipTests -Pnative
-   ```
+The runtime execution follows a strict sequence to ensure security:
 
-   The artifact lands in `confidentialstorm/host/target/confidentialstorm-topology.jar` and already bundles the enclave artifacts produced by the `enclave` module.
+#### A. Initialization (Host Side)
 
-2. Toggle production mode at runtime by exporting `STORM_PROD=true` or passing `-Dstorm.prod=true` (no code changes required).
+1. **Bootstrap**: The Host application starts.
+2. **Extraction**: The system extracts the embedded `.signed` enclave binary and the JNI bridge library (`lib_jni_tee_sdk_svm.so`) to a temporary location.
+3. **Loading**: The `nativeCreateEnclave` function (via JNI) instructs the SGX driver to load the enclave into protected memory.
+4. **JVM Attachment**: The Host calls `nativeSvmAttachIsolate`, initializing the SubstrateVM inside the enclave.
 
-3. If you are using the devcontainer, enter it with `task devcontainer` or `task devcontainer-attach`; it provides a Storm CLI configured via `conf/storm.yaml`.
+#### B. Service Loading
 
-4. Submit the topology (remember to enable production mode, e.g. with `STORM_PROD=true`):
+5. **Proxy Creation**: Upon calling `enclave.load(Service.class)`, the Host creates a Java **Dynamic Proxy** for the interface.
+6. **Registration**: The service name is sent to the enclave, which uses reflection to instantiate the corresponding implementation class.
 
-   ```bash
-   STORM_PROD=true storm jar confidentialstorm/host/target/confidentialstorm-topology.jar \
-     ch.usi.inf.examples.confidential_word_count.host.WordCountTopology \
-     ConfidentialWordCountTopology
-   ```
+#### C. Method Invocation (Host -> Enclave)
 
-   Replace the last argument if you want a different topology name.
+When a method is called on the service proxy:
 
-5. Monitor the deployment through the Storm UI (`http://<nimbus-host>:8080`) or via `storm list`, and stop it when you're done:
-
-   ```bash
-   storm kill ConfidentialWordCountTopology
-   ```
-
-If you need to submit from outside the devcontainer, copy `confidentialstorm/host/target/confidentialstorm-topology.jar` and `conf/storm.yaml` to the target machine, then update the endpoints in `storm.yaml` to match the remote cluster.
-
-### Local test cluster (docker-compose)
-
-- The repo ships with `docker-compose.yml`, which launches ZooKeeper, Nimbus, a Storm UI, and a Supervisor wired to the same configuration as `conf/storm.yaml`.
-- Start the stack with `docker compose up -d` (or `docker-compose up -d`) before running `storm jar` to test remote submissions against your local cluster.
-- The devcontainer already connects to the external `storm-net` bridge declared in the compose file, so any `storm` commands you run inside it automatically reach the services exposed by the stack.
-
-## Project structure
+7. **Intercept**: The `ProxyEnclaveInvocationHandler` intercepts the call.
+8. **Serialize**: Arguments and method metadata are serialized.
+9. **ECALL**: A native JNI function (`nativeInvokeMethod`) performs an SGX ECALL (Entrance Call), transitioning execution to the enclave.
+10. **Deserialize (Enclave)**: The C entry point inside the enclave calls the internal JVM.
+11. **Execute**: The internal JVM deserializes arguments, invokes the actual method via Reflection, and captures the result.
+12. **Return**: The result is serialized and returned (OCALL/Return) to the Host for deserialization.
 
 ```
-confidentialstorm/
-├── common/          # Shared interfaces and models
-│   ├── api/         # Service interfaces (SplitSentenceService, WordCountService, HistogramService)
-│   └── model/       # Request/response DTOs
-├── enclave/         # SGX enclave implementations
-│   ├── split/       # SplitSentenceServiceImpl (Teaclave service)
-│   ├── wordcount/   # WordCountServiceImpl
-│   └── histogram/   # HistogramServiceImpl
-└── host/            # Storm topology components
-    ├── bolts/       # SplitSentenceBolt, WordCounterBolt, HistogramBolt
-    │   └── base/    # ConfidentialBolt abstraction used by enclave-aware bolts
-    └── spouts/      # RandomJokeSpout
+[ HOST JVM ]                                     [ SGX ENCLAVE ]
+      |                                                |
+      | 1. EnclaveFactory.create()                     |
+      |----------------------------------------------->| (Loads .signed binary)
+      |                                                |
+      | 2. Attach Internal JVM                         |
+      |----------------------------------------------->| (Starts SubstrateVM)
+      |                                                |
+      | 3. service.method()                            |
+      |    (Proxy Intercept)                           |
+      |          |                                     |
+      |    (Serialize Args)                            |
+      |          |                                     |
+      |    (JNI -> ECALL) ---------------------------->| (Enclave Entry Point)
+      |                                                |       |
+      |                                                | (Deserialize Args)
+      |                                                |       |
+      |                                                | (Reflection Invoke ServiceImpl)
+      |                                                |       |
+      |    (Return Result) <---------------------------| (Serialize Result)
+      |                                                |
 ```
 
-## Prerequisites
+### Native Components
 
-- OpenJDK 17 and Maven 3.9+ (the enclave build relies on Java 17 features and recent Maven plugins).
-- [Apache Teaclave Java TEE SDK 0.1.0](https://teaclave.apache.org/) with the SGX platform plugins configured; the devcontainer uses the `teaclave/teaclave-java-tee-sdk:v0.1.0-ubuntu18.04` base image.
-- GraalVM CE 22.2.0 (Java 17) with `native-image` plus a standard C/C++ toolchain (`gcc`, `g++`, `cmake`, `make`, `zlib1g-dev`, etc.) to build the enclave shared libraries.
-- Intel SGX-capable hardware with the PSW/driver installed, or SGX simulation mode; set `org.apache.teaclave.javasdk.platform` accordingly.
-- Apache Storm CLI 2.8.x available on the host machine. The local workflow uses `sudo storm local` to access SGX devices, so your user must have sudo privileges or be able to access the devices.
-- Docker Engine + Docker Compose if you plan to run the optional `docker-compose.yml` cluster or the VS Code devcontainer (the compose stack expects an external `storm-net` bridge).
-- Optional: `devcontainer` CLI / VS Code Dev Containers and [go-task](https://taskfile.dev) to run the helper tasks.
+- **`tee_sdk_wrapper`**: A native bridge running inside the enclave. It manages the SubstrateVM lifecycle and exposes C entry points for ECALLs. It also handles memory allocation from the host via `ocall_malloc` to return data.
+- **`sgx_mmap`**: Provides the memory management interface required by GraalVM. It wraps POSIX `mmap`/`munmap` calls, redirecting them to the enclave's internal memory manager, as standard system calls are forbidden within SGX.
 
-## Security notes
+## Usage
 
-- All text processing (splitting, counting, histogram aggregation) happens inside SGX enclaves, protecting data from both the host OS and other processes.
-- The `ConfidentialBolt` base class provides a common pattern for Storm bolts that delegate to Teaclave services over secure channels.
-- Enclave attestation and secure channel establishment are handled by the Teaclave Java SDK; verify attestation evidence and provision production keys before deploying to untrusted environments.
+### Prerequisites
+
+- **Java**: OpenJDK 17.
+- **Build Tools**: Maven 3.9+.
+- **Environment**: Intel SGX-capable hardware with installed PSW/driver, or configured Simulation Mode.
+- **Dependencies**: Apache Teaclave Java TEE SDK 0.1.0, GraalVM CE 22.2.0 (Java 17), and standard C/C++ toolchain (`gcc`, `make`, `cmake`).
+- **Development Tools**: [Go-Task](https://taskfile.dev) is recommended for managing the development environment and executing common tasks (defined in `taskfile.yml`).
+
+> **Note**: A fully configured development environment is available via the provided Dev Container configuration (`.devcontainer/`). This container includes all necessary dependencies, such as the SGX SDK, Teaclave runtime, GraalVM, Maven, and Storm CLI.
+
+### Building the Library
+
+To build the core library modules:
+
+```bash
+mvn clean install -DskipTests
+```
+
+To build with native enclave compilation (requires SGX environment):
+
+```bash
+mvn clean install -DskipTests -Pnative
+```
+
+### Developing a Confidential Application
+
+1. **Define Interfaces**: Create your service interfaces in a `common` module.
+2. **Implement Enclave Logic**: Implement these interfaces in an `enclave` module, utilizing `confidentialstorm-enclave` dependencies.
+3. **Create Topology**: In your `host` module, extend `ConfidentialBolt` or `ConfidentialSpout`. Use the `EnclaveManager` to load services and delegate tuple processing to the enclave.
+
+## Examples
+
+The `examples/` directory contains complete reference implementations:
+
+- **`confidential-word-count`**: The most idiomatic example, designed to showcase a production-ready implementation.
+  - **Full Security**: Enables all security features, including **Packet Replay Protection** and **Routing Validation**, via `WordCountEnclaveConfigProvider`.
+  - **Secure Logic**: Implements the same robust `StreamingDPMechanism` as the synthetic example for its global histogram aggregation, proving that differential privacy can be seamlessly integrated into standard business logic.
+  - **Architecture**: Demonstrates a realistic multi-stage topology where sensitive data (jokes) is ingested, securely split (`SplitSentenceService`), counted (`WordCountService`), and aggregated (`HistogramService`) entirely within enclaves, with strict type checking and contribution bounding.
+
+- **`synthetic-dp-histogram`**: A faithful reproduction of the benchmark experiment from the "Differentially Private Stream Processing at Scale" paper (Section 5.1).
+  - **Benchmark Focused**: Intentionally disables some security features (replay protection, routing validation) to match the paper's experimental setup and isolate the performance of the DP algorithms.
+  - **Dynamic Configuration**: Demonstrates how to use the **Service API** (`SyntheticHistogramService#configure`) to pass runtime configuration (e.g., `maxTimeSteps`, `mu`) from the Host topology to the Enclave, allowing for flexible experiments without recompiling the enclave.
+  - **Advanced DP**: Features the full `StreamingDPMechanism` with hierarchical perturbation and sliding window aggregation, generating privacy-preserving histograms from high-volume synthetic Zipfian data.
+
+- **`simple-topology`**: A minimal "Hello World" example showcasing basic Host-Enclave communication.
+  - **Connectivity Check**: Features a simple `SimpleEnclaveService` that reverses a string, serving as a baseline for verifying infrastructure connectivity and understanding the request/response flow without complex business logic.
+
+For detailed instructions on running specific examples, refer to the `README.md` within each example directory.
