@@ -35,13 +35,13 @@ This library relies on the Apache `teaclave-java-tee-sdk` to execute Java code w
 
 Confidential Storm is designed to fit naturally into the Apache Storm architecture.
 
-*   **Topology Structure**: An application is defined as a standard Storm **Topology**, a graph of computation where nodes are **Spouts** (data sources) and **Bolts** (data processors).
-*   **Confidential Components**: Developers extend `ConfidentialBolt` or `ConfidentialSpout` instead of the standard classes. These components act as gateways to the secure world.
-*   **Parallelism Mapping (1:1)**:
-    *   In Storm, parallelism is achieved by spawning multiple **Executors** (threads) across multiple **Worker Processes** (JVMs).
-    *   Confidential Storm maintains a strict **1:1 mapping between a Storm Task and an SGX Enclave**.
-    *   When a `ConfidentialBolt` is initialized (during the `prepare()` phase of a Task), it spins up its own isolated SGX Enclave instance.
-    *   This ensures that parallelism in the trusted world scales linearly with the parallelism defined in the Storm topology.
+- **Topology Structure**: An application is defined as a standard Storm **Topology**, a graph of computation where nodes are **Spouts** (data sources) and **Bolts** (data processors).
+- **Confidential Components**: Developers extend `ConfidentialBolt` or `ConfidentialSpout` instead of the standard classes. These components act as gateways to the secure world.
+- **Parallelism Mapping (1:1)**:
+  - In Storm, parallelism is achieved by spawning multiple **Executors** (threads) across multiple **Worker Processes** (JVMs).
+  - Confidential Storm maintains a strict **1:1 mapping between a Storm Task and an SGX Enclave**.
+  - When a `ConfidentialBolt` is initialized (during the `prepare()` phase of a Task), it spins up its own isolated SGX Enclave instance.
+  - This ensures that parallelism in the trusted world scales linearly with the parallelism defined in the Storm topology.
 
 ### 2. Module Interconnection
 
@@ -61,7 +61,7 @@ An application built with Confidential Storm typically consists of three main mo
   - Contains the **Enclave Bridge** (`TeeSdkEnclave.java`), acting as the controller.
   - Manages the lifecycle of the enclave (creation, destruction) and proxies method calls to it.
 
-- **Common (`common.jar`)**:
+- **Common**:
   - Contains Service Interfaces annotated with `@EnclaveService`.
   - Shared by Host and Enclave to define the API contract.
 
@@ -125,10 +125,10 @@ When a method is called on the service proxy:
 
 ### Prerequisites
 
-- **Java**: OpenJDK 17.
+- **Java**: [GraalVM Community Edition 22.2.0](https://www.graalvm.org/) (which includes OpenJDK 17).
 - **Build Tools**: Maven 3.9+.
 - **Environment**: Intel SGX-capable hardware with installed PSW/driver, or configured Simulation Mode.
-- **Dependencies**: Apache Teaclave Java TEE SDK 0.1.0, GraalVM CE 22.2.0 (Java 17), and standard C/C++ toolchain (`gcc`, `make`, `cmake`).
+- **Dependencies**: Apache Teaclave Java TEE SDK 0.1.0 and standard C/C++ toolchain (`gcc`, `make`, `cmake`).
 - **Development Tools**: [Go-Task](https://taskfile.dev) is recommended for managing the development environment and executing common tasks (defined in `taskfile.yml`).
 
 > **Note**: A fully configured development environment is available via the provided Dev Container configuration (`.devcontainer/`). This container includes all necessary dependencies, such as the SGX SDK, Teaclave runtime, GraalVM, Maven, and Storm CLI.
