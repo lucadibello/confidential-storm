@@ -24,6 +24,9 @@ public class SimpleTopology {
         Config conf = new Config();
         conf.setDebug(false);
 
+        // Use MOCK_IN_SVM for development (change to TEE_SDK for production SGX)
+        conf.put("confidentialstorm.enclave.type", "MOCK_IN_SVM");
+
         // Enclave proxy to detect enclave-side errors (disabled for max performance)
         conf.put("confidentialstorm.enclave.proxy.enable", "false");
 

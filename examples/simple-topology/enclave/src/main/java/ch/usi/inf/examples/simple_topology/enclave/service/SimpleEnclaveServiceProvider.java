@@ -8,7 +8,7 @@ import ch.usi.inf.examples.simple_topology.common.api.model.SimpleEnclaveRespons
 import com.google.auto.service.AutoService;
 
 @AutoService(SimpleEnclaveService.class)
-class SimpleEnclaveServiceProvider implements SimpleEnclaveService {
+public class SimpleEnclaveServiceProvider implements SimpleEnclaveService {
 
     protected final EnclaveExceptionContext exceptionCtx = EnclaveExceptionContext.getInstance();
 
