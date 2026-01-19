@@ -38,9 +38,15 @@ tasks:
       - devcontainer up --workspace-folder {{.WORKSPACE}}
 
   devcontainer-attach:
+    desc: Exec into the devcontainer and start a bash shell
+    cmds:
+      - devcontainer exec --workspace-folder {{.WORKSPACE}} bash
+
+  devcontainer-attach-tmux:
     desc: Exec into the devcontainer and start/attach tmux
     cmds:
       - devcontainer exec --workspace-folder {{.WORKSPACE}} tmux new-session -A -s {{.SESSION}}
+
 
   devcontainer-down:
     desc: Stop and remove the devcontainer for this workspace
