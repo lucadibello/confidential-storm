@@ -2,7 +2,6 @@ package ch.usi.inf.examples.synthetic_dp.enclave.service;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
-import ch.usi.inf.confidentialstorm.enclave.dp.ContributionLimiter;
 import ch.usi.inf.confidentialstorm.enclave.dp.StreamingDPMechanism;
 import ch.usi.inf.examples.synthetic_dp.common.api.SyntheticHistogramService;
 import ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticSnapshotResponse;

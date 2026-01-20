@@ -7,5 +7,5 @@ import org.apache.teaclave.javasdk.common.annotations.EnclaveService;
 
 @EnclaveService
 public interface UserContributionBoundingService {
-    UserContributionBoundingResponse check(UserContributionBoundingRequest request) throws EnclaveServiceException;
+    UserContributionBoundingResponse checkAndClamp(UserContributionBoundingRequest request) throws EnclaveServiceException;
 }

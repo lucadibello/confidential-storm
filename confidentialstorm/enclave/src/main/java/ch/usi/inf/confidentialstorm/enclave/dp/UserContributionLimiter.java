@@ -8,7 +8,7 @@ import java.util.Map;
  * Tracks per-user contribution counts and enforces a hard maximum.
  * This encapsulates the bounding logic so applications can reuse it across services.
  */
-public final class ContributionLimiter {
+public final class UserContributionLimiter {
     private final Map<Object, Long> counts = new HashMap<>();
 
     /**

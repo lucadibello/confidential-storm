@@ -130,7 +130,7 @@ public class StreamingDPMechanism {
      * Per-user contribution limiter enforcing C-bounded contributions.
      * Critical for maintaining L1 = C × Lm sensitivity assumption.
      */
-    private final ContributionLimiter contributionLimiter = new ContributionLimiter();
+    private final UserContributionLimiter userContributionLimiter = new UserContributionLimiter();
 
     /**
      * Maximum contributions per user (C from Section 3.2).
@@ -181,7 +181,7 @@ public class StreamingDPMechanism {
     public boolean addContribution(String key, double count, String userId) {
         // Enforce contribution bounding: each user can contribute at most C records
         // NOTE: needed to maintaining L_1 = C * L_m sensitivity assumption
-        if (!contributionLimiter.allow(userId, maxContributionsPerUser)) {
+        if (!userContributionLimiter.allow(userId, maxContributionsPerUser)) {
             log.debug("[DP-MECHANISM] Rejected contribution from user {} (exceeded C={})",
                      userId, maxContributionsPerUser);
             return false;

@@ -1,4 +1,4 @@
-package ch.usi.inf.confidentialstorm.enclave.service.model;
+package ch.usi.inf.confidentialstorm.enclave.security;
 
 import java.util.BitSet;
 

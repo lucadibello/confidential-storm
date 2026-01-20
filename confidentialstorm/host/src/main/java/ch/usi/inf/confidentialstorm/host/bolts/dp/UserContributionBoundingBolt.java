@@ -1,10 +1,11 @@
-package ch.usi.inf.confidentialstorm.host.bolts;
+package ch.usi.inf.confidentialstorm.host.bolts.dp;
 
 import ch.usi.inf.confidentialstorm.common.api.UserContributionBoundingService;
 import ch.usi.inf.confidentialstorm.common.api.model.UserContributionBoundingRequest;
 import ch.usi.inf.confidentialstorm.common.api.model.UserContributionBoundingResponse;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+import ch.usi.inf.confidentialstorm.host.bolts.ConfidentialBolt;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
 import org.apache.storm.tuple.Fields;
@@ -37,12 +38,13 @@ public class UserContributionBoundingBolt extends ConfidentialBolt<UserContribut
 
         // Check contribution limit
         UserContributionBoundingRequest req = new UserContributionBoundingRequest(word);
-        UserContributionBoundingResponse resp = service.check(req);
+        UserContributionBoundingResponse resp = service.checkAndClamp(req);
 
-        if (resp.word() != null) {
+        // check if authorized
+        if (resp.isDropped()) {
             // If authorized, emit
             LOG.info("[UserContributionBoundingBolt {}] Forwarding word", boltId);
-            getCollector().emit(input, new Values(resp.word()));
+            getCollector().emit(input, new Values(word, resp.clampedCount()));
         } else {
             LOG.info("[UserContributionBoundingBolt {}] Dropping word (limit exceeded)", boltId);
         }
@@ -52,6 +54,6 @@ public class UserContributionBoundingBolt extends ConfidentialBolt<UserContribut
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        declarer.declare(new Fields("encryptedWord"));
+        declarer.declare(new Fields("encryptedWord", "clampedCount"));
     }
 }
