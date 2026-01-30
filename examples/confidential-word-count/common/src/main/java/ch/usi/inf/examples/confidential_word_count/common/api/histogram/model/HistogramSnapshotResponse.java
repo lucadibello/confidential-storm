@@ -1,4 +1,4 @@
-package ch.usi.inf.examples.confidential_word_count.common.api.model;
+package ch.usi.inf.examples.confidential_word_count.common.api.histogram.model;
 
 import java.io.Serial;
 import java.io.Serializable;

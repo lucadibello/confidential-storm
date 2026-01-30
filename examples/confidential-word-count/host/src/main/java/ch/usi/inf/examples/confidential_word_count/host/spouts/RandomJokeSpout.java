@@ -3,7 +3,7 @@ package ch.usi.inf.examples.confidential_word_count.host.spouts;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.spouts.ConfidentialSpout;
-import ch.usi.inf.examples.confidential_word_count.common.api.SpoutMapperService;
+import ch.usi.inf.examples.confidential_word_count.common.api.spout.SpoutRouterService;
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import ch.usi.inf.examples.confidential_word_count.host.util.JokeReader;
 import org.apache.storm.spout.SpoutOutputCollector;
@@ -19,14 +19,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-public class RandomJokeSpout extends ConfidentialSpout<SpoutMapperService> {
+public class RandomJokeSpout extends ConfidentialSpout<SpoutRouterService> {
     private static final long EMIT_DELAY_MS = 250;
     private static final Logger LOG = LoggerFactory.getLogger(RandomJokeSpout.class);
     private List<EncryptedValue> encryptedJokes;
     private Random rand;
 
     public RandomJokeSpout() {
-        super(SpoutMapperService.class);
+        super(SpoutRouterService.class);
     }
 
     @Override
@@ -58,7 +58,7 @@ public class RandomJokeSpout extends ConfidentialSpout<SpoutMapperService> {
 
         // use service to configure route for the joke entry (spout -> splitter)
         LOG.debug("[RandomJokeSpout {}] Testing route for joke index {}", this.state.getTaskId(), idx);
-        EncryptedValue routedJokeEntry = getService().setupRoute(ComponentConstants.RANDOM_JOKE_SPOUT, currentJokeEntry);
+        EncryptedValue routedJokeEntry = getService().setupRoute(currentJokeEntry);
 
         // NOTE: each joke is a JSON entry with fields: ["body", "category", "id", "rating", "user_id"]
         LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJokeEntry);

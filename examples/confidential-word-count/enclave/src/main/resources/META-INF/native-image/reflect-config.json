@@ -1,6 +1,6 @@
 [
   {
-    "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramSnapshotResponse",
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.count.model.WordCountAckResponse",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "allDeclaredMethods": true,
@@ -9,7 +9,7 @@
     "allPublicFields": true
   },
   {
-    "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.HistogramUpdateRequest",
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.count.model.WordCountFlushRequest",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "allDeclaredMethods": true,
@@ -18,7 +18,7 @@
     "allPublicFields": true
   },
   {
-    "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.SplitSentenceRequest",
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.count.model.WordCountFlushResponse",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "allDeclaredMethods": true,
@@ -27,7 +27,7 @@
     "allPublicFields": true
   },
   {
-    "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.SplitSentenceResponse",
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.count.model.WordCountRequest",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "allDeclaredMethods": true,
@@ -36,7 +36,7 @@
     "allPublicFields": true
   },
   {
-    "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountAckResponse",
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.count.model.WordCountResponse",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "allDeclaredMethods": true,
@@ -45,7 +45,7 @@
     "allPublicFields": true
   },
   {
-    "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushRequest",
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.histogram.model.HistogramSnapshotResponse",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "allDeclaredMethods": true,
@@ -54,7 +54,7 @@
     "allPublicFields": true
   },
   {
-    "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountFlushResponse",
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.histogram.model.HistogramUpdateAckResponse",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "allDeclaredMethods": true,
@@ -63,7 +63,7 @@
     "allPublicFields": true
   },
   {
-    "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountRequest",
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.histogram.model.HistogramUpdateRequest",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "allDeclaredMethods": true,
@@ -72,7 +72,16 @@
     "allPublicFields": true
   },
   {
-    "name": "ch.usi.inf.examples.confidential_word_count.common.api.model.WordCountResponse",
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.split.model.SplitSentenceRequest",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true,
+    "llDeclaredFields": true,
+    "allPublicFields": true
+  },
+  {
+    "name": "ch.usi.inf.examples.confidential_word_count.common.api.split.model.SplitSentenceResponse",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "allDeclaredMethods": true,
@@ -80,6 +89,16 @@
     "allDeclaredFields": true,
     "allPublicFields": true
   },
+  {
+    "name": "",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true
+  },
+
 
   {
     "name": "java.security.MessageDigestSpi"

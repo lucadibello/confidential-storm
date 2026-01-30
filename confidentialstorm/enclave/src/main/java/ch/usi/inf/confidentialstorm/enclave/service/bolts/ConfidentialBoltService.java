@@ -7,7 +7,7 @@ import ch.usi.inf.confidentialstorm.enclave.EnclaveConfig;
 import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.enclave.exception.EnclaveExceptionContext;
-import ch.usi.inf.confidentialstorm.enclave.service.model.ReplayWindow;
+import ch.usi.inf.confidentialstorm.enclave.security.ReplayWindow;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 
