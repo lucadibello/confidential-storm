@@ -105,10 +105,13 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
             return;
         }
 
-        // in any case -> update the histogram with the new values
+        // Extract input tuple format: (word, count, userId)
         EncryptedValue word = (EncryptedValue) input.getValueByField("word");
         EncryptedValue newCount = (EncryptedValue) input.getValueByField("count");
-        service.update(new HistogramUpdateRequest(word, newCount));
+        EncryptedValue userId = (EncryptedValue) input.getValueByField("userId");
+
+        // Update the histogram with the new values
+        service.update(new HistogramUpdateRequest(word, newCount, userId));
 
         // acknowledge the tuple
         getCollector().ack(input);

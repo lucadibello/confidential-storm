@@ -1,10 +1,11 @@
 package ch.usi.inf.examples.confidential_word_count.host.spouts;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
-import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.spouts.ConfidentialSpout;
-import ch.usi.inf.examples.confidential_word_count.common.api.spout.SpoutRouterService;
-import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
+import ch.usi.inf.examples.confidential_word_count.common.api.spout.SpoutPreprocessingService;
+import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SealedJokeEntry;
+import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutRouterRequest;
+import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutRouterResponse;
 import ch.usi.inf.examples.confidential_word_count.host.util.JokeReader;
 import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
@@ -19,14 +20,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-public class RandomJokeSpout extends ConfidentialSpout<SpoutRouterService> {
+public class RandomJokeSpout extends ConfidentialSpout<SpoutPreprocessingService> {
     private static final long EMIT_DELAY_MS = 250;
     private static final Logger LOG = LoggerFactory.getLogger(RandomJokeSpout.class);
-    private List<EncryptedValue> encryptedJokes;
+    private List<SealedJokeEntry> encryptedJokes;
     private Random rand;
 
     public RandomJokeSpout() {
-        super(SpoutRouterService.class);
+        super(SpoutPreprocessingService.class);
     }
 
     @Override
@@ -40,7 +41,6 @@ public class RandomJokeSpout extends ConfidentialSpout<SpoutRouterService> {
             LOG.error("[RandomJokeSpout {}] Failed to load jokes dataset", this.state.getTaskId(), e);
             throw new RuntimeException(e);
         }
-        // save the collector for emitting tuples <Joke, String>
         this.rand = new Random();
         LOG.info("[RandomJokeSpout {}] Prepared with delay {} ms",
                 this.state.getTaskId(), EMIT_DELAY_MS);
@@ -54,15 +54,19 @@ public class RandomJokeSpout extends ConfidentialSpout<SpoutRouterService> {
     public void executeNextTuple() throws EnclaveServiceException {
         // generate the next random joke
         int idx = rand.nextInt(encryptedJokes.size());
-        EncryptedValue currentJokeEntry = encryptedJokes.get(idx);
+        SealedJokeEntry currentJokeEntry = encryptedJokes.get(idx);
 
         // use service to configure route for the joke entry (spout -> splitter)
+        // Request format: (payload, userId)
         LOG.debug("[RandomJokeSpout {}] Testing route for joke index {}", this.state.getTaskId(), idx);
-        EncryptedValue routedJokeEntry = getService().setupRoute(currentJokeEntry);
+        SpoutRouterResponse routedJokeEntry = getService().setupRoute(
+                new SpoutRouterRequest(currentJokeEntry.payload(), currentJokeEntry.userId()));
 
-        // NOTE: each joke is a JSON entry with fields: ["body", "category", "id", "rating", "user_id"]
-        LOG.info("[RandomJokeSpout {}] Emitting joke {}", this.state.getTaskId(), routedJokeEntry);
-        getCollector().emit(new Values(routedJokeEntry));
+        // Emit tuple format: (payload, userId)
+        // NOTE: payload contains fields: ["body", "category", "id", "rating"]
+        // NOTE: userId contains field: ["user_id"]
+        LOG.info("[RandomJokeSpout {}] Emitting joke with separate userId", this.state.getTaskId());
+        getCollector().emit(new Values(routedJokeEntry.payload(), routedJokeEntry.userId()));
 
         // sleep for a while to avoid starving the topology
         try {
@@ -74,6 +78,7 @@ public class RandomJokeSpout extends ConfidentialSpout<SpoutRouterService> {
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        declarer.declare(new Fields("entry"));
+        // Tuple format: (payload, userId)
+        declarer.declare(new Fields("payload", "userId"));
     }
 }

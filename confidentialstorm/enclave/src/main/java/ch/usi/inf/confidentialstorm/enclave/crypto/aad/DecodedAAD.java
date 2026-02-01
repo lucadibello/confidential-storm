@@ -91,15 +91,6 @@ public final class DecodedAAD {
         return sourceName.equals(component.getName());
     }
 
-    public void requireSource(TopologySpecification.Component component) {
-        if (sourceName == null) {
-            throw new IllegalArgumentException("AAD missing source component");
-        }
-        if (!matchesSource(component)) {
-            throw new IllegalArgumentException("AAD source mismatch for " + component.getName());
-        }
-    }
-
     public boolean matchesDestination(TopologySpecification.Component component) {
         Objects.requireNonNull(component, "Component cannot be null");
         if (destinationName == null) {
@@ -108,12 +99,18 @@ public final class DecodedAAD {
         return destinationName.equals(component.getName());
     }
 
-    public void requireDestination(TopologySpecification.Component component) {
-        if (destinationName == null) {
-            throw new IllegalArgumentException("AAD missing destination component");
+    public void requireSource(TopologySpecification.Component component) {
+        Objects.requireNonNull(sourceName, "AAD missing source component");
+
+        if (!matchesSource(component)) {
+            throw new IllegalStateException("AAD source mismatch for " + component.getName());
         }
+    }
+
+    public void requireDestination(TopologySpecification.Component component) {
+        Objects.requireNonNull(destinationName, "AAD missing destination component");
         if (!matchesDestination(component)) {
-            throw new IllegalArgumentException("AAD destination mismatch for " + component.getName());
+            throw new IllegalStateException("AAD destination mismatch for " + component.getName());
         }
     }
 

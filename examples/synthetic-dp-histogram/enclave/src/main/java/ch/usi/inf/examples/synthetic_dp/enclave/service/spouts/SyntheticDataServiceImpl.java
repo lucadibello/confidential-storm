@@ -14,7 +14,7 @@ import ch.usi.inf.examples.synthetic_dp.common.api.SyntheticDataService;
 import ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticEncryptedRecord;
 import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
 import com.google.auto.service.AutoService;
-import java.util.Objects;
+
 import java.util.UUID;
 
 @AutoService(SyntheticDataService.class)

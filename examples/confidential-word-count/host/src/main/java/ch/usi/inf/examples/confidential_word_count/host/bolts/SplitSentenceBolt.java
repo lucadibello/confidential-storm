@@ -4,6 +4,7 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceExcept
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.ConfidentialBolt;
 import ch.usi.inf.examples.confidential_word_count.common.api.split.SplitSentenceService;
+import ch.usi.inf.examples.confidential_word_count.common.api.split.model.SealedWord;
 import ch.usi.inf.examples.confidential_word_count.common.api.split.model.SplitSentenceRequest;
 import ch.usi.inf.examples.confidential_word_count.common.api.split.model.SplitSentenceResponse;
 import org.apache.storm.task.TopologyContext;
@@ -33,21 +34,22 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
 
     @Override
     protected void processTuple(Tuple input, SplitSentenceService service) throws EnclaveServiceException {
-        // read encrypted body
-        EncryptedValue encryptedJokeEntry = (EncryptedValue) input.getValueByField("entry");
-        LOG.debug("[SplitSentenceBolt {}] Received encrypted joke entry {}", boltId, encryptedJokeEntry);
+        // Read input tuple format: (payload, userId)
+        EncryptedValue encryptedPayload = (EncryptedValue) input.getValueByField("payload");
+        EncryptedValue encryptedUserId = (EncryptedValue) input.getValueByField("userId");
+        LOG.debug("[SplitSentenceBolt {}] Received encrypted joke entry", boltId);
 
-        // request enclave to split the sentence
-        SplitSentenceResponse response = service.split(new SplitSentenceRequest(encryptedJokeEntry));
-        LOG.info("[SplitSentenceBolt {}] Emitting {} encrypted words for encrypted joke {}", boltId, response.words().size(), encryptedJokeEntry);
+        // Request enclave to split the sentence
+        SplitSentenceResponse response = service.split(new SplitSentenceRequest(encryptedPayload, encryptedUserId));
+        LOG.info("[SplitSentenceBolt {}] Emitting {} encrypted words", boltId, response.words().size());
 
-        // send out each encrypted word as a separate tuple
-        for (EncryptedValue word : response.words()) {
-            // NOTE: word seems like a random blob of data => hides frequency distribution from host
-            getCollector().emit(input, new Values(word));
+        // Send out each (word, userId) pair as a separate tuple
+        for (SealedWord sealedWord : response.words()) {
+            // Emit tuple format: (word, userId)
+            getCollector().emit(input, new Values(sealedWord.word(), sealedWord.userId()));
         }
         getCollector().ack(input);
-        LOG.debug("[SplitSentenceBolt {}] Acked encrypted joke {}", boltId, encryptedJokeEntry);
+        LOG.debug("[SplitSentenceBolt {}] Acked encrypted joke", boltId);
     }
 
     @Override
@@ -58,6 +60,7 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        declarer.declare(new Fields("encryptedWord"));
+        // Tuple format: (word, userId)
+        declarer.declare(new Fields("word", "userId"));
     }
 }

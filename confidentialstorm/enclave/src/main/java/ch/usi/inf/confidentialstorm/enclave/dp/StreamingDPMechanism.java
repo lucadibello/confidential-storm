@@ -127,17 +127,6 @@ public class StreamingDPMechanism {
     private Set<String> s_i_prev = new HashSet<>();
 
     /**
-     * Per-user contribution limiter enforcing C-bounded contributions.
-     * Critical for maintaining L1 = C × Lm sensitivity assumption.
-     */
-    private final UserContributionLimiter userContributionLimiter = new UserContributionLimiter();
-
-    /**
-     * Maximum contributions per user (C from Section 3.2).
-     */
-    private final long maxContributionsPerUser;
-
-    /**
      * @param sigmaKey                Noise scale for key selection (based on sensitivity 1).
      * @param sigmaHist               Noise scale for histogram (based on sensitivity C*L).
      * @param maxTimeSteps            Maximum number of time steps to process.
@@ -165,7 +154,6 @@ public class StreamingDPMechanism {
         this.sigmaHist = sigmaHist;
         this.maxTimeSteps = maxTimeSteps;
         this.mu = mu;
-        this.maxContributionsPerUser = maxContributionsPerUser;
         this.perRecordClamp = perRecordClamp;
     }
 
@@ -174,27 +162,14 @@ public class StreamingDPMechanism {
      * Enforces per-user contribution bounding (C) as required by Section 3.2.
      *
      * @param key    The aggregation key
-     * @param count  The contribution to add to the key
+     * @param clamped_count  The clamped contribution value
      * @param userId The user ID contributing this value
-     * @return true if contribution was accepted, false if rejected due to exceeding C
      */
-    public boolean addContribution(String key, double count, String userId) {
-        // Enforce contribution bounding: each user can contribute at most C records
-        // NOTE: needed to maintaining L_1 = C * L_m sensitivity assumption
-        if (!userContributionLimiter.allow(userId, maxContributionsPerUser)) {
-            log.debug("[DP-MECHANISM] Rejected contribution from user {} (exceeded C={})",
-                     userId, maxContributionsPerUser);
-            return false;
-        }
-
-        // Clamp the per-record contribution to L_m
-        double clamped = FastMath.max(-perRecordClamp, FastMath.min(perRecordClamp, count));
-
+    public void addContribution(String key, double clamped_count, String userId) {
         // accumulate contribution for this key in the current window
-        currentWindowCounts.merge(key, clamped, Double::sum);
+        currentWindowCounts.merge(key, clamped_count, Double::sum);
         // record contribution from this user to this key in the current window
         currentWindowUniqueUsers.computeIfAbsent(key, k -> new HashSet<>()).add(userId);
-        return true;
     }
 
     /**

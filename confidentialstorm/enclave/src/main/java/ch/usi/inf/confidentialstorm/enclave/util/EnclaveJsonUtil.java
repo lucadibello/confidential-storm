@@ -189,6 +189,20 @@ public final class EnclaveJsonUtil {
         return raw;
     }
 
+    public static byte[] serialize(double value) {
+        String strValue = Double.toString(value);
+        return strValue.getBytes(StandardCharsets.UTF_8);
+    }
+
+    public static byte[] serialize(long value) {
+        String strValue = Long.toString(value);
+        return strValue.getBytes(StandardCharsets.UTF_8);
+    }
+
+    public static byte[] serialize(String value) {
+        return value.getBytes(StandardCharsets.UTF_8);
+    }
+
     public static byte[] serialize(Map<String, Object> fields) {
         StringBuilder sb = new StringBuilder();
         sb.append('{');

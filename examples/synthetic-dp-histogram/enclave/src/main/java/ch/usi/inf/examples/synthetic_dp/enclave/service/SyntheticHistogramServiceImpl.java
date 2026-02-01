@@ -1,7 +1,7 @@
 package ch.usi.inf.examples.synthetic_dp.enclave.service;
 
-import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitializationException;
-import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
+import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
+import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.dp.StreamingDPMechanism;
 import ch.usi.inf.examples.synthetic_dp.common.api.SyntheticHistogramService;
 import ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticSnapshotResponse;
@@ -10,11 +10,15 @@ import ch.usi.inf.examples.synthetic_dp.common.config.DPConfig;
 import ch.usi.inf.confidentialstorm.enclave.util.DPUtil;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
+import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
+import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
+
 import com.google.auto.service.AutoService;
 import java.util.Map;
 
 @AutoService(SyntheticHistogramService.class)
-public final class SyntheticHistogramServiceImpl extends SyntheticHistogramServiceVerifier
+public final class SyntheticHistogramServiceImpl
+        extends ConfidentialBoltService<SyntheticUpdateRequest>
         implements SyntheticHistogramService {
 
     private StreamingDPMechanism mechanism;
@@ -52,15 +56,22 @@ public final class SyntheticHistogramServiceImpl extends SyntheticHistogramServi
         );
     }
 
-    @Override
-    public void updateImpl(SyntheticUpdateRequest request) throws SealedPayloadProcessingException, CipherInitializationException {
-        String key = sealedPayload.decryptToString(request.key());
-        double count = Double.parseDouble(sealedPayload.decryptToString(request.count()));
-        String userId = sealedPayload.decryptToString(request.userId());
 
-        // record contribution to DP mechanism
-        if (!mechanism.addContribution(key, count, userId)) {
-            log.warn("Contribution from user '{}' for key '{}' was not added (contribution bounding has been exceeded)", userId, key);
+    @Override
+    public void update(SyntheticUpdateRequest request) throws EnclaveServiceException {
+        try {
+            // verify request
+            super.verify(request);
+
+            String key = decryptToString(request.key());
+            double count = decryptToDouble(request.count());
+            String userId = decryptToString(request.userId());
+
+            // record contribution to DP mechanism
+            // NOTE: we assume that the count has already been clamped per-record if needed!
+            mechanism.addContribution(key, count, userId);
+        } catch (Throwable t) {
+            super.exceptionCtx.handleException(t);
         }
     }
 
@@ -74,4 +85,18 @@ public final class SyntheticHistogramServiceImpl extends SyntheticHistogramServi
         return new SyntheticSnapshotResponse(snap);
     }
 
+    @Override
+    public TopologySpecification.Component expectedSourceComponent() {
+        return ComponentConstants.SPOUT;
+    }
+
+    @Override
+    public TopologySpecification.Component expectedDestinationComponent() {
+        return ComponentConstants.HISTOGRAM_GLOBAL;
+    }
+
+    @Override
+    public TopologySpecification.Component currentComponent() {
+        return ComponentConstants.HISTOGRAM_GLOBAL;
+    }
 }

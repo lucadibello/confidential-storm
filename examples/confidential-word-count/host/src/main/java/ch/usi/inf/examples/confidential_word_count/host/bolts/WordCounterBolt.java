@@ -53,8 +53,8 @@ public class WordCounterBolt extends ConfidentialBolt<WordCountService> {
             WordCountFlushResponse response = service.flush(new WordCountFlushRequest());
             int count = 0;
             for (WordCountResponse item : response.histogram()) {
-                // emit each word returned by the service
-                getCollector().emit(new Values(item.word(), item.count()));
+                // Emit tuple format: (word, count, userId, routingKey)
+                getCollector().emit(new Values(item.word(), item.count(), item.userId(), item.routingKey()));
                 count++;
             }
             LOG.info("[WordCounterBolt {}] Flushed {} items.", boltId, count);
@@ -63,14 +63,15 @@ public class WordCounterBolt extends ConfidentialBolt<WordCountService> {
 
         // otherwise ingest normal tuple (event-time)
 
-        // extract encrypted word from the input tuple
-        EncryptedValue wordEntry = (EncryptedValue) input.getValueByField("encryptedWord");
+        // Extract input tuple format: (word, userId)
+        EncryptedValue wordEntry = (EncryptedValue) input.getValueByField("word");
+        EncryptedValue userIdEntry = (EncryptedValue) input.getValueByField("userId");
         LOG.debug("[WordCounterBolt {}] Received encrypted word", boltId);
 
-        // confidentially count the occurrences of the word
-        WordCountRequest req = new WordCountRequest(wordEntry);
-        WordCountAckResponse ack = service.count(req); // Receive and store the ack
-        LOG.debug("[WordCounterBolt {}] Word counted and buffered. Received ack: {}", boltId, ack); // Log the ack
+        // Confidentially count the occurrences of the word for this user
+        WordCountRequest req = new WordCountRequest(wordEntry, userIdEntry);
+        WordCountAckResponse ack = service.count(req);
+        LOG.debug("[WordCounterBolt {}] Word counted and buffered. Received ack: {}", boltId, ack);
 
         // acknowledge the tuple
         getCollector().ack(input);
@@ -78,6 +79,7 @@ public class WordCounterBolt extends ConfidentialBolt<WordCountService> {
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        declarer.declare(new Fields("word", "count"));
+        // Tuple format: (word, count, userId, routingKey)
+        declarer.declare(new Fields("word", "count", "userId", "routingKey"));
     }
 }

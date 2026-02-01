@@ -3,10 +3,8 @@ package ch.usi.inf.examples.confidential_word_count.enclave.service.bolts;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
-import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
-import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecificationBuilder;
+import ch.usi.inf.confidentialstorm.enclave.crypto.Hash;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveJsonUtil;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import ch.usi.inf.examples.confidential_word_count.common.api.count.WordCountService;
@@ -18,40 +16,19 @@ import java.util.*;
 
 @AutoService(WordCountService.class)
 public final class WordCountServiceProvider extends ConfidentialBoltService<WordCountRequest> implements WordCountService {
+
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(WordCountService.class);
-    private final String producerId = UUID.randomUUID().toString();
+
     // buffer: Word -> (UserId -> Count)
     private final Map<String, Map<String, Long>> buffer = new HashMap<>();
-    // for development purposes, we define the expected JSON fields here to validate the input
-    private final Set<String> expectedJsonFields = new HashSet<>(List.of("word", "user_id"));
-    private long sequenceCounter = 0;
 
     @Override
     public WordCountAckResponse count(WordCountRequest request) throws EnclaveServiceException {
         try {
-            // Decrypt the payload
-            String jsonPayload = sealedPayload.decryptToString(request.word());
-            Map<String, Object> jsonMap = EnclaveJsonUtil.parseJson(jsonPayload);
-
-            // Validate expected fields
-            if (!jsonMap.keySet().containsAll(expectedJsonFields)) {
-                log.warn("Invalid payload structure: {}", jsonPayload);
-                throw new RuntimeException("Invalid payload structure");
-            }
-
-            // Extract word from payload
-            String word = (String) jsonMap.get("word");
-            if (word == null) {
-                log.warn("Missing 'word' field in payload: {}", jsonPayload);
-                throw new RuntimeException("Missing 'word' field in payload");
-            }
-
-            // Extract user_id from payload
-            String userId = String.valueOf(jsonMap.get("user_id")); // long to string
-            if (userId == null) {
-                log.warn("Missing 'user_id' field in payload: {}", jsonPayload);
-                throw new RuntimeException("Missing 'user_id' field in payload");
-            }
+            // Decrypt the word
+            String word = Objects.requireNonNull(decryptToString(request.word()), "Missing word in payload");
+            // Decrypt the userId
+            String userId = Objects.requireNonNull(decryptToString(request.userId()), "Missing userId in payload");
 
             // Update buffer (per user)
             buffer.computeIfAbsent(word, k -> new HashMap<>())
@@ -81,31 +58,23 @@ public final class WordCountServiceProvider extends ConfidentialBoltService<Word
                     String userId = userEntry.getKey();
                     Long count = userEntry.getValue();
 
-                    // Create AAD
-                    long sequence = sequenceCounter++;
-                    AADSpecificationBuilder entryAadBuilder = AADSpecification.builder()
-                            .sourceComponent(ComponentConstants.WORD_COUNT)
-                            .destinationComponent(ComponentConstants.HISTOGRAM_GLOBAL)
-                            .put("producer_id", producerId)
-                            .put("seq", sequence);
+                    int seq = nextSequenceNumber();
 
-                    // Prepare payload JSON for the word: { "word": "...", "user_id": "..." }
-                    Map<String, Object> wordPayloadMap = new HashMap<>();
-                    wordPayloadMap.put("word", word);
-                    wordPayloadMap.put("user_id", userId);
+                    // Encrypt word (just the word string)
+                    EncryptedValue sealedWord = encrypt(word, seq);
 
-                    // encode payload as JSON
-                    byte[] jsonPayloadBytes = EnclaveJsonUtil.serialize(wordPayloadMap);
+                    // Encrypt count
+                    EncryptedValue sealedCount = encrypt(count, seq);
 
-                    // build aad specification
-                    AADSpecification aad = entryAadBuilder.build();
+                    // Encrypt userId
+                    EncryptedValue sealedUserId = encrypt(userId, seq);
 
-                    // Seal the word (with user_id in payload) and the count
-                    EncryptedValue sealedWord = sealedPayload.encrypt(jsonPayloadBytes, aad);
-                    EncryptedValue sealedCount = sealedPayload.encryptString(Long.toString(count), aad);
+                    // Generate routing info that links user to word (needed to route to correct user contribution boundary bolt)
+                    String routingInfo = "user:" + userId + "|word:" + word;
+                    byte[] routingKey = Hash.computeHash(routingInfo.getBytes());
 
-                    // Create WordCountResponse and add to responses
-                    responses.add(new WordCountResponse(sealedWord, sealedCount));
+                    // Create WordCountResponse: (word, count, userId, routingKey)
+                    responses.add(new WordCountResponse(sealedWord, sealedCount, sealedUserId, routingKey));
                 }
             }
 
@@ -127,11 +96,11 @@ public final class WordCountServiceProvider extends ConfidentialBoltService<Word
 
     @Override
     public TopologySpecification.Component expectedDestinationComponent() {
-        return ComponentConstants.WORD_COUNT;
+        return ComponentConstants.USER_CONTRIBUTION_BOUNDING;
     }
 
     @Override
-    public Collection<EncryptedValue> valuesToVerify(WordCountRequest request) {
-        return List.of(request.word());
+    public TopologySpecification.Component currentComponent() {
+        return ComponentConstants.WORD_COUNT;
     }
 }

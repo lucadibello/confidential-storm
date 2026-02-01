@@ -6,11 +6,19 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-public record SplitSentenceRequest(EncryptedValue jokeEntry) implements Serializable {
+/**
+ * Request for the SplitSentenceService to split a joke entry into words.
+ * Tuple format: (payload, userId)
+ *
+ * @param payload Encrypted payload containing the joke body (body, category, id, rating)
+ * @param userId  Encrypted user ID
+ */
+public record SplitSentenceRequest(EncryptedValue payload, EncryptedValue userId) implements Serializable {
     @Serial
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
 
     public SplitSentenceRequest {
-        Objects.requireNonNull(jokeEntry, "Encrypted body cannot be null");
+        Objects.requireNonNull(payload, "Encrypted payload cannot be null");
+        Objects.requireNonNull(userId, "Encrypted userId cannot be null");
     }
 }

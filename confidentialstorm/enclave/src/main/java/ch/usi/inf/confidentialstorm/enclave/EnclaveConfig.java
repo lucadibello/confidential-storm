@@ -41,6 +41,7 @@ public final class EnclaveConfig {
      * a secure key provisioning mechanism (i.e., using Intel SGX Remote Attestation).
      */
     public static final String STREAM_KEY_HEX = provider.getStreamKeyHex();
+
     /**
      * Minimum log level for enclave logging (fixed value).
      */

@@ -3,6 +3,7 @@ package ch.usi.inf.examples.confidential_word_count.host;
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.SplitSentenceBolt;
+import ch.usi.inf.examples.confidential_word_count.host.bolts.UserContributionBoundingBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.WordCounterBolt;
 import ch.usi.inf.examples.confidential_word_count.host.spouts.RandomJokeSpout;
 import org.apache.storm.Config;
@@ -10,6 +11,7 @@ import org.apache.storm.LocalCluster;
 import org.apache.storm.generated.StormTopology;
 import org.apache.storm.topology.ConfigurableTopology;
 import org.apache.storm.topology.TopologyBuilder;
+import org.apache.storm.tuple.Fields;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,12 +53,24 @@ public class WordCountTopology extends ConfigurableTopology {
                 ComponentConstants.SENTENCE_SPLIT.toString()
         );
 
+        // UserContributionBoundingBolt: bounds user contributions to the histogram
+        builder.setBolt(
+                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString(),
+                new UserContributionBoundingBolt(),
+                2
+        ).fieldsGrouping(
+                ComponentConstants.WORD_COUNT.toString(),
+                new Fields("routingKey")
+        );
+
         // HistogramBolt: merges partial counters into a single (global) histogram
         builder.setBolt(
                 ComponentConstants.HISTOGRAM_GLOBAL.toString(),
                 new HistogramBolt(),
                 1
-        ).globalGrouping(ComponentConstants.WORD_COUNT.toString());
+        ).globalGrouping(
+                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString()
+        );
 
         // configure spout wait strategy to avoid starving other bolts
         // NOTE: learn more here https://storm.apache.org/releases/current/Performance.html

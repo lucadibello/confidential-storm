@@ -1,12 +1,10 @@
 package ch.usi.inf.examples.confidential_word_count.enclave.service.bolts;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
-import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.dp.StreamingDPMechanism;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 import ch.usi.inf.confidentialstorm.enclave.util.DPUtil;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveJsonUtil;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import ch.usi.inf.examples.confidential_word_count.common.api.histogram.HistogramService;
@@ -17,15 +15,13 @@ import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import com.google.auto.service.AutoService;
 
-import java.util.*;
+import java.util.Map;
+import java.util.Objects;
 
 @AutoService(HistogramService.class)
 public final class HistogramServiceProvider extends ConfidentialBoltService<HistogramUpdateRequest> implements HistogramService {
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(HistogramService.class);
     private final StreamingDPMechanism mechanism;
-
-    // for development purposes, we define the expected JSON fields here to validate the input
-    private final Set<String> expectedJsonFields = new HashSet<>(List.of("word", "user_id"));
 
     @SuppressWarnings("unused")
     public HistogramServiceProvider() {
@@ -52,45 +48,17 @@ public final class HistogramServiceProvider extends ConfidentialBoltService<Hist
     @Override
     public HistogramUpdateAckResponse update(HistogramUpdateRequest update) throws EnclaveServiceException {
         try {
-            // Decrypt payload to get word and user_id
-            String jsonPayload = sealedPayload.decryptToString(update.word());
-            Map<String, Object> jsonMap = EnclaveJsonUtil.parseJson(jsonPayload);
+            // Decrypt word
+            String word = Objects.requireNonNull(decryptToString(update.word()), "Missing 'word' field in payload");
+            // Decrypt userId
+            String userId = Objects.requireNonNull(decryptToString(update.userId()), "Missing 'userId' field in payload");
+            // Decrypt count (which is already pre-aggregated and clamped)
+            double clamped_count = decryptToDouble(update.count());
 
-            // Validate expected fields
-            if (!jsonMap.keySet().containsAll(expectedJsonFields)) {
-                log.warn("Invalid payload structure: {}", jsonPayload);
-            }
+            // Register contribution from user to the DP mechanism
+            mechanism.addContribution(word, clamped_count, userId);
 
-            // Extract word from payload
-            String word = (String) jsonMap.get("word");
-            if (word == null) {
-                log.warn("Missing 'word' field in payload: {}", jsonPayload);
-                throw new RuntimeException("Missing 'word' field in payload");
-            }
-
-            // Extract user_id from payload
-            String userId = String.valueOf(jsonMap.get("user_id")); // long to string
-            if (userId == null) {
-                log.warn("Missing 'user_id' field in payload: {}", jsonPayload);
-                throw new RuntimeException("Missing 'user_id' field in payload");
-            }
-
-            // Decrypt count (which is already pre-aggregated -> count >= 1)
-            long count = Long.parseLong(sealedPayload.decryptToString(update.count()));
-            if (count < 1) {
-                log.warn("Invalid count value: {} in payload: {}", count, jsonPayload);
-                throw new RuntimeException("Invalid count value in payload");
-            }
-
-            // Handle aggregated counts by treating them as multiple unit contributions (ensure contribution bounding is applied)
-            for (int i = 0; i < count; i++) {
-                // record unit contribution
-                if (!mechanism.addContribution(word, 1.0, userId)) {
-                    log.warn("Contribution for word '{}' from user '{}' was not added (contribution bounding has been exceeded)", word, userId);
-                }
-            }
-
-            // return acknowledgment to indicate successful processing
+            // Return acknowledgment to indicate successful processing
             return new HistogramUpdateAckResponse();
         } catch (Throwable t) {
             this.exceptionCtx.handleException(t);
@@ -112,16 +80,16 @@ public final class HistogramServiceProvider extends ConfidentialBoltService<Hist
 
     @Override
     public TopologySpecification.Component expectedSourceComponent() {
-        return ComponentConstants.WORD_COUNT;
+        return ComponentConstants.USER_CONTRIBUTION_BOUNDING;
     }
 
     @Override
     public TopologySpecification.Component expectedDestinationComponent() {
-        return ComponentConstants.HISTOGRAM_GLOBAL;
+        return ComponentConstants.HISTOGRAM_GLOBAL; // ownership remains here
     }
 
     @Override
-    public Collection<EncryptedValue> valuesToVerify(HistogramUpdateRequest request) {
-        return List.of(request.word(), request.count());
+    public TopologySpecification.Component currentComponent() {
+        return ComponentConstants.HISTOGRAM_GLOBAL;
     }
 }

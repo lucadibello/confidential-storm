@@ -78,7 +78,6 @@ public final class SealedPayload {
                             TopologySpecification.Component expectedDestinationComponent) {
         Objects.requireNonNull(expectedDestinationComponent, "Expected destination cannot be null");
 
-        log.debug("Decoding AAD for route verification");
         DecodedAAD aad = DecodedAAD.fromBytes(sealed.associatedData());
         log.debug("Decoded AAD: {} using nonce: {}", aad, HexFormat.of().formatHex(sealed.nonce()));
         log.debug("Expected source: {}", expectedSourceComponent);

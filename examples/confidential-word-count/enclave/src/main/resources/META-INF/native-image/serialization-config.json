@@ -9,6 +9,9 @@
   { "name": "ch.usi.inf.examples.confidential_word_count.common.api.histogram.model.HistogramUpdateRequest" },
   { "name": "ch.usi.inf.examples.confidential_word_count.common.api.split.model.SplitSentenceRequest" },
   { "name": "ch.usi.inf.examples.confidential_word_count.common.api.split.model.SplitSentenceResponse" },
+  { "name": "ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutRouterRequest" },
+  { "name": "ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutRouterResponse" },
+  { "name": "ch.usi.inf.examples.confidential_word_count.common.api.split.model.SealedWord"},
 
   { "name": "org.apache.teaclave.javasdk.common.EnclaveInvocationContext" },
   { "name": "org.apache.teaclave.javasdk.common.EnclaveInvocationResult" },
