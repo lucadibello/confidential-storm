@@ -3,6 +3,7 @@ package ch.usi.inf.examples.confidential_word_count.enclave.service.bolts;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
+import ch.usi.inf.confidentialstorm.enclave.crypto.Hash;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
@@ -56,7 +57,8 @@ public final class SplitSentenceServiceProvider
             // The userId is already encrypted separately - we just need to re-encrypt it
             // with the correct AAD for the next hop
             int seq = nextSequenceNumber();
-            EncryptedValue reEncryptedUserId = encrypt(decryptToBytes(request.userId()), seq);
+            String userIdStr = decryptToString(request.userId());
+            EncryptedValue reEncryptedUserId = encrypt(userIdStr, seq);
 
             // Split the joke text into words
             //noinspection SimplifyStreamApiCallChains
@@ -71,8 +73,15 @@ public final class SplitSentenceServiceProvider
             for (String plainWord : plainWords) {
                 // Encrypt just the word (no user_id embedded)
                 EncryptedValue encryptedWord = encrypt(plainWord, seq);
+                // Encrypt count (1)
+                EncryptedValue encryptedCount = encrypt(1L, seq);
+
+                // Generate routing info that links user to word (needed to route to correct user contribution boundary bolt)
+                String routingInfo = "user:" + userIdStr + "|word:" + plainWord;
+                byte[] routingKey = Hash.computeHash(routingInfo.getBytes());
+
                 // Pair with the re-encrypted userId
-                sealedWords.add(new SealedWord(encryptedWord, reEncryptedUserId));
+                sealedWords.add(new SealedWord(encryptedWord, encryptedCount, reEncryptedUserId, routingKey));
             }
 
             // Return response with tuple format: List<(word, userId)>
@@ -90,7 +99,7 @@ public final class SplitSentenceServiceProvider
 
     @Override
     public TopologySpecification.Component expectedDestinationComponent() {
-        return ComponentConstants.WORD_COUNT;
+        return ComponentConstants.USER_CONTRIBUTION_BOUNDING;
     }
 
     @Override

@@ -4,7 +4,6 @@ import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentCons
 import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.SplitSentenceBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.UserContributionBoundingBolt;
-import ch.usi.inf.examples.confidential_word_count.host.bolts.WordCounterBolt;
 import ch.usi.inf.examples.confidential_word_count.host.spouts.RandomJokeSpout;
 import org.apache.storm.Config;
 import org.apache.storm.LocalCluster;
@@ -44,22 +43,13 @@ public class WordCountTopology extends ConfigurableTopology {
                 2
         ).shuffleGrouping(ComponentConstants.RANDOM_JOKE_SPOUT.toString());
 
-        // WordCountBolt: counts the words that are emitted
-        builder.setBolt(
-                ComponentConstants.WORD_COUNT.toString(),
-                new WordCounterBolt(),
-                2
-        ).shuffleGrouping(
-                ComponentConstants.SENTENCE_SPLIT.toString()
-        );
-
         // UserContributionBoundingBolt: bounds user contributions to the histogram
         builder.setBolt(
                 ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString(),
                 new UserContributionBoundingBolt(),
                 2
         ).fieldsGrouping(
-                ComponentConstants.WORD_COUNT.toString(),
+                ComponentConstants.SENTENCE_SPLIT.toString(),
                 new Fields("routingKey")
         );
 
