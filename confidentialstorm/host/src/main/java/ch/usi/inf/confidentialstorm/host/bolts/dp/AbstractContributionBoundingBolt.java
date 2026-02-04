@@ -14,11 +14,11 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
-public abstract class ContributionBoundingBolt extends ConfidentialBolt<UserContributionBoundingService> {
-    private static final Logger LOG = LoggerFactory.getLogger(ContributionBoundingBolt.class);
+public abstract class AbstractContributionBoundingBolt extends ConfidentialBolt<UserContributionBoundingService> {
+    private static final Logger LOG = LoggerFactory.getLogger(AbstractContributionBoundingBolt.class);
     private int boltId;
 
-    public ContributionBoundingBolt() {
+    public AbstractContributionBoundingBolt() {
         super(UserContributionBoundingService.class);
     }
 
