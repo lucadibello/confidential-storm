@@ -114,74 +114,37 @@ public abstract class ConfidentialBoltService<T> {
                         values.add(value);
                     }
                 } catch (IllegalAccessException e) {
-                    exceptionCtx.handleException(e);
+                    throw new EnclaveServiceException("Failed to access field " + field.getName(), e);
                 }
             }
         }
         return values;
     }
 
-    private void verifyRoute(Collection<EncryptedValue> values) throws EnclaveServiceException {
-        // NOTE: the destination component is the current component!
-        TopologySpecification.Component currentComponent = EnclaveConfig.ENABLE_ROUTE_VALIDATION
-                ? Objects.requireNonNull(currentComponent(), "Expected destination component cannot be null")
-                : null;
-        TopologySpecification.Component expectedSource = EnclaveConfig.ENABLE_ROUTE_VALIDATION
-                ? expectedSourceComponent()
-                : null;
-
-        for (EncryptedValue sealedValue : values) {
-            try {
-                // NOTE: if the source is null, it means that the value was created outside ConfidentialStorm
-                // hence, verifyRoute would verify only the destination component
-                sealedPayload.verifyRoute(sealedValue, expectedSource, currentComponent);
-            } catch (Exception e) {
-                exceptionCtx.handleException(e);
-            }
-        }
+    private boolean isTupleRoutedCorrectly(EncryptedValue value) {
+        return sealedPayload.isRouteValid(value, expectedSourceComponent(), currentComponent());
     }
 
     // NOTE: we assume all encrypted fields in the same request share the same producer and sequence number
-    private void verifyReplayProtection(Collection<EncryptedValue> values) throws EnclaveServiceException {
-        String producerId = null;
-        Long sequence = null;
-
-        for (EncryptedValue sealedValue : values) {
-            try {
-                // extract AAD and check producer/sequence consistency
-                DecodedAAD aad = DecodedAAD.fromBytes(sealedValue.associatedData());
-                String currentProducer = aad.producerId().orElseThrow(() ->
-                        new SecurityException("AAD missing producer_id"));
-                Long currentSeq = aad.sequenceNumber().orElseThrow(() ->
-                        new SecurityException("AAD missing sequence number"));
-
-                // get first available producer/sequence tuple and ensure all values have the same
-                if (producerId == null && sequence == null) {
-                    producerId = currentProducer;
-                    sequence = currentSeq;
-                } else if (!Objects.equals(producerId, currentProducer) || !Objects.equals(sequence, currentSeq)) {
-                    exceptionCtx.handleException(
-                            new SecurityException("Mismatch between AAD producer/sequence across encrypted fields")
-                    );
-                }
-            } catch (Exception e) {
-                exceptionCtx.handleException(e);
-            }
-        }
-
-        // ensure that we got valid producer/sequence info
-        if (producerId == null || sequence == null) {
-            exceptionCtx.handleException(new SecurityException("Missing producer/sequence information"));
-        }
+    private boolean isTupleNotReplay(EncryptedValue value) {
+        // extract AAD and check producer/sequence consistency
+        DecodedAAD aad = DecodedAAD.fromBytes(value.associatedData());
+        String producerId = aad.producerId().orElseThrow(() ->
+                new SecurityException("AAD missing producer_id"));
+        Long sequence = aad.sequenceNumber().orElseThrow(() ->
+                new SecurityException("AAD missing sequence number"));
 
         // now, check sequence number for replay attacks -> if the sequence number is outside the replay window or
         // has already been seen, we reject the request
 
         // we create or get the existing replay window for this producer (1 replay window per producer)
-        ReplayWindow window = replayWindows.computeIfAbsent(producerId, id -> new ReplayWindow(REPLAY_WINDOW_SIZE));
-        if (!window.accept(sequence)) {
-            exceptionCtx.handleException(new SecurityException("Replay or out-of-window sequence " + sequence + " for producer " + producerId));
-        }
+        return replayWindows
+                .computeIfAbsent(producerId, id -> new ReplayWindow(REPLAY_WINDOW_SIZE))
+                .accept(sequence);
+    }
+
+    protected void verify(T request) throws EnclaveServiceException {
+        verify(request, false, false);
     }
 
     /**
@@ -191,14 +154,35 @@ public abstract class ConfidentialBoltService<T> {
      * @param request the request containing the sealed values to verify
      * @throws EnclaveServiceException if any verification step fails
      */
-    protected void verify(T request) throws EnclaveServiceException {
+    protected void verify(T request, boolean skipRouteValidation, boolean skipReplayProtection)
+            throws EnclaveServiceException {
         // extract all critical values from the request
         Collection<EncryptedValue> values = valuesToVerify(request);
 
         // if > 0 values to verify, proceed
         if (!values.isEmpty()) {
-            if (EnclaveConfig.ENABLE_ROUTE_VALIDATION) verifyRoute(values);
-            if (EnclaveConfig.ENABLE_REPLAY_PROTECTION) verifyReplayProtection(values);
+            for (EncryptedValue value : values) {
+                if (skipRouteValidation) {
+                    if (EnclaveConfig.ENABLE_ROUTE_VALIDATION) {
+                        if (!isTupleRoutedCorrectly(value)) {
+                            log.error("Tuple routing validation failed for value with producer_id={}, seq={}",
+                                    DecodedAAD.fromBytes(value.associatedData()).producerId().orElse("unknown"),
+                                    DecodedAAD.fromBytes(value.associatedData()).sequenceNumber().orElse(-1L));
+                            throw new SecurityException("Tuple routing validation failed");
+                        }
+                    }
+                }
+                if (skipReplayProtection) {
+                    if (EnclaveConfig.ENABLE_REPLAY_PROTECTION) {
+                        if (!isTupleNotReplay(value)) {
+                            log.error("Replay attack detected for value with producer_id={}, seq={}",
+                                    DecodedAAD.fromBytes(value.associatedData()).producerId().orElse("unknown"),
+                                    DecodedAAD.fromBytes(value.associatedData()).sequenceNumber().orElse(-1L));
+                            throw new SecurityException("Replay attack detected");
+                        }
+                    }
+                }
+            }
         }
     }
 

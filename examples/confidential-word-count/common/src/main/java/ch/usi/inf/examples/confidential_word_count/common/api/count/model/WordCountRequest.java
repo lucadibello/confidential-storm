@@ -13,7 +13,7 @@ import java.util.Objects;
  * @param word   Encrypted word
  * @param userId Encrypted user ID
  */
-public record WordCountRequest(EncryptedValue word, EncryptedValue userId) implements Serializable {
+public record WordCountRequest(EncryptedValue word, EncryptedValue userId) implements WordCountBaseRequest {
     @Serial
     private static final long serialVersionUID = 2L;
 

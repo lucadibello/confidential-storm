@@ -59,7 +59,6 @@ public abstract class ContributionBoundingBolt extends ConfidentialBolt<UserCont
         EncryptedValue word = getEncryptedPayload(input);
         EncryptedValue count = getEncryptedCount(input);
         EncryptedValue userId = getEncryptedUserId(input);
-        LOG.debug("[UserContributionBoundingBolt {}] Received tuple", boltId);
 
         // Check contribution limit
         UserContributionBoundingRequest req = new UserContributionBoundingRequest(word, count, userId);
@@ -68,10 +67,8 @@ public abstract class ContributionBoundingBolt extends ConfidentialBolt<UserCont
         // check if authorized
         if (!resp.isDropped()) {
             // If authorized, emit tuple format: (word, clampedCount, userId)
-            LOG.info("[UserContributionBoundingBolt {}] Forwarding word", boltId);
+            LOG.debug("[UserContributionBoundingBolt {}] Forwarding word", boltId);
             getCollector().emit(input, new Values(resp.word(), resp.clampedCount(), resp.userId()));
-        } else {
-            LOG.info("[UserContributionBoundingBolt {}] Dropping word (limit exceeded)", boltId);
         }
 
         getCollector().ack(input);

@@ -13,11 +13,11 @@ import java.util.Objects;
  * @param payload Encrypted payload (body, category, id, rating)
  * @param userId  Encrypted user ID
  */
-public record SpoutRouterRequest(EncryptedValue payload, EncryptedValue userId) implements Serializable {
+public record SpoutPreprocessingRequest(EncryptedValue payload, EncryptedValue userId) implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public SpoutRouterRequest {
+    public SpoutPreprocessingRequest {
         Objects.requireNonNull(payload, "Payload cannot be null");
         Objects.requireNonNull(userId, "UserId cannot be null");
     }

@@ -4,8 +4,8 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceExcept
 import ch.usi.inf.confidentialstorm.host.spouts.ConfidentialSpout;
 import ch.usi.inf.examples.confidential_word_count.common.api.spout.SpoutPreprocessingService;
 import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SealedJokeEntry;
-import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutRouterRequest;
-import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutRouterResponse;
+import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutPreprocessingRequest;
+import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutPreprocessingResponse;
 import ch.usi.inf.examples.confidential_word_count.host.util.JokeReader;
 import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
@@ -59,8 +59,8 @@ public class RandomJokeSpout extends ConfidentialSpout<SpoutPreprocessingService
         // use service to configure route for the joke entry (spout -> splitter)
         // Request format: (payload, userId)
         LOG.debug("[RandomJokeSpout {}] Testing route for joke index {}", this.state.getTaskId(), idx);
-        SpoutRouterResponse routedJokeEntry = getService().setupRoute(
-                new SpoutRouterRequest(currentJokeEntry.payload(), currentJokeEntry.userId()));
+        SpoutPreprocessingResponse routedJokeEntry = getService().setupRoute(
+                new SpoutPreprocessingRequest(currentJokeEntry.payload(), currentJokeEntry.userId()));
 
         // Emit tuple format: (payload, userId)
         // NOTE: payload contains fields: ["body", "category", "id", "rating"]

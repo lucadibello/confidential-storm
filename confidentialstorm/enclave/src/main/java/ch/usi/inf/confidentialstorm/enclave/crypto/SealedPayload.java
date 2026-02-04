@@ -73,7 +73,7 @@ public final class SealedPayload {
         return new EncryptedValue(aad, nonce, ciphertext);
     }
 
-    public void verifyRoute(EncryptedValue sealed,
+    public boolean isRouteValid(EncryptedValue sealed,
                             TopologySpecification.Component expectedSourceComponent,
                             TopologySpecification.Component expectedDestinationComponent) {
         Objects.requireNonNull(expectedDestinationComponent, "Expected destination cannot be null");
@@ -83,10 +83,8 @@ public final class SealedPayload {
         log.debug("Expected source: {}", expectedSourceComponent);
         log.debug("Expected destination: {}", expectedDestinationComponent);
 
-        if (expectedSourceComponent != null) {
-            aad.requireSource(expectedSourceComponent);
-        }
-        aad.requireDestination(expectedDestinationComponent);
+        return aad.matchesSource(expectedSourceComponent)
+                && aad.matchesDestination(expectedDestinationComponent);
     }
 
     private Cipher initCipher(int mode, byte[] nonce, byte[] aad) throws CipherInitializationException {

@@ -5,8 +5,6 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.Hash;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
-import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
-import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import ch.usi.inf.examples.confidential_word_count.common.api.count.WordCountService;
 import ch.usi.inf.examples.confidential_word_count.common.api.count.model.*;
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
@@ -15,9 +13,9 @@ import com.google.auto.service.AutoService;
 import java.util.*;
 
 @AutoService(WordCountService.class)
-public final class WordCountServiceProvider extends ConfidentialBoltService<WordCountRequest> implements WordCountService {
-
-    private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(WordCountService.class);
+public final class WordCountServiceProvider
+        extends ConfidentialBoltService<WordCountBaseRequest>
+        implements WordCountService {
 
     // buffer: Word -> (UserId -> Count)
     private final Map<String, Map<String, Long>> buffer = new HashMap<>();
@@ -25,6 +23,9 @@ public final class WordCountServiceProvider extends ConfidentialBoltService<Word
     @Override
     public WordCountAckResponse count(WordCountRequest request) throws EnclaveServiceException {
         try {
+            // verify request before processing
+            verify(request);
+
             // Decrypt the word
             String word = Objects.requireNonNull(decryptToString(request.word()), "Missing word in payload");
             // Decrypt the userId
@@ -46,6 +47,9 @@ public final class WordCountServiceProvider extends ConfidentialBoltService<Word
     public WordCountFlushResponse flush(WordCountFlushRequest request) throws EnclaveServiceException {
         // NOTE: no verification needed as the request has no payload
         try {
+            // verify request
+            verify(request);
+
             // Prepare list to hold WordCountResponses
             List<WordCountResponse> responses = new ArrayList<>();
 

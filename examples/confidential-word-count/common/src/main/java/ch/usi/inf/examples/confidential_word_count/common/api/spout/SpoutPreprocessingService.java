@@ -1,8 +1,8 @@
 package ch.usi.inf.examples.confidential_word_count.common.api.spout;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
-import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutRouterRequest;
-import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutRouterResponse;
+import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutPreprocessingRequest;
+import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutPreprocessingResponse;
 import org.apache.teaclave.javasdk.common.annotations.EnclaveService;
 
 @EnclaveService
@@ -15,5 +15,5 @@ public interface SpoutPreprocessingService {
      * @return
      * @throws EnclaveServiceException
      */
-    SpoutRouterResponse setupRoute(SpoutRouterRequest request) throws EnclaveServiceException;
+    SpoutPreprocessingResponse setupRoute(SpoutPreprocessingRequest request) throws EnclaveServiceException;
 }

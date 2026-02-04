@@ -34,6 +34,12 @@ public class EnclaveServiceException extends Exception implements Serializable {
         this.originalMessage = message;
     }
 
+    public EnclaveServiceException(String message, Throwable cause) {
+        super(message, cause);
+        this.originalType = cause.getClass().getName();
+        this.originalMessage = cause.getMessage();
+    }
+
     private static String buildMessage(String operation, String type, String msg) {
         StringBuilder builder = new StringBuilder();
         builder.append(operation).append(" failed in enclave with ").append(type);

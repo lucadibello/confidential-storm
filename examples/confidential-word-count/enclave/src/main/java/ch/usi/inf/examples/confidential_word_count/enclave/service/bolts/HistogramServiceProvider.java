@@ -19,8 +19,9 @@ import java.util.Map;
 import java.util.Objects;
 
 @AutoService(HistogramService.class)
-public final class HistogramServiceProvider extends ConfidentialBoltService<HistogramUpdateRequest> implements HistogramService {
-    private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(HistogramService.class);
+public final class HistogramServiceProvider
+        extends ConfidentialBoltService<HistogramUpdateRequest>
+        implements HistogramService {
     private final StreamingDPMechanism mechanism;
 
     @SuppressWarnings("unused")
@@ -48,6 +49,9 @@ public final class HistogramServiceProvider extends ConfidentialBoltService<Hist
     @Override
     public HistogramUpdateAckResponse update(HistogramUpdateRequest update) throws EnclaveServiceException {
         try {
+            // verify request
+            verify(update);
+
             // Decrypt word
             String word = Objects.requireNonNull(decryptToString(update.word()), "Missing 'word' field in payload");
             // Decrypt userId

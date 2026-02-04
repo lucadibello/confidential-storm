@@ -5,7 +5,7 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
 
-public record WordCountFlushResponse(List<WordCountResponse> histogram) implements Serializable {
+public record WordCountFlushResponse(List<WordCountResponse> histogram) implements WordCountBaseRequest {
     @Serial
     private static final long serialVersionUID = 1L;
 

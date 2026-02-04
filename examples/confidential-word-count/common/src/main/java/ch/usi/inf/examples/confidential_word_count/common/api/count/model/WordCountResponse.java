@@ -16,7 +16,7 @@ import java.util.Objects;
  * @param routingKey Routing key for fieldsGrouping (hash of user:userId|word:word)
  */
 public record WordCountResponse(EncryptedValue word, EncryptedValue count, EncryptedValue userId, byte[] routingKey)
-        implements Serializable {
+        implements WordCountBaseRequest {
     @Serial
     private static final long serialVersionUID = 2L;
 

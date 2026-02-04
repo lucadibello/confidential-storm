@@ -5,8 +5,8 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 import ch.usi.inf.examples.confidential_word_count.common.api.spout.SpoutPreprocessingService;
-import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutRouterRequest;
-import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutRouterResponse;
+import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutPreprocessingRequest;
+import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SpoutPreprocessingResponse;
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import com.google.auto.service.AutoService;
 
@@ -22,14 +22,14 @@ import com.google.auto.service.AutoService;
  */
 @AutoService(SpoutPreprocessingService.class)
 public final class SpoutPreprocessingServiceProvider
-        extends ConfidentialBoltService<SpoutRouterRequest>
+        extends ConfidentialBoltService<SpoutPreprocessingRequest>
         implements SpoutPreprocessingService {
 
     @Override
-    public SpoutRouterResponse setupRoute(SpoutRouterRequest request) throws EnclaveServiceException {
+    public SpoutPreprocessingResponse setupRoute(SpoutPreprocessingRequest request) throws EnclaveServiceException {
         try {
-            // ensure request is valid
-            // NOTE: verify(request);
+            // ensure request is valid (skip replay protection as spout data does not have sequence numbers)
+            verify(request, true, false);
 
             // Decrypt and re-encrypt payload / user_id with new AAD routing information
             int seq = nextSequenceNumber();
@@ -37,7 +37,7 @@ public final class SpoutPreprocessingServiceProvider
             EncryptedValue reEncryptedUserId = encrypt(decryptToBytes(request.userId()), seq);
 
             // Return tuple format: (payload, userId)
-            return new SpoutRouterResponse(reEncryptedPayload, reEncryptedUserId);
+            return new SpoutPreprocessingResponse(reEncryptedPayload, reEncryptedUserId);
         } catch (Throwable t) {
             exceptionCtx.handleException(t);
             return null;
@@ -52,7 +52,7 @@ public final class SpoutPreprocessingServiceProvider
     @Override
     public TopologySpecification.Component expectedDestinationComponent() {
         // the data will be routed to the same spout component, which will then forward it to the correct downstream bolt
-        return ComponentConstants.RANDOM_JOKE_SPOUT;
+        return ComponentConstants.SENTENCE_SPLIT;
     }
 
     @Override

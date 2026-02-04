@@ -17,7 +17,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @AutoService(SplitSentenceService.class)
-public final class SplitSentenceServiceProvider extends ConfidentialBoltService<SplitSentenceRequest> implements SplitSentenceService {
+public final class SplitSentenceServiceProvider
+        extends ConfidentialBoltService<SplitSentenceRequest>
+        implements SplitSentenceService {
 
     /**
      * The logger instance for this class.
@@ -32,6 +34,9 @@ public final class SplitSentenceServiceProvider extends ConfidentialBoltService<
     @Override
     public SplitSentenceResponse split(SplitSentenceRequest request) throws EnclaveServiceException {
         try {
+            // verify the request before processing
+            verify(request);
+
             // Decrypt the payload (body, category, id, rating)
             Map<String, Object> payloadMap = decryptToMap(request.payload());
 

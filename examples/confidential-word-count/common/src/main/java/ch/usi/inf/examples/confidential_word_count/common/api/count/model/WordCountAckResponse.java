@@ -7,7 +7,7 @@ import java.io.Serializable;
  * Represents an acknowledgment response for a WordCount operation,
  * indicating that the word was successfully processed and buffered.
  */
-public record WordCountAckResponse() implements Serializable {
+public record WordCountAckResponse() implements WordCountBaseRequest {
     @Serial
     private static final long serialVersionUID = 1L;
 }

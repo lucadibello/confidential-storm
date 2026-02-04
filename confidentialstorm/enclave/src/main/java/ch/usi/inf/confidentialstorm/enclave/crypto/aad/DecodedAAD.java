@@ -63,18 +63,6 @@ public final class DecodedAAD {
         return null;
     }
 
-    public Map<String, Object> attributes() {
-        return attributes;
-    }
-
-    public Optional<String> sourceName() {
-        return Optional.ofNullable(sourceName);
-    }
-
-    public Optional<String> destinationName() {
-        return Optional.ofNullable(destinationName);
-    }
-
     public Optional<Long> sequenceNumber() {
         return Optional.ofNullable(sequenceNumber);
     }
@@ -97,31 +85,6 @@ public final class DecodedAAD {
             return false;
         }
         return destinationName.equals(component.getName());
-    }
-
-    public void requireSource(TopologySpecification.Component component) {
-        Objects.requireNonNull(sourceName, "AAD missing source component");
-
-        if (!matchesSource(component)) {
-            throw new IllegalStateException("AAD source mismatch for " + component.getName());
-        }
-    }
-
-    public void requireDestination(TopologySpecification.Component component) {
-        Objects.requireNonNull(destinationName, "AAD missing destination component");
-        if (!matchesDestination(component)) {
-            throw new IllegalStateException("AAD destination mismatch for " + component.getName());
-        }
-    }
-
-    public void requireSequenceNumber(long expectedSequenceNumber) {
-        if (sequenceNumber == null) {
-            throw new IllegalArgumentException("AAD missing sequence number");
-        }
-        if (!sequenceNumber.equals(expectedSequenceNumber)) {
-            throw new IllegalArgumentException("AAD sequence number mismatch: expected "
-                    + expectedSequenceNumber + ", got " + sequenceNumber);
-        }
     }
 
     @Override

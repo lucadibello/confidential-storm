@@ -13,14 +13,14 @@ import org.apache.commons.math3.util.FastMath;
 
 import java.util.Objects;
 
-public abstract class UserContributionBoundingServiceProviderTemplate
+public abstract class AbstractUserContributionBoundingServiceProvider
         extends ConfidentialBoltService<UserContributionBoundingRequest>
         implements UserContributionBoundingService {
 
     /**
      * The logger for this class.
      */
-    private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(UserContributionBoundingServiceProviderTemplate.class);
+    private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(AbstractUserContributionBoundingServiceProvider.class);
 
     private final UserContributionLimiter userContributionLimiter = new UserContributionLimiter();
 
@@ -45,7 +45,7 @@ public abstract class UserContributionBoundingServiceProviderTemplate
     @Override
     public UserContributionBoundingResponse checkAndClamp(UserContributionBoundingRequest request) throws EnclaveServiceException {
         try {
-            // Verify request integrity
+            // Verify request
             super.verify(request);
 
             // Decrypt word (now just a plain string, not JSON with user_id embedded)
@@ -69,11 +69,10 @@ public abstract class UserContributionBoundingServiceProviderTemplate
 
             // Clamp the per-record contribution to L_m
             final double perRecordClamp = getPerRecordClamp();
-            long userCount = userContributionLimiter.getUserCount(userId);
-            double clamped = FastMath.max(-perRecordClamp, FastMath.min(perRecordClamp, userCount));
+            double clamped = FastMath.max(-perRecordClamp, FastMath.min(perRecordClamp, count));
 
             log.debug("[UserContributionBounding] Accepted contribution from user {}: original count = {}, clamped count = {}",
-                    userId, userCount, clamped);
+                    userId, count, clamped);
 
             // Re-encrypt all values with new AAD for next hop
             int seq = nextSequenceNumber();
