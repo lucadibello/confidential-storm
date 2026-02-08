@@ -12,7 +12,7 @@ import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.enclave.exception.EnclaveExceptionContext;
 import ch.usi.inf.confidentialstorm.enclave.security.ReplayWindow;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveJsonUtil;
+import ch.usi.inf.confidentialstorm.common.util.EnclaveJsonUtil;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 

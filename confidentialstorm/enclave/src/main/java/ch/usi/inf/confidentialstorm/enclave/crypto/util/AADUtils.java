@@ -1,6 +1,6 @@
 package ch.usi.inf.confidentialstorm.enclave.crypto.util;
 
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveJsonUtil;
+import ch.usi.inf.confidentialstorm.common.util.EnclaveJsonUtil;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

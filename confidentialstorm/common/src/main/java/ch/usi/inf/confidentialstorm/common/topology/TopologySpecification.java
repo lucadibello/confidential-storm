@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -21,13 +20,9 @@ public final class TopologySpecification {
     private static final TopologyProvider provider;
 
     static {
-        ServiceLoader<TopologyProvider> loader = ServiceLoader.load(TopologyProvider.class);
-        TopologyProvider found = null;
-        for (TopologyProvider p : loader) {
-            found = p;
-            break;
-        }
-        provider = Objects.requireNonNullElseGet(found, () -> component -> Collections.emptyList());
+        // Secure loading: Direct instantiation of the EncryptedTopologyProvider
+        // avoiding ServiceLoader which can be hijacked via classpath manipulation.
+        provider = new EncryptedTopologyProvider();
     }
 
     private TopologySpecification() {

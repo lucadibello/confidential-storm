@@ -24,43 +24,10 @@ public class WordCountTopology extends ConfigurableTopology {
 
     @Override
     public int run(String[] args) {
-        TopologyBuilder builder = new TopologyBuilder();
+        TopologyBuilder builder = getTopologyBuilder();
         Logger LOG = LoggerFactory.getLogger(WordCountTopology.class);
         boolean isProd = isProdEnvironment(args);
         LOG.info("Starting WordCountTopology in {} mode", isProd ? "PROD" : "LOCAL");
-
-        // RandomJokeSpout: emits random jokes (json entries with "body" field)
-        builder.setSpout(
-                ComponentConstants.RANDOM_JOKE_SPOUT.toString(),
-                new RandomJokeSpout(),
-                1
-        );
-
-        // SplitSentenceBolt: splits body into words
-        builder.setBolt(
-                ComponentConstants.SENTENCE_SPLIT.toString(),
-                new SplitSentenceBolt(),
-                2
-        ).shuffleGrouping(ComponentConstants.RANDOM_JOKE_SPOUT.toString());
-
-        // UserContributionBoundingBolt: bounds user contributions to the histogram
-        builder.setBolt(
-                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString(),
-                new UserContributionBoundingBolt(),
-                2
-        ).fieldsGrouping(
-                ComponentConstants.SENTENCE_SPLIT.toString(),
-                new Fields("routingKey")
-        );
-
-        // HistogramBolt: merges partial counters into a single (global) histogram
-        builder.setBolt(
-                ComponentConstants.HISTOGRAM_GLOBAL.toString(),
-                new HistogramBolt(),
-                1
-        ).globalGrouping(
-                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString()
-        );
 
         // configure spout wait strategy to avoid starving other bolts
         // NOTE: learn more here https://storm.apache.org/releases/current/Performance.html
@@ -118,6 +85,45 @@ public class WordCountTopology extends ConfigurableTopology {
             // submit topology
             return submit("WordCountTopology", conf, builder);
         }
+    }
+
+    @ch.usi.inf.confidentialstorm.common.annotation.ConfidentialTopologyBuilder
+    public static TopologyBuilder getTopologyBuilder() {
+        TopologyBuilder builder = new TopologyBuilder();
+
+        // RandomJokeSpout: emits random jokes (json entries with "body" field)
+        builder.setSpout(
+                ComponentConstants.RANDOM_JOKE_SPOUT.toString(),
+                new RandomJokeSpout(),
+                1
+        );
+
+        // SplitSentenceBolt: splits body into words
+        builder.setBolt(
+                ComponentConstants.SENTENCE_SPLIT.toString(),
+                new SplitSentenceBolt(),
+                2
+        ).shuffleGrouping(ComponentConstants.RANDOM_JOKE_SPOUT.toString());
+
+        // UserContributionBoundingBolt: bounds user contributions to the histogram
+        builder.setBolt(
+                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString(),
+                new UserContributionBoundingBolt(),
+                2
+        ).fieldsGrouping(
+                ComponentConstants.SENTENCE_SPLIT.toString(),
+                new Fields("routingKey")
+        );
+
+        // HistogramBolt: merges partial counters into a single (global) histogram
+        builder.setBolt(
+                ComponentConstants.HISTOGRAM_GLOBAL.toString(),
+                new HistogramBolt(),
+                1
+        ).globalGrouping(
+                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString()
+        );
+        return builder;
     }
 
     private boolean isProdEnvironment(String[] args) {
