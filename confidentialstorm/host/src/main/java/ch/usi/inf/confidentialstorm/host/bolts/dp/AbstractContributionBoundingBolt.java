@@ -1,8 +1,8 @@
 package ch.usi.inf.confidentialstorm.host.bolts.dp;
 
-import ch.usi.inf.confidentialstorm.common.api.UserContributionBoundingService;
-import ch.usi.inf.confidentialstorm.common.api.model.UserContributionBoundingRequest;
-import ch.usi.inf.confidentialstorm.common.api.model.UserContributionBoundingResponse;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.UserContributionBoundingService;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributionBoundingRequest;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributionBoundingResponse;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.ConfidentialBolt;
@@ -68,7 +68,12 @@ public abstract class AbstractContributionBoundingBolt extends ConfidentialBolt<
         if (!resp.isDropped()) {
             // If authorized, emit tuple format: (word, clampedCount, userId)
             LOG.debug("[UserContributionBoundingBolt {}] Forwarding word", boltId);
-            getCollector().emit(input, new Values(resp.word(), resp.clampedCount(), resp.userId()));
+
+            // pass to next bolt: (word, clampedCount, userId, routingKey -> for partitioning)
+            getCollector().emit(input, new Values(
+                    resp.word(), resp.clampedCount(),
+                    resp.userId(), resp.routingKey()
+            ));
         }
 
         getCollector().ack(input);

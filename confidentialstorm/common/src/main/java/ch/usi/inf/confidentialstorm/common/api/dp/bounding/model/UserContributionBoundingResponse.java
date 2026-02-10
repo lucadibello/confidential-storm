@@ -1,4 +1,4 @@
-package ch.usi.inf.confidentialstorm.common.api.model;
+package ch.usi.inf.confidentialstorm.common.api.dp.bounding.model;
 
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 
@@ -31,6 +31,11 @@ public class UserContributionBoundingResponse implements Serializable {
     private final EncryptedValue userId;
 
     /**
+     * Key used for routing the contribution to the correct partition in the downstream processing.
+     */
+    private final byte[] routingKey;
+
+    /**
      * Private constructor to initialize the UserContributionBoundingResponse.
      *
      * @param word         The encrypted word, or null if dropped.
@@ -39,10 +44,13 @@ public class UserContributionBoundingResponse implements Serializable {
      */
     private UserContributionBoundingResponse(@Nullable EncryptedValue word,
                                              @Nullable EncryptedValue clampedCount,
-                                             @Nullable EncryptedValue userId) {
+                                             @Nullable EncryptedValue userId,
+                                             @Nullable byte[] routingKey
+    ) {
         this.word = word;
         this.clampedCount = clampedCount;
         this.userId = userId;
+        this.routingKey = routingKey;
     }
 
     /**
@@ -76,12 +84,22 @@ public class UserContributionBoundingResponse implements Serializable {
     }
 
     /**
+    * Gets the routing key for the contribution.
+    *
+    * @return The routing key, or null if the contribution was dropped.
+    */
+    @Nullable
+    public byte[] routingKey() {
+        return routingKey;
+    }
+
+    /**
      * Factory method to create a dropped user contribution response.
      *
      * @return A UserContributionBoundingResponse indicating a dropped contribution.
      */
     public static UserContributionBoundingResponse dropped() {
-        return new UserContributionBoundingResponse(null, null, null);
+        return new UserContributionBoundingResponse(null, null, null, null);
     }
 
     /**
@@ -92,11 +110,12 @@ public class UserContributionBoundingResponse implements Serializable {
      * @param userId The encrypted user ID (re-encrypted with new AAD).
      * @return A UserContributionBoundingResponse indicating an authorized contribution.
      */
-    public static UserContributionBoundingResponse authorized(EncryptedValue word, EncryptedValue count, EncryptedValue userId) {
+    public static UserContributionBoundingResponse authorized(EncryptedValue word, EncryptedValue count,
+                                                              EncryptedValue userId, byte[] routingKey) {
         Objects.requireNonNull(word, "Word cannot be null for authorized response");
         Objects.requireNonNull(count, "Count cannot be null for authorized response");
         Objects.requireNonNull(userId, "UserId cannot be null for authorized response");
-        return new UserContributionBoundingResponse(word, count, userId);
+        return new UserContributionBoundingResponse(word, count, userId, routingKey);
     }
 
     /**

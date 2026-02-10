@@ -1,14 +1,13 @@
 package ch.usi.inf.examples.confidential_word_count.host.bolts;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
-import ch.usi.inf.confidentialstorm.host.bolts.ConfidentialBolt;
-import ch.usi.inf.examples.confidential_word_count.common.api.histogram.HistogramService;
-import ch.usi.inf.examples.confidential_word_count.common.api.histogram.model.HistogramSnapshotResponse;
+import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+import ch.usi.inf.confidentialstorm.host.bolts.dp.AbstractDataPerturbationBolt;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
+import org.apache.storm.tuple.Fields;
 import org.apache.storm.tuple.Tuple;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.storm.tuple.Values;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -19,22 +18,15 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class HistogramBolt extends ConfidentialBolt<HistogramService> {
-    private static final Logger LOG = LoggerFactory.getLogger(HistogramBolt.class);
+public class DataPerturbationBolt extends AbstractDataPerturbationBolt {
+
     private final String OUTPUT_FILE = "data/histogram.txt";
     private ExecutorService io;
-    private int boltId;
-
-    public HistogramBolt() {
-        super(HistogramService.class);
-    }
 
     @Override
     protected void afterPrepare(Map<String, Object> topoConf, TopologyContext context) {
         super.afterPrepare(topoConf, context);
-        this.boltId = context.getThisTaskId();
         this.io = Executors.newSingleThreadExecutor();
-        LOG.info("[HistogramBolt {}] Prepared. Snapshot output: {}", boltId, OUTPUT_FILE);
     }
 
     @Override
@@ -45,6 +37,18 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
         super.beforeCleanup();
     }
 
+    @Override
+    protected void processSnapshot(Map<String, Long> histogramSnapshot) {
+        if (io != null) {
+            // asynchronously write the snapshot to avoid blocking the main processing thread
+            io.submit(() -> writeSnapshot(histogramSnapshot));
+        } else {
+            LOG.error("IO executor service is not initialized. Cannot write snapshot.");
+        }
+
+        // pass the snapshot to the next bolt in the topology
+        getCollector().emit(new Values(histogramSnapshot));
+    }
 
     private void writeSnapshot(Map<String, Long> snap) {
         File file = new File(OUTPUT_FILE);
@@ -72,26 +76,22 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
     }
 
     @Override
-    protected void processTuple(Tuple input, HistogramService service) throws EnclaveServiceException {
-        // if tick tuple -> export histogram to file
-        if (isTickTuple(input)) {
-            LOG.info("[HistogramBolt {}] Received tick tuple. Exporting histogram snapshot...", boltId);
-            HistogramSnapshotResponse snapshot = service.snapshot();
-
-            Map<String, Long> snap = snapshot.counts();
-            if (io != null) {
-                io.submit(() -> writeSnapshot(snap));
-            } else {
-                // export snapshot to file
-                writeSnapshot(snap);
-            }
-            LOG.info("[HistogramBolt {}] Exported histogram snapshot with {} entries.", boltId, snapshot.counts().size());
-            return;
-        }
+    public void declareOutputFields(OutputFieldsDeclarer outputFieldsDeclarer) {
+        outputFieldsDeclarer.declare(new Fields("histogram"));
     }
 
     @Override
-    public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        // sink bolt
+    protected EncryptedValue getUserIdEntry(Tuple input) {
+        return (EncryptedValue) input.getValueByField("userId");
+    }
+
+    @Override
+    protected EncryptedValue getWordEntry(Tuple input) {
+        return (EncryptedValue) input.getValueByField("word");
+    }
+
+    @Override
+    protected EncryptedValue getClampedCountEntry(Tuple input) {
+        return (EncryptedValue) input.getValueByField("count");
     }
 }

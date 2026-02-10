@@ -1,14 +1,15 @@
 package ch.usi.inf.examples.confidential_word_count.enclave.service.bolts;
 
-import ch.usi.inf.confidentialstorm.common.api.UserContributionBoundingService;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.UserContributionBoundingService;
 import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
+import ch.usi.inf.confidentialstorm.enclave.service.bolts.base.dp.AbstractUserContributionBoundingServiceProvider;
 import ch.usi.inf.examples.confidential_word_count.common.config.DPConfig;
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import com.google.auto.service.AutoService;
 
 @AutoService(UserContributionBoundingService.class)
-public class AbstractUserContributionBoundingServiceProvider
-        extends ch.usi.inf.confidentialstorm.enclave.service.bolts.base.dp.AbstractUserContributionBoundingServiceProvider {
+public class UserContributionBoundingServiceProvider
+        extends AbstractUserContributionBoundingServiceProvider {
 
     @Override
     protected double getPerRecordClamp() {
@@ -22,16 +23,16 @@ public class AbstractUserContributionBoundingServiceProvider
 
     @Override
     public TopologySpecification.Component expectedSourceComponent() {
-        return ComponentConstants.WORD_COUNT;
+        return ComponentConstants.BOLT_SENTENCE_SPLIT;
     }
 
     @Override
     public TopologySpecification.Component expectedDestinationComponent() {
-        return ComponentConstants.HISTOGRAM_GLOBAL;
+        return ComponentConstants.BOLT_DATA_PERTURBATION;
     }
 
     @Override
     public TopologySpecification.Component currentComponent() {
-        return ComponentConstants.USER_CONTRIBUTION_BOUNDING;
+        return ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING;
     }
 }

@@ -1,10 +1,11 @@
 package ch.usi.inf.confidentialstorm.enclave.service.bolts.base.dp;
 
-import ch.usi.inf.confidentialstorm.common.api.UserContributionBoundingService;
-import ch.usi.inf.confidentialstorm.common.api.model.UserContributionBoundingRequest;
-import ch.usi.inf.confidentialstorm.common.api.model.UserContributionBoundingResponse;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.UserContributionBoundingService;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributionBoundingRequest;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributionBoundingResponse;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+import ch.usi.inf.confidentialstorm.enclave.crypto.Hash;
 import ch.usi.inf.confidentialstorm.enclave.dp.UserContributionLimiter;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
@@ -80,8 +81,14 @@ public abstract class AbstractUserContributionBoundingServiceProvider
             EncryptedValue encryptedClampedCount = encrypt(clamped, seq);
             EncryptedValue encryptedUserId = encrypt(userId, seq);
 
+            // compute hash for routing
+
+            // Generate routing info that links user to word (needed to route to correct user contribution boundary bolt)
+            String routingInfo = "user:" + userId + "|word:" + word;
+            byte[] routingKey = Hash.computeHash(routingInfo.getBytes());
+
             // Return authorized response with tuple format: (word, clampedCount, userId)
-            return UserContributionBoundingResponse.authorized(encryptedWord, encryptedClampedCount, encryptedUserId);
+            return UserContributionBoundingResponse.authorized(encryptedWord, encryptedClampedCount, encryptedUserId, routingKey);
         } catch (Throwable t) {
             // use exception manager
             exceptionCtx.handleException(t);

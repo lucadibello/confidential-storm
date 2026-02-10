@@ -1,7 +1,7 @@
 package ch.usi.inf.examples.confidential_word_count.host;
 
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
-import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramBolt;
+import ch.usi.inf.examples.confidential_word_count.host.bolts.DataPerturbationBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.SplitSentenceBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.UserContributionBoundingBolt;
 import ch.usi.inf.examples.confidential_word_count.host.spouts.RandomJokeSpout;
@@ -31,36 +31,39 @@ public class WordCountTopology extends ConfigurableTopology {
 
         // RandomJokeSpout: emits random jokes (json entries with "body" field)
         builder.setSpout(
-                ComponentConstants.RANDOM_JOKE_SPOUT.toString(),
+                ComponentConstants.SPOUT_RANDOM_JOKE.toString(),
                 new RandomJokeSpout(),
                 1
         );
 
         // SplitSentenceBolt: splits body into words
         builder.setBolt(
-                ComponentConstants.SENTENCE_SPLIT.toString(),
+                ComponentConstants.BOLT_SENTENCE_SPLIT.toString(),
                 new SplitSentenceBolt(),
                 2
-        ).shuffleGrouping(ComponentConstants.RANDOM_JOKE_SPOUT.toString());
+        ).shuffleGrouping(ComponentConstants.SPOUT_RANDOM_JOKE.toString());
 
         // UserContributionBoundingBolt: bounds user contributions to the histogram
         builder.setBolt(
-                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString(),
+                ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING.toString(),
                 new UserContributionBoundingBolt(),
                 2
         ).fieldsGrouping(
-                ComponentConstants.SENTENCE_SPLIT.toString(),
+                ComponentConstants.BOLT_SENTENCE_SPLIT.toString(),
                 new Fields("routingKey")
         );
 
-        // HistogramBolt: merges partial counters into a single (global) histogram
+        // DataPerturbationBolt: computes the histogram and perturbs it to ensure differential privacy before emitting the final result
         builder.setBolt(
-                ComponentConstants.HISTOGRAM_GLOBAL.toString(),
-                new HistogramBolt(),
+                ComponentConstants.BOLT_DATA_PERTURBATION.toString(),
+                new DataPerturbationBolt(),
                 1
-        ).globalGrouping(
-                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString()
+        ).fieldsGrouping(
+                ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING.toString(),
+                new Fields("routingKey")
         );
+
+        // FIXME: HistogramBolt - receives partial histograms from DataPerturbationBolt and aggregates them to produce the final histogram
 
         // configure spout wait strategy to avoid starving other bolts
         // NOTE: learn more here https://storm.apache.org/releases/current/Performance.html

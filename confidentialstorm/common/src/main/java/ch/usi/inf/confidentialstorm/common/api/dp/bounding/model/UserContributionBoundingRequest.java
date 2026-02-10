@@ -1,4 +1,4 @@
-package ch.usi.inf.confidentialstorm.common.api.model;
+package ch.usi.inf.confidentialstorm.common.api.dp.bounding.model;
 
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 
@@ -14,7 +14,8 @@ import java.util.Objects;
  * @param count  Encrypted count value
  * @param userId Encrypted user ID
  */
-public record UserContributionBoundingRequest(EncryptedValue word, EncryptedValue count, EncryptedValue userId) implements Serializable {
+public record UserContributionBoundingRequest(EncryptedValue word, EncryptedValue count, EncryptedValue userId)
+        implements Serializable {
     @Serial
     private static final long serialVersionUID = 2L;
 
