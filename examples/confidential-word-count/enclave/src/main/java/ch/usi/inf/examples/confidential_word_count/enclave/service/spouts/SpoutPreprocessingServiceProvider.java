@@ -29,7 +29,7 @@ public final class SpoutPreprocessingServiceProvider
     public SpoutPreprocessingResponse setupRoute(SpoutPreprocessingRequest request) throws EnclaveServiceException {
         try {
             // ensure request is valid (skip replay protection as spout data does not have sequence numbers)
-            verify(request, true, false);
+            verify(request, false, true);
 
             // Decrypt and re-encrypt payload / user_id with new AAD routing information
             int seq = nextSequenceNumber();
@@ -46,18 +46,18 @@ public final class SpoutPreprocessingServiceProvider
 
     @Override
     public TopologySpecification.Component expectedSourceComponent() {
-        return ComponentConstants.DATASET; // data comes from the dataset component
+        return ComponentConstants._DATASET; // data comes from the dataset component
     }
 
     @Override
     public TopologySpecification.Component expectedDestinationComponent() {
         // the data will be routed to the same spout component, which will then forward it to the correct downstream bolt
-        return ComponentConstants.SENTENCE_SPLIT;
+        return ComponentConstants.BOLT_SENTENCE_SPLIT;
     }
 
     @Override
     public TopologySpecification.Component currentComponent() {
         // this service is a spout router, so the current component is the spout itself
-        return ComponentConstants.RANDOM_JOKE_SPOUT;
+        return ComponentConstants.SPOUT_RANDOM_JOKE;
     }
 }

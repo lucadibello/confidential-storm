@@ -29,18 +29,12 @@ import java.util.TreeMap;
  * Uses ChaCha20-Poly1305 for encryption and HMAC-SHA256 for routing key derivation.
  */
 public final class SealedPayload {
-
-    private final EnclaveLogger log;
     private final SecretKey encryptionKey;
-    private final SecureRandom random;
+    private final SecureRandom random = new SecureRandom();;
     private final byte[] emptyAad = new byte[0];
 
     private SealedPayload(byte[] streamKey) {
-        this.log = EnclaveLoggerFactory.getLogger(SealedPayload.class);
-        this.log.info("Initializing SealedPayload");
         this.encryptionKey = new SecretKeySpec(streamKey, "ChaCha20");
-        this.random = new SecureRandom();
-        this.log.info("SealedPayload initialized successfully");
     }
 
     public static SealedPayload fromConfig() {
@@ -78,11 +72,10 @@ public final class SealedPayload {
                             TopologySpecification.Component expectedDestinationComponent) {
         Objects.requireNonNull(expectedDestinationComponent, "Expected destination cannot be null");
 
+        // decode the AAD to check the source and destination components
         DecodedAAD aad = DecodedAAD.fromBytes(sealed.associatedData());
-        log.debug("Decoded AAD: {} using nonce: {}", aad, HexFormat.of().formatHex(sealed.nonce()));
-        log.debug("Expected source: {}", expectedSourceComponent);
-        log.debug("Expected destination: {}", expectedDestinationComponent);
 
+        // ensure the AAD matches the expected source and destination components
         return aad.matchesSource(expectedSourceComponent)
                 && aad.matchesDestination(expectedDestinationComponent);
     }

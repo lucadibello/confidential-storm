@@ -165,7 +165,7 @@ public class StreamingDPMechanism {
      * @param clamped_count  The clamped contribution value
      * @param userId The user ID contributing this value
      */
-    public void addContribution(String key, double clamped_count, String userId) {
+    public void addContribution(String userId, String key, double clamped_count) {
         // accumulate contribution for this key in the current window
         currentWindowCounts.merge(key, clamped_count, Double::sum);
         // record contribution from this user to this key in the current window

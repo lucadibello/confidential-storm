@@ -46,7 +46,10 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
         // Send out each (word, userId) pair as a separate tuple
         for (SealedWord sealedWord : response.words()) {
             // Emit tuple format: (word, count, userId, routingKey)
-            getCollector().emit(input, new Values(sealedWord.word(), sealedWord.count(), sealedWord.userId(), sealedWord.routingKey()));
+            getCollector().emit(input, new Values(
+                    sealedWord.word(), sealedWord.count(),
+                    sealedWord.userId(), sealedWord.routingKey()
+            ));
         }
         getCollector().ack(input);
         LOG.debug("[SplitSentenceBolt {}] Acked encrypted joke", boltId);

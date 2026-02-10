@@ -77,5 +77,14 @@ public class DPUtil {
         // use log base 2 for tree height calculation as per theorem C.1
         double log2T = FastMath.log(T) / FastMath.log(2);
         return FastMath.sqrt((log2T * L * L) / ((2 * rho)));
+
+    }
+
+    /**
+     * Returns the user-level L1 sensitivity C * L_m, used by the DP tree to
+     * calibrate Gaussian noise.
+     */
+    public static double l1Sensitivity(long maxContributionsPerUser, double perRecordClamp) {
+        return maxContributionsPerUser * perRecordClamp;
     }
 }

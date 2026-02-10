@@ -71,6 +71,14 @@ public final class DecodedAAD {
         return Optional.ofNullable(producerId);
     }
 
+    public Optional<String> sourceName() {
+        return Optional.ofNullable(sourceName);
+    }
+
+    public Optional<String> destinationName() {
+        return Optional.ofNullable(destinationName);
+    }
+
     public boolean matchesSource(TopologySpecification.Component component) {
         Objects.requireNonNull(component, "Component cannot be null");
         if (sourceName == null) {

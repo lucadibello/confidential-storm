@@ -3,6 +3,7 @@ package ch.usi.inf.confidentialstorm.host.bolts;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.host.base.ConfidentialComponentState;
 import ch.usi.inf.confidentialstorm.host.util.EnclaveErrorUtils;
+import org.apache.storm.Constants;
 import org.apache.storm.task.OutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.base.BaseRichBolt;
@@ -95,6 +96,11 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
 
     protected void beforeCleanup() {
         // hook for subclasses
+    }
+
+    protected boolean isTickTuple(Tuple tuple) {
+        return tuple.getSourceComponent().equals(Constants.SYSTEM_COMPONENT_ID)
+                && tuple.getSourceStreamId().equals(Constants.SYSTEM_TICK_STREAM_ID);
     }
 
     protected abstract void processTuple(Tuple input, S service) throws EnclaveServiceException;

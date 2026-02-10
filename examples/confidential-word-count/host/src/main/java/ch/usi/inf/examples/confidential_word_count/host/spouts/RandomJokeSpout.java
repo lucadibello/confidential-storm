@@ -58,14 +58,13 @@ public class RandomJokeSpout extends ConfidentialSpout<SpoutPreprocessingService
 
         // use service to configure route for the joke entry (spout -> splitter)
         // Request format: (payload, userId)
-        LOG.debug("[RandomJokeSpout {}] Testing route for joke index {}", this.state.getTaskId(), idx);
         SpoutPreprocessingResponse routedJokeEntry = getService().setupRoute(
                 new SpoutPreprocessingRequest(currentJokeEntry.payload(), currentJokeEntry.userId()));
 
         // Emit tuple format: (payload, userId)
         // NOTE: payload contains fields: ["body", "category", "id", "rating"]
         // NOTE: userId contains field: ["user_id"]
-        LOG.info("[RandomJokeSpout {}] Emitting joke with separate userId", this.state.getTaskId());
+        LOG.info("[RandomJokeSpout {}] Emitting new joke tuple", this.state.getTaskId());
         getCollector().emit(new Values(routedJokeEntry.payload(), routedJokeEntry.userId()));
 
         // sleep for a while to avoid starving the topology

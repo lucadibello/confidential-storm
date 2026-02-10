@@ -54,11 +54,8 @@ public final class SplitSentenceServiceProvider
                 throw new RuntimeException("Missing 'body' field in payload");
             }
 
-            // The userId is already encrypted separately - we just need to re-encrypt it
-            // with the correct AAD for the next hop
-            int seq = nextSequenceNumber();
+            // Decrypt the userId for re-encryption with per-word AAD
             String userIdStr = decryptToString(request.userId());
-            EncryptedValue reEncryptedUserId = encrypt(userIdStr, seq);
 
             // Split the joke text into words
             //noinspection SimplifyStreamApiCallChains
@@ -68,13 +65,17 @@ public final class SplitSentenceServiceProvider
                     .collect(Collectors.toList());
 
             // Create list of SealedWord (word, userId) pairs
-            // Each word is encrypted separately, userId is the same for all words from this joke
+            // Each word is encrypted separately with a unique sequence number per tuple,
+            // since each SealedWord becomes its own tuple downstream
             List<SealedWord> sealedWords = new ArrayList<>(plainWords.size());
             for (String plainWord : plainWords) {
+                int seq = nextSequenceNumber();
                 // Encrypt just the word (no user_id embedded)
                 EncryptedValue encryptedWord = encrypt(plainWord, seq);
                 // Encrypt count (1)
                 EncryptedValue encryptedCount = encrypt(1L, seq);
+                // Re-encrypt userId with this tuple's sequence number
+                EncryptedValue reEncryptedUserId = encrypt(userIdStr, seq);
 
                 // Generate routing info that links user to word (needed to route to correct user contribution boundary bolt)
                 String routingInfo = "user:" + userIdStr + "|word:" + plainWord;
@@ -94,16 +95,16 @@ public final class SplitSentenceServiceProvider
 
     @Override
     public TopologySpecification.Component expectedSourceComponent() {
-        return ComponentConstants.RANDOM_JOKE_SPOUT;
+        return ComponentConstants.SPOUT_RANDOM_JOKE;
     }
 
     @Override
     public TopologySpecification.Component expectedDestinationComponent() {
-        return ComponentConstants.USER_CONTRIBUTION_BOUNDING;
+        return ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING;
     }
 
     @Override
     public TopologySpecification.Component currentComponent() {
-        return ComponentConstants.SENTENCE_SPLIT;
+        return ComponentConstants.BOLT_SENTENCE_SPLIT;
     }
 }

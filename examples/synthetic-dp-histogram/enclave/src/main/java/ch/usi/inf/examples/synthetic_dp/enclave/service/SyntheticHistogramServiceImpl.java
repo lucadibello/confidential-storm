@@ -69,7 +69,7 @@ public final class SyntheticHistogramServiceImpl
 
             // record contribution to DP mechanism
             // NOTE: we assume that the count has already been clamped per-record if needed!
-            mechanism.addContribution(key, count, userId);
+            mechanism.addContribution(userId, key, count);
         } catch (Throwable t) {
             super.exceptionCtx.handleException(t);
         }
