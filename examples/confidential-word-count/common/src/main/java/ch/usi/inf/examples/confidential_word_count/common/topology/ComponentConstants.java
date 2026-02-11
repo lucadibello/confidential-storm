@@ -7,6 +7,7 @@ public final class ComponentConstants {
     public static final TopologySpecification.Component BOLT_SENTENCE_SPLIT = TopologySpecification.Component.of("bolt-sentence-split");
     public static final TopologySpecification.Component BOLT_USER_CONTRIBUTION_BOUNDING = TopologySpecification.Component.of("bolt-user-contribution-bounding");
     public static final TopologySpecification.Component BOLT_DATA_PERTURBATION = TopologySpecification.Component.of("bolt-data-perturbation");
+    public static final TopologySpecification.Component BOLT_HISTOGRAM_AGGREGATION = TopologySpecification.Component.of("bolt-histogram-aggregation");
     public static final TopologySpecification.Component _DATASET = TopologySpecification.Component.of("_DATASET");
 
     private ComponentConstants() {

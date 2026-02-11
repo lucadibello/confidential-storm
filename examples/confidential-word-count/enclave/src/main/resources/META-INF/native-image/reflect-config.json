@@ -100,6 +100,33 @@
     "allPublicFields": true
   },
   {
+    "name": "ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.EncryptedDataPerturbationSnapshot",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true
+  },
+  {
+    "name": "ch.usi.inf.confidentialstorm.common.api.dp.aggregation.model.HistogramAggregationRequest",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true
+  },
+  {
+    "name": "ch.usi.inf.confidentialstorm.common.api.dp.aggregation.model.HistogramAggregationResponse",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true
+  },
+  {
     "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,

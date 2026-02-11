@@ -13,7 +13,7 @@ import java.util.Objects;
  */
 public class UserContributionBoundingResponse implements Serializable {
     @Serial
-    private static final long serialVersionUID = 2L;
+    private static final long serialVersionUID = 3L;
 
     /**
      * The encrypted word (re-encrypted with new AAD).
@@ -31,9 +31,11 @@ public class UserContributionBoundingResponse implements Serializable {
     private final EncryptedValue userId;
 
     /**
-     * Key used for routing the contribution to the correct partition in the downstream processing.
+     * Key used for routing to the data perturbation bolt.
+     * Derived from hash(word) only, so all contributions for the same word land on the same DP replica
+     * (required by Algorithm 1's key selection which tracks unique users per key).
      */
-    private final byte[] routingKey;
+    private final byte[] dpRoutingKey;
 
     /**
      * Private constructor to initialize the UserContributionBoundingResponse.
@@ -41,16 +43,17 @@ public class UserContributionBoundingResponse implements Serializable {
      * @param word         The encrypted word, or null if dropped.
      * @param clampedCount The encrypted clamped count, or null if the contribution was dropped.
      * @param userId       The encrypted user ID, or null if dropped.
+     * @param dpRoutingKey The DP routing key (hash of word only), or null if dropped.
      */
     private UserContributionBoundingResponse(@Nullable EncryptedValue word,
                                              @Nullable EncryptedValue clampedCount,
                                              @Nullable EncryptedValue userId,
-                                             @Nullable byte[] routingKey
+                                             @Nullable byte[] dpRoutingKey
     ) {
         this.word = word;
         this.clampedCount = clampedCount;
         this.userId = userId;
-        this.routingKey = routingKey;
+        this.dpRoutingKey = dpRoutingKey;
     }
 
     /**
@@ -84,13 +87,13 @@ public class UserContributionBoundingResponse implements Serializable {
     }
 
     /**
-    * Gets the routing key for the contribution.
-    *
-    * @return The routing key, or null if the contribution was dropped.
-    */
+     * Gets the DP routing key for the contribution (word-only hash).
+     *
+     * @return The DP routing key, or null if the contribution was dropped.
+     */
     @Nullable
-    public byte[] routingKey() {
-        return routingKey;
+    public byte[] dpRoutingKey() {
+        return dpRoutingKey;
     }
 
     /**
@@ -105,17 +108,18 @@ public class UserContributionBoundingResponse implements Serializable {
     /**
      * Factory method to create an authorized user contribution response.
      *
-     * @param word   The encrypted word (re-encrypted with new AAD).
-     * @param count  The encrypted clamped count associated with the word.
-     * @param userId The encrypted user ID (re-encrypted with new AAD).
+     * @param word         The encrypted word (re-encrypted with new AAD).
+     * @param count        The encrypted clamped count associated with the word.
+     * @param userId       The encrypted user ID (re-encrypted with new AAD).
+     * @param dpRoutingKey The DP routing key (hash of word only).
      * @return A UserContributionBoundingResponse indicating an authorized contribution.
      */
     public static UserContributionBoundingResponse authorized(EncryptedValue word, EncryptedValue count,
-                                                              EncryptedValue userId, byte[] routingKey) {
+                                                              EncryptedValue userId, byte[] dpRoutingKey) {
         Objects.requireNonNull(word, "Word cannot be null for authorized response");
         Objects.requireNonNull(count, "Count cannot be null for authorized response");
         Objects.requireNonNull(userId, "UserId cannot be null for authorized response");
-        return new UserContributionBoundingResponse(word, count, userId, routingKey);
+        return new UserContributionBoundingResponse(word, count, userId, dpRoutingKey);
     }
 
     /**

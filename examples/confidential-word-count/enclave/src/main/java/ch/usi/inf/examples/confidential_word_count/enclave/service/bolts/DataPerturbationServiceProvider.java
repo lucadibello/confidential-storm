@@ -65,14 +65,7 @@ public class DataPerturbationServiceProvider extends AbstractDataPerturbationSer
 
     @Override
     public TopologySpecification.Component expectedDestinationComponent() {
-        /*
-         FIXME: if we are working in a distributed manner, we should pass the partial results
-         to a final "merging" component that will produce the final global histogram (by merging partial histograms
-         from different partitions).
-
-         If no parallelism, then we can directly produce the global histogram here, but this is not scalable!
-         */
-        return ComponentConstants.BOLT_DATA_PERTURBATION; // ownership remains here
+        return ComponentConstants.BOLT_HISTOGRAM_AGGREGATION;
     }
 
     @Override

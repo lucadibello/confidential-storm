@@ -11,6 +11,9 @@
   { "name": "ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.DataPerturbationContributionEntryRequest" },
   { "name": "ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.DataPerturbationContributionEntryResponse" },
   { "name": "ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.DataPerturbationSnapshot" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.EncryptedDataPerturbationSnapshot" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.dp.aggregation.model.HistogramAggregationRequest" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.dp.aggregation.model.HistogramAggregationResponse" },
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue" },
 
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveCryptoException"},

@@ -2,6 +2,7 @@ package ch.usi.inf.confidentialstorm.host.bolts.dp;
 
 import ch.usi.inf.confidentialstorm.common.api.dp.perturbation.DataPerturbationService;
 import ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.DataPerturbationContributionEntryRequest;
+import ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.EncryptedDataPerturbationSnapshot;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.DataPerturbationSnapshot;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
@@ -29,14 +30,37 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
         return config;
     }
 
+    /**
+     * Override to return true to use encrypted snapshots instead of plaintext.
+     * When enabled, tick tuples will call {@link #processEncryptedSnapshot} instead of {@link #processSnapshot}.
+     */
+    protected boolean useEncryptedSnapshots() {
+        return false;
+    }
+
+    /**
+     * Template method to process an encrypted histogram snapshot from the data perturbation service.
+     * Only called when {@link #useEncryptedSnapshots()} returns true.
+     *
+     * @param snapshot the encrypted snapshot
+     * @throws EnclaveServiceException if there is an error processing the snapshot
+     */
+    protected void processEncryptedSnapshot(EncryptedDataPerturbationSnapshot snapshot) throws EnclaveServiceException {
+        throw new UnsupportedOperationException("Override processEncryptedSnapshot() when useEncryptedSnapshots() is true");
+    }
+
     @Override
     protected void processTuple(Tuple input, DataPerturbationService service) throws EnclaveServiceException {
         if (isTickTuple(input)) {
-            // process tick tuple: return snapshot
-            DataPerturbationSnapshot snapshot = service.getSnapshot();
-
-            // do something else with the snapshot
-            processSnapshot(snapshot.histogramSnapshot());
+            if (useEncryptedSnapshots()) {
+                // process tick tuple: return encrypted snapshot for downstream aggregation
+                EncryptedDataPerturbationSnapshot encryptedSnapshot = service.getEncryptedSnapshot();
+                processEncryptedSnapshot(encryptedSnapshot);
+            } else {
+                // process tick tuple: return plaintext snapshot
+                DataPerturbationSnapshot snapshot = service.getSnapshot();
+                processSnapshot(snapshot.histogramSnapshot());
+            }
         } else {
             // update histogram via service API
             service.addContribution(new DataPerturbationContributionEntryRequest(

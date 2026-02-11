@@ -3,10 +3,13 @@ package ch.usi.inf.confidentialstorm.enclave.service.bolts.base.dp;
 import ch.usi.inf.confidentialstorm.common.api.dp.perturbation.DataPerturbationService;
 import ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.*;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
+import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.enclave.dp.StreamingDPMechanism;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 import ch.usi.inf.confidentialstorm.enclave.util.DPUtil;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 public abstract class AbstractDataPerturbationServiceProvider
@@ -137,5 +140,22 @@ public abstract class AbstractDataPerturbationServiceProvider
             this.exceptionCtx.handleException(t);
             return null; // signal error if exceptions are disabled
        }
+    }
+
+    @Override
+    public EncryptedDataPerturbationSnapshot getEncryptedSnapshot() throws EnclaveServiceException {
+        try {
+            Map<String, Long> snapshot = this.mechanism.snapshot();
+
+            // Widen Long -> Object for the generic encrypt(Map<String, Object>, seq) method
+            Map<String, Object> payload = new LinkedHashMap<>(snapshot.size());
+            payload.putAll(snapshot);
+
+            EncryptedValue encrypted = encrypt(payload, nextSequenceNumber());
+            return new EncryptedDataPerturbationSnapshot(encrypted);
+        } catch (Throwable t) {
+            this.exceptionCtx.handleException(t);
+            return null;
+        }
     }
 }

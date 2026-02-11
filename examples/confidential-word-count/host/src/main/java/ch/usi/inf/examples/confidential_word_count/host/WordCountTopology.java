@@ -2,6 +2,7 @@ package ch.usi.inf.examples.confidential_word_count.host;
 
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.DataPerturbationBolt;
+import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramAggregatorBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.SplitSentenceBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.UserContributionBoundingBolt;
 import ch.usi.inf.examples.confidential_word_count.host.spouts.RandomJokeSpout;
@@ -53,17 +54,26 @@ public class WordCountTopology extends ConfigurableTopology {
                 new Fields("routingKey")
         );
 
-        // DataPerturbationBolt: computes the histogram and perturbs it to ensure differential privacy before emitting the final result
+        // DataPerturbationBolt: computes the histogram and perturbs it to ensure differential privacy
+        // Uses parallelism=2 with word-only routing so each replica sees all contributions for its assigned keys
         builder.setBolt(
                 ComponentConstants.BOLT_DATA_PERTURBATION.toString(),
                 new DataPerturbationBolt(),
-                1
+                2
         ).fieldsGrouping(
                 ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING.toString(),
-                new Fields("routingKey")
+                new Fields("dpRoutingKey")
         );
 
-        // FIXME: HistogramBolt - receives partial histograms from DataPerturbationBolt and aggregates them to produce the final histogram
+        // HistogramAggregatorBolt: receives encrypted partial histograms from DataPerturbation replicas
+        // and merges them inside the enclave to produce the final global histogram
+        builder.setBolt(
+                ComponentConstants.BOLT_HISTOGRAM_AGGREGATION.toString(),
+                new HistogramAggregatorBolt(),
+                1
+        ).shuffleGrouping(
+                ComponentConstants.BOLT_DATA_PERTURBATION.toString()
+        );
 
         // configure spout wait strategy to avoid starving other bolts
         // NOTE: learn more here https://storm.apache.org/releases/current/Performance.html

@@ -81,14 +81,12 @@ public abstract class AbstractUserContributionBoundingServiceProvider
             EncryptedValue encryptedClampedCount = encrypt(clamped, seq);
             EncryptedValue encryptedUserId = encrypt(userId, seq);
 
-            // compute hash for routing
+            // Generate word-only routing key for data perturbation partitioning
+            // (ensures all contributions for the same word land on the same DP replica)
+            byte[] dpRoutingKey = Hash.computeHash(("word:" + word).getBytes());
 
-            // Generate routing info that links user to word (needed to route to correct user contribution boundary bolt)
-            String routingInfo = "user:" + userId + "|word:" + word;
-            byte[] routingKey = Hash.computeHash(routingInfo.getBytes());
-
-            // Return authorized response with tuple format: (word, clampedCount, userId)
-            return UserContributionBoundingResponse.authorized(encryptedWord, encryptedClampedCount, encryptedUserId, routingKey);
+            // Return authorized response with tuple format: (word, clampedCount, userId, routingKey)
+            return UserContributionBoundingResponse.authorized(encryptedWord, encryptedClampedCount, encryptedUserId, dpRoutingKey);
         } catch (Throwable t) {
             // use exception manager
             exceptionCtx.handleException(t);

@@ -14,7 +14,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
-public abstract class AbstractContributionBoundingBolt extends ConfidentialBolt<UserContributionBoundingService> {
+public abstract class AbstractContributionBoundingBolt
+        extends ConfidentialBolt<UserContributionBoundingService> {
     private static final Logger LOG = LoggerFactory.getLogger(AbstractContributionBoundingBolt.class);
     private int boltId;
 
@@ -69,10 +70,10 @@ public abstract class AbstractContributionBoundingBolt extends ConfidentialBolt<
             // If authorized, emit tuple format: (word, clampedCount, userId)
             LOG.debug("[UserContributionBoundingBolt {}] Forwarding word", boltId);
 
-            // pass to next bolt: (word, clampedCount, userId, routingKey -> for partitioning)
+            // pass to next bolt: (word, clampedCount, userId, dpRoutingKey -> for partitioning)
             getCollector().emit(input, new Values(
                     resp.word(), resp.clampedCount(),
-                    resp.userId(), resp.routingKey()
+                    resp.userId(), resp.dpRoutingKey()
             ));
         }
 

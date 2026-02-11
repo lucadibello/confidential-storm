@@ -16,9 +16,8 @@ public class WordCountTopologyProvider implements TopologyProvider {
             ComponentConstants.SPOUT_RANDOM_JOKE, List.of(ComponentConstants.BOLT_SENTENCE_SPLIT),
             ComponentConstants.BOLT_SENTENCE_SPLIT, List.of(ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING),
             ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING, List.of(ComponentConstants.BOLT_DATA_PERTURBATION),
-            // FIXME: we need to add the aggregation step here, but it is currently missing in the implementation of the topology!!
-            // For now, left empty! (List.of())
-            ComponentConstants.BOLT_DATA_PERTURBATION, List.of()
+            ComponentConstants.BOLT_DATA_PERTURBATION, List.of(ComponentConstants.BOLT_HISTOGRAM_AGGREGATION),
+            ComponentConstants.BOLT_HISTOGRAM_AGGREGATION, List.of()
     );
 
     @Override
