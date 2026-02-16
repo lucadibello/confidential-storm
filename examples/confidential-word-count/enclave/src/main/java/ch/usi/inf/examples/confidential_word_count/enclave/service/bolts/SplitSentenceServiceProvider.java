@@ -77,8 +77,8 @@ public final class SplitSentenceServiceProvider
                 // Re-encrypt userId with this tuple's sequence number
                 EncryptedValue reEncryptedUserId = encrypt(userIdStr, seq);
 
-                // Generate routing info that links user to word (needed to route to correct user contribution boundary bolt)
-                String routingInfo = "user:" + userIdStr + "|word:" + plainWord;
+                // Generate routing information to route the same user's words to the same instance downstream
+                String routingInfo = "user:" + userIdStr;
                 byte[] routingKey = Hash.computeHash(routingInfo.getBytes());
 
                 // Pair with the re-encrypted userId
