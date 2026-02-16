@@ -51,8 +51,7 @@ public final class SyntheticHistogramServiceImpl
                 sigmaHist,
                 maxTimeSteps,
                 mu,
-                DPConfig.MAX_CONTRIBUTIONS_PER_USER,
-                DPConfig.PER_RECORD_CLAMP
+                DPConfig.MAX_CONTRIBUTIONS_PER_USER
         );
     }
 

@@ -94,8 +94,7 @@ public abstract class AbstractDataPerturbationServiceProvider
                 sigmaHist,
                 getMaxTimeSteps(),
                 getMu(),
-                getMaxUserContributions(),
-                getPerRecordClamp()
+                getMaxUserContributions()
         );
     }
 
