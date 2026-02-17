@@ -5,6 +5,10 @@ import ch.usi.inf.confidentialstorm.enclave.crypto.util.AADUtils;
 
 import java.util.*;
 
+/**
+ * Represents a decoded Additional Authenticated Data (AAD) payload.
+ * Provides methods to access common AAD fields and verify routing.
+ */
 public final class DecodedAAD {
     private final Map<String, Object> attributes;
     private final String sourceName;
@@ -25,6 +29,12 @@ public final class DecodedAAD {
         this.producerId = producerId;
     }
 
+    /**
+     * Decodes a DecodedAAD instance from its byte representation (JSON).
+     *
+     * @param aadBytes the AAD bytes to decode
+     * @return the DecodedAAD instance
+     */
     public static DecodedAAD fromBytes(byte[] aadBytes) {
         if (aadBytes == null || aadBytes.length == 0) {
             // empty
@@ -63,22 +73,48 @@ public final class DecodedAAD {
         return null;
     }
 
+    /**
+     * Gets the sequence number from the AAD.
+     *
+     * @return an Optional containing the sequence number, if present
+     */
     public Optional<Long> sequenceNumber() {
         return Optional.ofNullable(sequenceNumber);
     }
 
+    /**
+     * Gets the producer ID from the AAD.
+     *
+     * @return an Optional containing the producer ID, if present
+     */
     public Optional<String> producerId() {
         return Optional.ofNullable(producerId);
     }
 
+    /**
+     * Gets the source component name from the AAD.
+     *
+     * @return an Optional containing the source name, if present
+     */
     public Optional<String> sourceName() {
         return Optional.ofNullable(sourceName);
     }
 
+    /**
+     * Gets the destination component name from the AAD.
+     *
+     * @return an Optional containing the destination name, if present
+     */
     public Optional<String> destinationName() {
         return Optional.ofNullable(destinationName);
     }
 
+    /**
+     * Checks if the source in the AAD matches the given component.
+     *
+     * @param component the component to match against
+     * @return true if matches, false otherwise
+     */
     public boolean matchesSource(TopologySpecification.Component component) {
         Objects.requireNonNull(component, "Component cannot be null");
         if (sourceName == null) {
@@ -87,6 +123,12 @@ public final class DecodedAAD {
         return sourceName.equals(component.getName());
     }
 
+    /**
+     * Checks if the destination in the AAD matches the given component.
+     *
+     * @param component the component to match against
+     * @return true if matches, false otherwise
+     */
     public boolean matchesDestination(TopologySpecification.Component component) {
         Objects.requireNonNull(component, "Component cannot be null");
         if (destinationName == null) {

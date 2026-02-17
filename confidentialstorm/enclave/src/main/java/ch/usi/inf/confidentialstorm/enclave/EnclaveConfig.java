@@ -1,12 +1,14 @@
 package ch.usi.inf.confidentialstorm.enclave;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
+import ch.usi.inf.confidentialstorm.enclave.crypto.EncryptionScheme;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.LogLevel;
 
 import java.util.ServiceLoader;
 
 /**
  * Configuration parameters for the secure enclave.
+ * These parameters are loaded via a {@link EnclaveConfiguration} provider.
  */
 public final class EnclaveConfig {
     /**
@@ -63,6 +65,11 @@ public final class EnclaveConfig {
      * to prevent replay attacks on the encrypted data.
      */
     public static final boolean ENABLE_REPLAY_PROTECTION = provider.isReplayProtectionEnabled();
+    /**
+     * The encryption scheme used for sealing payloads.
+     * Immutable at runtime; becomes a build-time constant in GraalVM native-image.
+     */
+    public static final EncryptionScheme ENCRYPTION_SCHEME = provider.getEncryptionScheme();
 
     private EnclaveConfig() {
         // Prevent instantiation

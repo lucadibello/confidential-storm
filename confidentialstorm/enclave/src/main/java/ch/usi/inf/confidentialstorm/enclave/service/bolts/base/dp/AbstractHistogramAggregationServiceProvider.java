@@ -31,9 +31,18 @@ public abstract class AbstractHistogramAggregationServiceProvider
     /**
      * Return the number of DataPerturbation replicas whose partials must be merged
      * before a complete histogram is produced.
+     *
+     * @return the expected replica count
      */
     protected abstract int getExpectedReplicaCount();
 
+    /**
+     * Merges a partial histogram into the current aggregation round.
+     *
+     * @param request the request containing the encrypted partial histogram
+     * @return a response indicating if the aggregation is complete or pending
+     * @throws EnclaveServiceException if an error occurs during merging
+     */
     @Override
     public HistogramAggregationResponse mergePartial(HistogramAggregationRequest request) throws EnclaveServiceException {
         try {

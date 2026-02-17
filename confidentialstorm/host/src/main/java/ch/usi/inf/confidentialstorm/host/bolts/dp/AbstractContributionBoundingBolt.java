@@ -14,11 +14,18 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
+/**
+ * Base implementation for a bolt that performs user contribution bounding.
+ * This bolt delegates the bounding and clamping logic to an enclave-based {@link UserContributionBoundingService}.
+ */
 public abstract class AbstractContributionBoundingBolt
         extends ConfidentialBolt<UserContributionBoundingService> {
     private static final Logger LOG = LoggerFactory.getLogger(AbstractContributionBoundingBolt.class);
     private int boltId;
 
+    /**
+     * Constructs a new AbstractContributionBoundingBolt.
+     */
     public AbstractContributionBoundingBolt() {
         super(UserContributionBoundingService.class);
     }

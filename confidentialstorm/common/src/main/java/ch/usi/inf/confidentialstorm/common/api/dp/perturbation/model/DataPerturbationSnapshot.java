@@ -4,6 +4,11 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Map;
 
+/**
+ * Snapshot of the differentially private histogram.
+ *
+ * @param histogramSnapshot the noisy histogram as a map of word to count
+ */
 public record DataPerturbationSnapshot(Map<String, Long> histogramSnapshot) implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;

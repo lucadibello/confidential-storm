@@ -19,6 +19,14 @@ public record UserContributionBoundingRequest(EncryptedValue word, EncryptedValu
     @Serial
     private static final long serialVersionUID = 2L;
 
+    /**
+     * Constructs a new UserContributionBoundingRequest.
+     *
+     * @param word   the encrypted word/key
+     * @param count  the encrypted count value
+     * @param userId the encrypted user ID
+     * @throws NullPointerException if any parameter is null
+     */
     public UserContributionBoundingRequest {
         Objects.requireNonNull(word, "Word cannot be null");
         Objects.requireNonNull(count, "Count cannot be null");

@@ -5,6 +5,10 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import java.io.Serial;
 import java.util.Objects;
 
+/**
+ * Request to add a user contribution to the data perturbation mechanism.
+ * This request contains the encrypted user ID, the encrypted word/key, and the encrypted clamped count.
+ */
 public final class DataPerturbationContributionEntryRequest extends DataPerturbationRequest {
 
     @Serial
@@ -14,7 +18,14 @@ public final class DataPerturbationContributionEntryRequest extends DataPerturba
     private final EncryptedValue word;
     private final EncryptedValue clampedCount;
 
-
+    /**
+     * Constructs a new DataPerturbationContributionEntryRequest.
+     *
+     * @param userId       the encrypted user ID
+     * @param word         the encrypted word/key
+     * @param clampedCount the encrypted clamped contribution count
+     * @throws IllegalArgumentException if any parameter is null
+     */
     public DataPerturbationContributionEntryRequest(EncryptedValue userId, EncryptedValue word, EncryptedValue clampedCount) {
         if (userId == null || word == null || clampedCount == null) {
             throw new IllegalArgumentException("All fields must be non-null");
@@ -24,14 +35,29 @@ public final class DataPerturbationContributionEntryRequest extends DataPerturba
         this.clampedCount = clampedCount;
     }
 
+    /**
+     * Gets the encrypted user ID.
+     *
+     * @return the encrypted user ID
+     */
     public EncryptedValue userId() {
         return userId;
     }
 
+    /**
+     * Gets the encrypted word/key.
+     *
+     * @return the encrypted word
+     */
     public EncryptedValue word() {
         return word;
     }
 
+    /**
+     * Gets the encrypted clamped contribution count.
+     *
+     * @return the encrypted clamped count
+     */
     public EncryptedValue clampedCount() {
         return clampedCount;
     }

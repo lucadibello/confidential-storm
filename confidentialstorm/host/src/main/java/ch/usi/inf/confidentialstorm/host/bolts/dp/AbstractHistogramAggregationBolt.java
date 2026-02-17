@@ -22,12 +22,18 @@ import java.util.Map;
 public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<HistogramAggregationService> {
     protected static final Logger LOG = LoggerFactory.getLogger(AbstractHistogramAggregationBolt.class);
 
+    /**
+     * Constructs a new AbstractHistogramAggregationBolt.
+     */
     public AbstractHistogramAggregationBolt() {
         super(HistogramAggregationService.class);
     }
 
     /**
      * Extract the encrypted partial histogram from the input tuple.
+     *
+     * @param input the input tuple
+     * @return the encrypted partial histogram
      */
     protected abstract EncryptedValue getEncryptedPartialHistogram(Tuple input);
 

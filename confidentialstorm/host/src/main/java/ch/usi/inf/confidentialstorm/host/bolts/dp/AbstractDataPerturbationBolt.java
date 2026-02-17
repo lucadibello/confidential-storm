@@ -16,9 +16,16 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Base implementation for a bolt that performs data perturbation (DP).
+ * This bolt delegates the DP mechanism to an enclave-based {@link DataPerturbationService}.
+ */
 public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<DataPerturbationService> {
     protected static final Logger LOG = LoggerFactory.getLogger(AbstractDataPerturbationBolt.class);
 
+    /**
+     * Constructs a new AbstractDataPerturbationBolt.
+     */
     public AbstractDataPerturbationBolt() {
         super(DataPerturbationService.class);
     }
@@ -33,6 +40,8 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     /**
      * Override to return true to use encrypted snapshots instead of plaintext.
      * When enabled, tick tuples will call {@link #processEncryptedSnapshot} instead of {@link #processSnapshot}.
+     *
+     * @return true to use encrypted snapshots
      */
     protected boolean useEncryptedSnapshots() {
         return false;

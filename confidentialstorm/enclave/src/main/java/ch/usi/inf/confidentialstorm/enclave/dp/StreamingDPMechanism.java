@@ -187,6 +187,9 @@ public class StreamingDPMechanism {
             return produceHistogram();
         }
 
+        // Clear the current sums map to ensure we only output keys processed in this time step
+        currentSums.clear();
+
         // 1. Identify all keys that need processing in this step
         // a) Unique set of keys in this stream window D_tr_i (Step 4 of Algo 1)
         // b) Keys predicted to be released at this specific timeStep (Algo 3 Case 2)
@@ -206,10 +209,6 @@ public class StreamingDPMechanism {
                 predictionIt.remove(); // remove prediction as we are processing it now
             }
         }
-
-        // Step 3 of Algo 2 - ensure all previously selected keys are included (S^(i) includes all selected keys)
-        log.warn("[DP-MECHANISM] Including previously selected keys: {}", selectedKeys.size());
-        s_i.addAll(selectedKeys);
 
         log.debug("[DP-MECHANISM] Keys with contributions this window: {}, predicted releases: {}, total selected keys: {}",
                     currentWindowCounts.size(), predictedReleaseTimes.size(), selectedKeys.size());

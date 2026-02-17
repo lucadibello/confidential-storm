@@ -14,6 +14,10 @@ import org.apache.commons.math3.util.FastMath;
 
 import java.util.Objects;
 
+/**
+ * Abstract base implementation of the {@link UserContributionBoundingService}.
+ * This class handles user-level contribution bounding and per-record clamping.
+ */
 public abstract class AbstractUserContributionBoundingServiceProvider
         extends ConfidentialBoltService<UserContributionBoundingRequest>
         implements UserContributionBoundingService {
@@ -43,6 +47,13 @@ public abstract class AbstractUserContributionBoundingServiceProvider
     protected abstract long getMaxContributionsPerUser();
 
 
+    /**
+     * Checks if a user contribution is within the allowed limits and clamps its value.
+     *
+     * @param request the request containing the word, count, and userId
+     * @return the bounding response (authorized or dropped)
+     * @throws EnclaveServiceException if an error occurs during processing
+     */
     @Override
     public UserContributionBoundingResponse checkAndClamp(UserContributionBoundingRequest request) throws EnclaveServiceException {
         try {

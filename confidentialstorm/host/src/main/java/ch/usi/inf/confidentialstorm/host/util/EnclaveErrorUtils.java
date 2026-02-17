@@ -7,12 +7,18 @@ import java.lang.reflect.Method;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.util.Objects;
 
+/**
+ * Utility class for handling and formatting enclave errors.
+ */
 public final class EnclaveErrorUtils {
     private EnclaveErrorUtils() {
     }
 
     /**
      * Unwrap common proxy/reflection wrappers to get to the underlying enclave error.
+     *
+     * @param throwable the throwable to unwrap
+     * @return the underlying enclave error
      */
     public static Throwable unwrap(Throwable throwable) {
         Throwable current = throwable;
@@ -37,6 +43,9 @@ public final class EnclaveErrorUtils {
 
     /**
      * Return string representation of the given throwable representing an exception from the enclave service.
+     *
+     * @param throwable the throwable to format
+     * @return the formatted error string
      */
     public static String format(Throwable throwable) {
         Throwable root = unwrap(throwable);

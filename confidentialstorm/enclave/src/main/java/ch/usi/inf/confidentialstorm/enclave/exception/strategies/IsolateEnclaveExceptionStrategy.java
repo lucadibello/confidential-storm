@@ -5,7 +5,8 @@ import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 
 /**
- * This exception strategy segregates the exceptions occurring within the enclave from affecting the host.
+ * Exception strategy that isolates exceptions occurring within the enclave, preventing them from affecting the host.
+ * This strategy logs the exception details but does not throw any exceptions.
  */
 public class IsolateEnclaveExceptionStrategy implements IEnclaveExceptionStrategy {
 
@@ -15,9 +16,11 @@ public class IsolateEnclaveExceptionStrategy implements IEnclaveExceptionStrateg
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(IsolateEnclaveExceptionStrategy.class);
 
     /**
-     * In this strategy, we simply isolate the enclave by not performing any action on exception.
+     * Handles the exception by logging it and suppressing further propagation.
      * <p>
      * We log the exception in debug mode for further analysis.
+     *
+     * @param t the exception to handle
      */
     @Override
     public void handleException(Throwable t) {

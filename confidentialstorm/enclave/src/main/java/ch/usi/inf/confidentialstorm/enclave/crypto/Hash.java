@@ -3,6 +3,9 @@ package ch.usi.inf.confidentialstorm.enclave.crypto;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
+/**
+ * Utility class for cryptographic hashing.
+ */
 public class Hash {
 
     private static final String ALGORITHM = "SHA-256";

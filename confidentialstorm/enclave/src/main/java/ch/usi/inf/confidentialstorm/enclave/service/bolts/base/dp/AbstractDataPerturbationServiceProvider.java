@@ -12,6 +12,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Abstract base implementation of the {@link DataPerturbationService}.
+ * This class handles the initialization of the {@link StreamingDPMechanism} and provides
+ * template methods for privacy parameters.
+ */
 public abstract class AbstractDataPerturbationServiceProvider
         extends ConfidentialBoltService<DataPerturbationRequest>
         implements DataPerturbationService
@@ -49,6 +54,8 @@ public abstract class AbstractDataPerturbationServiceProvider
      * The minimum number of unique user contributions required for releasing a key in the histogram.
      * <p>
      * NOTE: higher mu = fewer keys selected, but higher quality (fewer 0 counts).
+     *
+     * @return the base threshold mu
      */
     public abstract long getMu();
 
@@ -56,6 +63,8 @@ public abstract class AbstractDataPerturbationServiceProvider
      * The maximum number of time steps to consider for the data stream.
      * <p>
      * NOTE: lower maxTimeSteps = less noise, faster prediction, better histogram quality.
+     *
+     * @return the maximum number of time steps
      */
     public abstract int getMaxTimeSteps();
 
@@ -64,6 +73,8 @@ public abstract class AbstractDataPerturbationServiceProvider
      * <p>
      * For example, if each record represents a count of events, this could be set to 1 to ensure that each record
      * contributes at most 1 to the histogram.
+     *
+     * @return the per-record clamp value
      */
     public abstract double getPerRecordClamp();
 
@@ -73,9 +84,14 @@ public abstract class AbstractDataPerturbationServiceProvider
      * <p>
      * This is used to calculate the l1 sensitivity of the histogram, which in turn determines the amount of noise to
      * add for differential privacy.
+     *
+     * @return the maximum user contributions
      */
     public abstract long getMaxUserContributions();
 
+    /**
+     * Constructs a new AbstractDataPerturbationServiceProvider and initializes the DP mechanism.
+     */
     public AbstractDataPerturbationServiceProvider() {
         // Calibrate noise for Key Selection (Sensitivity = 1)
         double rhoK = DPUtil.cdpRho(getEpsilonK(), getDeltaK());

@@ -51,6 +51,12 @@ public final class UserContributionLimiter {
         }
     }
 
+    /**
+     * Gets the contribution count for a user.
+     *
+     * @param userId the user ID
+     * @return the contribution count
+     */
     public long getUserCount(@Nullable Object userId) {
         if (userId == null) {
             return 0;

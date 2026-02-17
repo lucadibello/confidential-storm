@@ -15,18 +15,39 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
+/**
+ * Base class for all confidential Storm bolts.
+ * This class handles enclave initialization, tuple processing delegation,
+ * and error handling.
+ *
+ * @param <S> the type of the enclave service used by this bolt
+ */
 public abstract class ConfidentialBolt<S> extends BaseRichBolt {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConfidentialBolt.class);
 
     private final Class<S> serviceClass;
     private final EnclaveType enclaveType;
+    /**
+     * Holds the confidential state of the component.
+     */
     protected transient ConfidentialComponentState<OutputCollector, S> state;
 
+    /**
+     * Constructs a new ConfidentialBolt with default enclave type (TEE_SDK).
+     *
+     * @param serviceClass the class of the enclave service
+     */
     protected ConfidentialBolt(Class<S> serviceClass) {
         this(serviceClass, EnclaveType.TEE_SDK);
     }
 
+    /**
+     * Constructs a new ConfidentialBolt with specific enclave type.
+     *
+     * @param serviceClass the class of the enclave service
+     * @param enclaveType  the enclave type to use
+     */
     protected ConfidentialBolt(Class<S> serviceClass, EnclaveType enclaveType) {
         this.serviceClass = serviceClass;
         this.enclaveType = enclaveType;
@@ -90,21 +111,48 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
         super.cleanup();
     }
 
+    /**
+     * Hook method called after bolt preparation.
+     *
+     * @param topoConf the topology configuration
+     * @param context  the topology context
+     */
     protected void afterPrepare(Map<String, Object> topoConf, TopologyContext context) {
         // hook for subclasses
     }
 
+    /**
+     * Hook method called before bolt cleanup.
+     */
     protected void beforeCleanup() {
         // hook for subclasses
     }
 
+    /**
+     * Checks if a tuple is a system tick tuple.
+     *
+     * @param tuple the tuple to check
+     * @return true if it is a tick tuple, false otherwise
+     */
     protected boolean isTickTuple(Tuple tuple) {
         return tuple.getSourceComponent().equals(Constants.SYSTEM_COMPONENT_ID)
                 && tuple.getSourceStreamId().equals(Constants.SYSTEM_TICK_STREAM_ID);
     }
 
+    /**
+     * Abstract method to process a tuple using the enclave service.
+     *
+     * @param input   the input tuple
+     * @param service the enclave service
+     * @throws EnclaveServiceException if an error occurs inside the enclave
+     */
     protected abstract void processTuple(Tuple input, S service) throws EnclaveServiceException;
 
+    /**
+     * Gets the Storm output collector.
+     *
+     * @return the collector
+     */
     protected OutputCollector getCollector() {
         return state.getCollector();
     }

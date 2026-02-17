@@ -6,13 +6,22 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Minimal JSON parser for use within Enclaves (Jackson is not available due to extremely high TCB).
+ * Minimal JSON parser and serializer for use within Enclaves.
+ * <p>
+ * This class provides basic JSON functionality without external dependencies,
+ * which is critical for maintaining a small Trusted Computing Base (TCB).
  */
 public final class EnclaveJsonUtil {
 
     private EnclaveJsonUtil() {
     }
 
+    /**
+     * Parses a JSON string into a map of attributes.
+     *
+     * @param json the JSON string to parse
+     * @return a map representing the JSON object
+     */
     public static Map<String, Object> parseJson(String json) {
         try {
             return parseSimpleObject(json);
@@ -189,20 +198,44 @@ public final class EnclaveJsonUtil {
         return raw;
     }
 
+    /**
+     * Serializes a double value to bytes.
+     *
+     * @param value the value to serialize
+     * @return the bytes
+     */
     public static byte[] serialize(double value) {
         String strValue = Double.toString(value);
         return strValue.getBytes(StandardCharsets.UTF_8);
     }
 
+    /**
+     * Serializes a long value to bytes.
+     *
+     * @param value the value to serialize
+     * @return the bytes
+     */
     public static byte[] serialize(long value) {
         String strValue = Long.toString(value);
         return strValue.getBytes(StandardCharsets.UTF_8);
     }
 
+    /**
+     * Serializes a string value to bytes.
+     *
+     * @param value the value to serialize
+     * @return the bytes
+     */
     public static byte[] serialize(String value) {
         return value.getBytes(StandardCharsets.UTF_8);
     }
 
+    /**
+     * Serializes a map of fields to JSON bytes.
+     *
+     * @param fields the fields to serialize
+     * @return the JSON bytes
+     */
     public static byte[] serialize(Map<String, Object> fields) {
         StringBuilder sb = new StringBuilder();
         sb.append('{');

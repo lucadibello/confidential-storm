@@ -19,6 +19,13 @@ import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 
 import java.util.*;
 
+/**
+ * Base class for enclave services that correspond to Storm bolts.
+ * Provides shared logic for request verification (routing and replay protection),
+ * as well as helper methods for encryption and decryption.
+ *
+ * @param <T> the request type
+ */
 public abstract class ConfidentialBoltService<T> {
 
     /**
@@ -42,15 +49,12 @@ public abstract class ConfidentialBoltService<T> {
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(ConfidentialBoltService.class);
 
     /**
-     * Size of the replay window for sequence number tracking (should be large enough to accommodate out-of-order messages).
-     * <p>
-     * FIXME: is it really possible to have out-of-order messages in Storm? If not, we could reduce this to 1.
+     * Size of the replay window for sequence number tracking.
      */
     private final int REPLAY_WINDOW_SIZE = 128;
 
     /**
      * Map of producer IDs to their corresponding replay windows for replay attack prevention.
-     * NOTE: we use a map of replay windows as one bolt could ingest data streams from multiple different producers.
      */
     private final Map<String, ReplayWindow> replayWindows = new HashMap<>();
 
@@ -102,6 +106,7 @@ public abstract class ConfidentialBoltService<T> {
      *
      * @param request the request containing the sealed values
      * @return a collection of sealed/encrypted values to verify
+     * @throws EnclaveServiceException if field access fails
      */
     public Collection<EncryptedValue> valuesToVerify(T request) throws EnclaveServiceException {
         // Use reflection to find all EncryptedValue fields in the request object
@@ -134,6 +139,12 @@ public abstract class ConfidentialBoltService<T> {
                 .accept(sequenceNumber);
     }
 
+    /**
+     * Verifies the request with default options (no skipping).
+     *
+     * @param request the request to verify
+     * @throws EnclaveServiceException if verification fails
+     */
     protected void verify(T request) throws EnclaveServiceException {
         verify(request, false, false);
     }
@@ -142,7 +153,9 @@ public abstract class ConfidentialBoltService<T> {
      * Verifies that all sealed values in the request are valid, come from the expected source
      * and go to the expected destination, and that their sequence numbers are within the replay window.
      *
-     * @param request the request containing the sealed values to verify
+     * @param request              the request containing the sealed values to verify
+     * @param skipRouteValidation  whether to skip route validation
+     * @param skipReplayProtection whether to skip replay protection
      * @throws EnclaveServiceException if any verification step fails
      */
     protected void verify(T request, boolean skipRouteValidation, boolean skipReplayProtection)

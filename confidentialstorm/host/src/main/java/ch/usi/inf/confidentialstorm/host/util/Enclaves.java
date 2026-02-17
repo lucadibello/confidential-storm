@@ -11,12 +11,22 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Utility class for enclave creation and service loading.
+ */
 public class Enclaves {
     private static final String ENCLAVE_TYPE_CONF_KEY = "confidentialstorm.enclave.type";
 
     // create logger using slf4j
     private static final Logger LOG = LoggerFactory.getLogger(Enclaves.class);
 
+    /**
+     * Creates an enclave of the specified type.
+     *
+     * @param enclaveType the enclave type
+     * @return the created enclave
+     * @throws IllegalStateException if creation fails
+     */
     public static Enclave createEnclave(EnclaveType enclaveType) {
         LOG.info("Creating enclave of type {}", enclaveType);
         try {
@@ -29,6 +39,15 @@ public class Enclaves {
         }
     }
 
+    /**
+     * Loads a service from the specified enclave.
+     *
+     * @param enclave      the enclave to load from
+     * @param serviceClass the class of the service to load
+     * @param <S>          the service type
+     * @return the loaded service
+     * @throws IllegalStateException if the service cannot be loaded
+     */
     public static <S> S loadService(Enclave enclave, Class<S> serviceClass) {
         LOG.info("Loading service {} from enclave", serviceClass.getName());
         try {
@@ -45,6 +64,13 @@ public class Enclaves {
         }
     }
 
+    /**
+     * Resolves the enclave type from topology configuration or environment.
+     *
+     * @param topoConf           the topology configuration
+     * @param defaultEnclaveType the default enclave type to use if none is found
+     * @return the resolved enclave type
+     */
     public static EnclaveType resolveEnclaveType(Map<String, Object> topoConf, EnclaveType defaultEnclaveType) {
         String override = extractOverrideFromTopologyConf(topoConf);
         if (override == null) {

@@ -2,11 +2,14 @@ package ch.usi.inf.confidentialstorm.enclave.util;
 
 import org.apache.commons.math3.util.FastMath;
 
+/**
+ * Utility class for Differential Privacy (DP) calculations.
+ * Includes methods for converting DP parameters and calculating noise scales.
+ */
 public class DPUtil {
 
     /**
-     * Converts an (epsilon, delta)-DP guarantee into an equivalent rho-zCDP guarantee
-     * (as used for the binary tree aggregation in the referenced DP streaming paper).
+     * Converts an (epsilon, delta)-DP guarantee into an equivalent rho-zCDP guarantee.
      *
      * @param eps   target epsilon (privacy loss parameter)
      * @param delta target delta (failure probability in (eps, delta)-DP)
@@ -33,8 +36,7 @@ public class DPUtil {
     }
 
     /**
-     * Computes the delta that corresponds to a given rho-zCDP and epsilon bound,
-     * per the zCDP to (epsilon, delta)-DP conversion in the DP streaming paper.
+     * Computes the delta that corresponds to a given rho-zCDP and epsilon bound.
      *
      * @param rho zCDP privacy parameter
      * @param eps epsilon bound
@@ -65,12 +67,11 @@ public class DPUtil {
     }
 
     /**
-     * Computes the Gaussian sigma needed for binary tree aggregation under rho-zCDP
-     * (see Algorithm 2 / binary tree aggregation in the paper).
+     * Computes the Gaussian sigma needed for binary tree aggregation under rho-zCDP.
      *
      * @param rho zCDP privacy parameter
      * @param T   number of releases/time steps supported by the tree
-     * @param L   per-user L1 sensitivity (C * L_m in the paper)
+     * @param L   per-user L1 sensitivity
      * @return standard deviation for the Gaussian noise
      */
     public static double calculateSigma(double rho, double T, double L) {
@@ -81,8 +82,11 @@ public class DPUtil {
     }
 
     /**
-     * Returns the user-level L1 sensitivity C * L_m, used by the DP tree to
-     * calibrate Gaussian noise.
+     * Returns the user-level L1 sensitivity C * L_m.
+     *
+     * @param maxContributionsPerUser maximum contributions per user (C)
+     * @param perRecordClamp          per-record clamp value (L_m)
+     * @return the L1 sensitivity
      */
     public static double l1Sensitivity(long maxContributionsPerUser, double perRecordClamp) {
         return maxContributionsPerUser * perRecordClamp;
