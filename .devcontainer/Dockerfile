@@ -200,6 +200,10 @@ RUN TARGET_GROUP="$(cat /etc/devcontainer-group 2>/dev/null || echo "${REMOTE_GR
     && mkdir -p "${REMOTE_HOME}"/.cache \
     && chown "${REMOTE_USER}:${TARGET_GROUP}" "${REMOTE_HOME}"/.cache
 
+# Copy .devcontainer/.zed config to the remote user config directory (for Zed editor support)
+COPY .devcontainer/.zed /home/${REMOTE_USER}/.config/zed
+RUN chown -R "${REMOTE_USER}:${GROUP_NAME}" /home/${REMOTE_USER}/.config/zed
+
 EXPOSE 2222 6666
 
 ENTRYPOINT ["/usr/local/bin/devcontainer-entrypoint"]
