@@ -179,15 +179,6 @@ RUN set -eux; \
     ln -s "/opt/apache-storm-${STORM_VERSION}" "${STORM_HOME}"; \
     ln -s "${STORM_HOME}/bin/storm" /usr/local/bin/storm
 
-# Download Java 21 for JDT Language Server (used by Neovim/Zed built-in LSP client)
-RUN set -eux; \
-    url="https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.10%2B7/OpenJDK21U-jdk_x64_linux_hotspot_21.0.10_7.tar.gz"; \
-    curl -fsSL -o /tmp/temurin21.tgz "$url"; \
-    mkdir -p /opt/java; \
-    tar -xzf /tmp/temurin21.tgz -C /opt/java; \
-    mv /opt/java/jdk-21.0.10+7 /opt/java/temurin-21; \
-    echo "Development Temurin JDK installed successfully."
-
 # Minimal Storm client config (nimbus by service name)
 RUN mkdir -p /home/${REMOTE_USER}/.storm && \
     echo 'nimbus.seeds: ["nimbus"]' > /home/${REMOTE_USER}/.storm/storm.yaml

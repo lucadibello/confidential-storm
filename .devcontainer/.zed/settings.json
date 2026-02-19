@@ -1,9 +1,0 @@
-{
-    "lsp": {
-        "java": {
-            "settings": {
-                "java_home": "/opt/java/temurin-21"
-            }
-        }
-    }
-}
