@@ -182,7 +182,7 @@ public final class SealedPayload {
         try {
             return cipher.doFinal(input);
         } catch (GeneralSecurityException e) {
-            throw new SealedPayloadProcessingException("Unable to process sealed payload", e);
+            throw new SealedPayloadProcessingException("Unable to process sealed payload with scheme " + scheme, e);
         }
     }
 

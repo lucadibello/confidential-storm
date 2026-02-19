@@ -12,25 +12,48 @@ MAVEN_GOALS ?= package
 MAVEN_FLAGS ?= -DskipTests
 # Toggle native profile (requires SGX-enabled env) via `make ENCLAVE_PROFILE= enclave`.
 ENCLAVE_PROFILE ?= -Pnative
+# Encryption scheme for dataset sealing. Must match EncryptionScheme in the enclave config.
+# Valid values: CHACHA20_POLY1305 (default), AES_256_GCM, NONE
+ENCRYPTION_SCHEME ?= CHACHA20_POLY1305
 
-.PHONY: all build help clean common enclave host submit run-local seal-dataset test-enclave
+.PHONY: all build help clean common enclave host submit run-local \
+       seal-dataset seal-chacha20 seal-aes256gcm seal-none \
+       test-enclave dataset-with-users percentile
 
 all: build
 
 help:
 	@echo "Make targets:"
-	@echo "  make [all|build]   - Build common, enclave (native), and host artifacts"
-	@echo "  make common        - Build the shared Java library"
-	@echo "  make enclave       - Build enclave artifacts (default profile: $(ENCLAVE_PROFILE))"
-	@echo "  make host          - Build the Storm topology (depends on enclave output)"
-	@echo "  make clean         - Run 'mvn clean' for the example project"
-	@echo "  make run-local     - Run the topology locally"
-	@echo "  make seal-dataset  - Encrypt the dataset (requires python3)"
+	@echo ""
+	@echo "  Build & run"
+	@echo "    make [all|build]       - Build common, enclave (native), and host artifacts"
+	@echo "    make common            - Build the shared Java library"
+	@echo "    make enclave           - Build enclave artifacts (default profile: $(ENCLAVE_PROFILE))"
+	@echo "    make host              - Build the Storm topology (depends on enclave output)"
+	@echo "    make clean             - Run 'mvn clean' for the example project"
+	@echo "    make run-local         - Run the topology locally"
+	@echo "    make test-enclave      - Run enclave unit tests"
+	@echo "    make submit            - Submit topology to a Storm cluster"
+	@echo ""
+	@echo "  Dataset sealing (requires python3 + cryptography)"
+	@echo "    make seal-dataset      - Seal dataset with ENCRYPTION_SCHEME (default: $(ENCRYPTION_SCHEME))"
+	@echo "    make seal-chacha20     - Seal dataset with ChaCha20-Poly1305"
+	@echo "    make seal-aes256gcm    - Seal dataset with AES-256-GCM"
+	@echo "    make seal-none         - Store dataset as plaintext (benchmarking only)"
+	@echo ""
+	@echo "  Analysis"
+	@echo "    make percentile        - Compute per-user word-count percentile"
 	@echo ""
 	@echo "Variables:"
-	@echo "  MVN=<path>                Override Maven binary (default: mvn)"
-	@echo "  MAVEN_FLAGS='<flags>'     Extra flags (default: $(MAVEN_FLAGS))"
-	@echo "  ENCLAVE_PROFILE='<flags>' Profile(s) to pass while building enclave"
+	@echo "  MVN=<path>                   Override Maven binary (default: mvn)"
+	@echo "  MAVEN_FLAGS='<flags>'        Extra flags (default: $(MAVEN_FLAGS))"
+	@echo "  ENCLAVE_PROFILE='<flags>'    Profile(s) to pass while building enclave"
+	@echo "  ENCRYPTION_SCHEME=<scheme>   Scheme for seal-dataset (default: $(ENCRYPTION_SCHEME))"
+	@echo "                               Values: CHACHA20_POLY1305, AES_256_GCM, NONE"
+
+# ---------------------------------------------------------------------------
+# Build
+# ---------------------------------------------------------------------------
 
 build: clean common enclave host
 
@@ -49,23 +72,46 @@ test-enclave: install-framework
 host: install-framework
 	$(MVN) -f $(ROOT_POM) -pl host -am $(MAVEN_FLAGS) $(MAVEN_GOALS)
 
+# ---------------------------------------------------------------------------
+# Run
+# ---------------------------------------------------------------------------
+
 run-local:
 	@echo "Running Storm topology locally with debug logging (120 seconds)..."
 	@sudo storm local -c topology.debug=true --local-ttl 120 host/target/confidential-word-count-topology.jar ch.usi.inf.examples.confidential_word_count.host.WordCountTopology -- --local
 	@echo "Finished local run."
 
-seal-dataset:
-	@echo "Sealing dataset (encrypting jokes.json to jokes.enc.json)..."
-	$(MAKE) dataset-with-users
-	@STREAM_KEY_HEX=$$(cat $(DATASET_DIR)/stream_key_hex) \
-		python3 $(DATASET_DIR)/seal-dataset/main.py $(DATASET_WITH_USERS) host/src/main/resources/jokes.enc.json
-	@echo "Finished encryption."
+submit:
+	@echo "Submitting Storm topology to cluster..."
+	@storm jar host/target/confidential-word-count-topology.jar ch.usi.inf.examples.confidential_word_count.host.WordCountTopology -- --cluster
+	@echo "Finished submission."
 
-percentile:
-	@echo "Computing per-user word-count percentile (default p=0.99)..."
-	$(MAKE) dataset-with-users
-	@python3 $(MAX_CONTRIB_TOOL) $(DATASET_WITH_USERS)
-	@echo "Done."
+# ---------------------------------------------------------------------------
+# Dataset sealing
+# ---------------------------------------------------------------------------
+
+# Generic target — uses ENCRYPTION_SCHEME variable
+seal-dataset: dataset-with-users
+	@echo "Sealing dataset (scheme=$(ENCRYPTION_SCHEME))..."
+	@STREAM_KEY_HEX=$$(cat $(DATASET_DIR)/stream_key_hex) \
+		python3 $(DATASET_DIR)/seal-dataset/main.py \
+			--scheme $(ENCRYPTION_SCHEME) \
+			$(DATASET_WITH_USERS) host/src/main/resources/jokes.enc.json
+	@echo "Finished sealing (scheme=$(ENCRYPTION_SCHEME))."
+
+# Convenience shortcuts for each scheme
+seal-chacha20:
+	$(MAKE) seal-dataset ENCRYPTION_SCHEME=CHACHA20_POLY1305
+
+seal-aes256gcm:
+	$(MAKE) seal-dataset ENCRYPTION_SCHEME=AES_256_GCM
+
+seal-none:
+	$(MAKE) seal-dataset ENCRYPTION_SCHEME=NONE
+
+# ---------------------------------------------------------------------------
+# Dataset preparation & analysis
+# ---------------------------------------------------------------------------
 
 dataset-with-users:
 	@echo "Generating dataset with user_id annotations..."
@@ -73,7 +119,8 @@ dataset-with-users:
 	@python3 $(DATASET_DIR)/regen-dataset/main.py $(DATASET_RAW) $(DATASET_WITH_USERS)
 	@echo "Dataset with user_ids written to $(DATASET_WITH_USERS)"
 
-submit:
-	@echo "Submitting Storm topology to cluster..."
-	@storm jar host/target/confidential-word-count-topology.jar ch.usi.inf.examples.confidential_word_count.host.WordCountTopology -- --cluster
-	@echo "Finished submission."
+percentile:
+	@echo "Computing per-user word-count percentile (default p=0.99)..."
+	$(MAKE) dataset-with-users
+	@python3 $(MAX_CONTRIB_TOOL) $(DATASET_WITH_USERS)
+	@echo "Done."
