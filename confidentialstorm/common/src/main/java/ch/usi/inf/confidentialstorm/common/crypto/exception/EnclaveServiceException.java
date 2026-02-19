@@ -15,6 +15,14 @@ public class EnclaveServiceException extends Exception implements Serializable {
     private final String originalType;
     private final String originalMessage;
 
+    /**
+     * Constructs a new EnclaveServiceException.
+     *
+     * @param operation       the name of the operation that failed
+     * @param originalType    the type of the original exception
+     * @param originalMessage the message of the original exception
+     * @param enclaveStack    the stack trace from the enclave
+     */
     public EnclaveServiceException(String operation,
                                    String originalType,
                                    String originalMessage,
@@ -28,10 +36,28 @@ public class EnclaveServiceException extends Exception implements Serializable {
         }
     }
 
+    /**
+     * Constructs a new EnclaveServiceException with type and message.
+     *
+     * @param originalType the type of the original exception
+     * @param message      the detail message
+     */
     public EnclaveServiceException(String originalType, String message) {
         super(message);
         this.originalType = originalType;
         this.originalMessage = message;
+    }
+
+    /**
+     * Constructs a new EnclaveServiceException with a cause.
+     *
+     * @param message the detail message
+     * @param cause   the cause
+     */
+    public EnclaveServiceException(String message, Throwable cause) {
+        super(message, cause);
+        this.originalType = cause.getClass().getName();
+        this.originalMessage = cause.getMessage();
     }
 
     private static String buildMessage(String operation, String type, String msg) {
@@ -43,10 +69,20 @@ public class EnclaveServiceException extends Exception implements Serializable {
         return builder.toString();
     }
 
+    /**
+     * Gets the original exception type.
+     *
+     * @return the original exception type
+     */
     public String getOriginalType() {
         return originalType;
     }
 
+    /**
+     * Gets the original exception message.
+     *
+     * @return the original exception message
+     */
     public String getOriginalMessage() {
         return originalMessage;
     }

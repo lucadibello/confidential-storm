@@ -1,15 +1,17 @@
 package ch.usi.inf.examples.confidential_word_count.host;
 
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
-import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramBolt;
+import ch.usi.inf.examples.confidential_word_count.host.bolts.DataPerturbationBolt;
+import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramAggregatorBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.SplitSentenceBolt;
-import ch.usi.inf.examples.confidential_word_count.host.bolts.WordCounterBolt;
+import ch.usi.inf.examples.confidential_word_count.host.bolts.UserContributionBoundingBolt;
 import ch.usi.inf.examples.confidential_word_count.host.spouts.RandomJokeSpout;
 import org.apache.storm.Config;
 import org.apache.storm.LocalCluster;
 import org.apache.storm.generated.StormTopology;
 import org.apache.storm.topology.ConfigurableTopology;
 import org.apache.storm.topology.TopologyBuilder;
+import org.apache.storm.tuple.Fields;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,33 +32,48 @@ public class WordCountTopology extends ConfigurableTopology {
 
         // RandomJokeSpout: emits random jokes (json entries with "body" field)
         builder.setSpout(
-                ComponentConstants.RANDOM_JOKE_SPOUT.toString(),
+                ComponentConstants.SPOUT_RANDOM_JOKE.toString(),
                 new RandomJokeSpout(),
                 1
         );
 
         // SplitSentenceBolt: splits body into words
         builder.setBolt(
-                ComponentConstants.SENTENCE_SPLIT.toString(),
+                ComponentConstants.BOLT_SENTENCE_SPLIT.toString(),
                 new SplitSentenceBolt(),
                 2
-        ).shuffleGrouping(ComponentConstants.RANDOM_JOKE_SPOUT.toString());
+        ).shuffleGrouping(ComponentConstants.SPOUT_RANDOM_JOKE.toString());
 
-        // WordCountBolt: counts the words that are emitted
+        // UserContributionBoundingBolt: bounds user contributions to the histogram
         builder.setBolt(
-                ComponentConstants.WORD_COUNT.toString(),
-                new WordCounterBolt(),
+                ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING.toString(),
+                new UserContributionBoundingBolt(),
                 2
-        ).shuffleGrouping(
-                ComponentConstants.SENTENCE_SPLIT.toString()
+        ).fieldsGrouping(
+                ComponentConstants.BOLT_SENTENCE_SPLIT.toString(),
+                new Fields("routingKey")
         );
 
-        // HistogramBolt: merges partial counters into a single (global) histogram
+        // DataPerturbationBolt: computes the histogram and perturbs it to ensure differential privacy
+        // Uses parallelism=2 with word-only routing so each replica sees all contributions for its assigned keys
         builder.setBolt(
-                ComponentConstants.HISTOGRAM_GLOBAL.toString(),
-                new HistogramBolt(),
+                ComponentConstants.BOLT_DATA_PERTURBATION.toString(),
+                new DataPerturbationBolt(),
+                2
+        ).fieldsGrouping(
+                ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING.toString(),
+                new Fields("dpRoutingKey")
+        );
+
+        // HistogramAggregatorBolt: receives encrypted partial histograms from DataPerturbation replicas
+        // and merges them inside the enclave to produce the final global histogram
+        builder.setBolt(
+                ComponentConstants.BOLT_HISTOGRAM_AGGREGATION.toString(),
+                new HistogramAggregatorBolt(),
                 1
-        ).globalGrouping(ComponentConstants.WORD_COUNT.toString());
+        ).shuffleGrouping(
+                ComponentConstants.BOLT_DATA_PERTURBATION.toString()
+        );
 
         // configure spout wait strategy to avoid starving other bolts
         // NOTE: learn more here https://storm.apache.org/releases/current/Performance.html

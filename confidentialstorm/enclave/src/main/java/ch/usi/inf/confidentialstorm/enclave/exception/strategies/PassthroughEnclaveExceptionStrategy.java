@@ -4,11 +4,17 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceExcept
 import ch.usi.inf.confidentialstorm.enclave.exception.strategies.base.IEnclaveExceptionStrategy;
 
 /**
- * This exception handling strategy wraps any throwable in a serializable EnclaveServiceException
- * in order to let exceptions reach the untrusted application
+ * Exception handling strategy that wraps exceptions in a serializable {@link EnclaveServiceException}
+ * to let them reach the host application.
  */
 public class PassthroughEnclaveExceptionStrategy implements IEnclaveExceptionStrategy {
 
+    /**
+     * Handles the exception by wrapping it and throwing an EnclaveServiceException.
+     *
+     * @param t the exception to handle
+     * @throws EnclaveServiceException always
+     */
     @Override
     public void handleException(Throwable t) throws EnclaveServiceException {
         String type = t.getClass().getName();

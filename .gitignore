@@ -91,3 +91,9 @@ data/*
 
 # secrets
 .env
+
+# ide files
+.vscode/
+.zed/
+# we only keep the zed configuration to work within the devcontainer using JDTLS (requires Java 21 + additional configuration)
+!.devcontainer/.zed

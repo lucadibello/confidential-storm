@@ -1,6 +1,7 @@
 package ch.usi.inf.examples.confidential_word_count.host.util;
 
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+import ch.usi.inf.examples.confidential_word_count.common.api.spout.model.SealedJokeEntry;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,14 +27,22 @@ public final class JokeReader {
     // Tiny demo
     public static void main(String[] args) throws Exception {
         JokeReader reader = new JokeReader();
-        List<EncryptedValue> jokes = reader.readAll("jokes.enc.json");
+        List<SealedJokeEntry> jokes = reader.readAll("jokes.enc.json");
         System.out.println("Loaded " + jokes.size() + " jokes");
         if (!jokes.isEmpty()) {
             System.out.println(jokes.get(0));
         }
     }
 
-    public List<EncryptedValue> readAll(String jsonResourceName) throws IOException {
+    /**
+     * Reads all encrypted joke entries from a JSON resource.
+     * Each entry contains separately encrypted userId and payload fields.
+     *
+     * @param jsonResourceName the name of the JSON resource file
+     * @return list of SealedJokeEntry objects with separate encrypted userId and payload
+     * @throws IOException if the resource cannot be read
+     */
+    public List<SealedJokeEntry> readAll(String jsonResourceName) throws IOException {
         ClassLoader classloader = Thread.currentThread().getContextClassLoader();
         InputStream resourceStream = classloader.getResourceAsStream(jsonResourceName);
         if (resourceStream == null) {
@@ -44,22 +53,39 @@ public final class JokeReader {
             if (!root.isArray()) {
                 throw new IllegalArgumentException("Expected JSON array for jokes dataset");
             }
-            List<EncryptedValue> encryptedJokes = new ArrayList<>();
+            List<SealedJokeEntry> encryptedJokes = new ArrayList<>();
             for (JsonNode entry : root) {
-                JsonNode headerNode = entry.get("header");
-                if (headerNode == null) {
+                // Parse separately encrypted userId and payload
+                JsonNode userIdNode = entry.get("userId");
+                JsonNode payloadNode = entry.get("payload");
+
+                if (userIdNode == null || payloadNode == null) {
+                    LOG.warn("Entry missing 'userId' or 'payload' field, skipping");
                     continue;
                 }
-                byte[] aad = buildAadBytes(headerNode);
-                byte[] nonce = decodeBase64(entry.get("nonce"));
-                byte[] ciphertext = decodeBase64(entry.get("ciphertext"));
 
-                // wrap fields inside EncryptedValue object
-                EncryptedValue joke = new EncryptedValue(aad, nonce, ciphertext);
-                encryptedJokes.add(joke);
+                EncryptedValue encryptedUserId = parseEncryptedValue(userIdNode);
+                EncryptedValue encryptedPayload = parseEncryptedValue(payloadNode);
+
+                // Format: (payload, userId)
+                encryptedJokes.add(new SealedJokeEntry(encryptedPayload, encryptedUserId));
             }
             return encryptedJokes;
         }
+    }
+
+    /**
+     * Parses an EncryptedValue from a JSON node containing header, nonce, and ciphertext.
+     */
+    private EncryptedValue parseEncryptedValue(JsonNode node) {
+        JsonNode headerNode = node.get("header");
+        if (headerNode == null) {
+            throw new IllegalArgumentException("Missing 'header' field in encrypted value");
+        }
+        byte[] aad = buildAadBytes(headerNode);
+        byte[] nonce = decodeBase64(node.get("nonce"));
+        byte[] ciphertext = decodeBase64(node.get("ciphertext"));
+        return new EncryptedValue(aad, nonce, ciphertext);
     }
 
     private byte[] decodeBase64(JsonNode node) {

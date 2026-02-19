@@ -15,19 +15,36 @@ import java.util.Map;
 
 /**
  * Generic confidential spout that loads an enclave service of the caller's choice.
+ * Handles enclave lifecycle and error handling for confidential spouts.
+ *
+ * @param <S> the type of the enclave service used by this spout
  */
 public abstract class ConfidentialSpout<S> extends BaseRichSpout {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConfidentialSpout.class);
 
+    /**
+     * Holds the confidential state of the component.
+     */
     protected transient ConfidentialComponentState<SpoutOutputCollector, S> state;
     private final Class<S> serviceClass;
     private final EnclaveType enclaveType;
 
+    /**
+     * Constructs a new ConfidentialSpout with default enclave type (TEE_SDK).
+     *
+     * @param serviceClass the class of the enclave service
+     */
     protected ConfidentialSpout(Class<S> serviceClass) {
         this(serviceClass, EnclaveType.TEE_SDK);
     }
 
+    /**
+     * Constructs a new ConfidentialSpout with specific enclave type.
+     *
+     * @param serviceClass the class of the enclave service
+     * @param enclaveType  the enclave type to use
+     */
     protected ConfidentialSpout(Class<S> serviceClass, EnclaveType enclaveType) {
         this.serviceClass = serviceClass;
         this.enclaveType = enclaveType;
@@ -57,6 +74,13 @@ public abstract class ConfidentialSpout<S> extends BaseRichSpout {
         }
     }
 
+    /**
+     * Hook method called after spout opening.
+     *
+     * @param conf      the topology configuration
+     * @param context   the topology context
+     * @param collector the spout output collector
+     */
     protected void afterOpen(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector) {
         // hook for subclass
     }
@@ -72,23 +96,41 @@ public abstract class ConfidentialSpout<S> extends BaseRichSpout {
                 this.state.destroy();
             }
         } catch (EnclaveDestroyingException e) {
-            LOG.error("Failed to destroy enclave for bolt {} (task {})",
+            LOG.error("Failed to destroy enclave for spout {} (task {})",
                     this.state.getComponentId(), this.state.getTaskId(), e);
         }
     }
 
+    /**
+     * Hook method called before spout closing.
+     */
     protected void beforeClose() {
         // hook for subclass
     }
 
+    /**
+     * Gets the enclave service instance.
+     *
+     * @return the service
+     */
     protected S getService() {
         return state.getEnclaveManager().getService();
     }
 
+    /**
+     * Gets the Storm spout output collector.
+     *
+     * @return the collector
+     */
     protected SpoutOutputCollector getCollector() {
         return state.getCollector();
     }
 
+    /**
+     * Gets the component ID.
+     *
+     * @return the component ID
+     */
     protected String getComponentId() {
         return state.getComponentId();
     }
@@ -118,5 +160,10 @@ public abstract class ConfidentialSpout<S> extends BaseRichSpout {
         return Map.of();
     }
 
+    /**
+     * Abstract method to be implemented by subclasses to emit the next tuple.
+     *
+     * @throws EnclaveServiceException if an error occurs inside the enclave
+     */
     protected abstract void executeNextTuple() throws EnclaveServiceException;
 }

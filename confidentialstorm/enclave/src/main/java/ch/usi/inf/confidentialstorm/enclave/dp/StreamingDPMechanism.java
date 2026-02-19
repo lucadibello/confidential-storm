@@ -28,12 +28,16 @@ public class StreamingDPMechanism {
      * For each key detected during the key selection phase, we maintain a separate binary aggregation tree to track
      * the number of unique users contributing to that key over time.
      * <p>
-     * FIXME: this statement needs to be double-checked!
      * This guarantees p-zCDP for each of the trees for each key.
      */
     private final Map<String, BinaryAggregationTree> keySelectionForest = new HashMap<>();
 
-
+    /**
+     * Forest of binary aggregation trees for histogram release.
+     * <p>
+     * For each selected key, we maintain a separate binary aggregation tree to track the sum of contributions
+     * over time with added noise.
+     */
     private final Map<String, BinaryAggregationTree> histogramForest = new HashMap<>();
     
     /**
@@ -41,16 +45,18 @@ public class StreamingDPMechanism {
      */
     private final Set<String> selectedKeys = new HashSet<>();
 
-    // sum of released noisy counts for each key (algorithm 2)
+    /**
+     * Map that stores the current noisy sum for each key.
+     * <p>
+     * These values are computed using Algorithm 2 and are used to produce the final histogram.
+     */
     private final Map<String, Double> currentSums = new HashMap<>();
-
-    // keep track of predicted release times for keys (algorithm 3)
 
     /**
      * Map that links each key to its predicted release time step.
      * <p>
      * This is used in the Empty Key Release Prediction (Algorithm 3) to determine when a key is expected to be
-     * released.
+     * released due to noise alone.
      */
     private final Map<String, Integer> predictedReleaseTimes = new HashMap<>();
 
@@ -63,11 +69,16 @@ public class StreamingDPMechanism {
      */
     private final Map<String, Set<String>> observedUsersForKeySelection = new HashMap<>();
 
-    // Buffer for hierarchical perturbation (Algorithm 2)
-    // Stores aggregated value (Delta V) since last release (or start)
+    /**
+     * Buffer for hierarchical perturbation (Algorithm 2).
+     * Stores the aggregated value (Delta V) accumulated since the last release (or start) for each key.
+     */
     private final Map<String, Double> unreleasedHistogramBuffer = new HashMap<>();
 
-    // Buffers for current time window contributions (needed for key selection)
+    /**
+     * Buffers for current time window contributions (needed for key selection).
+     * Stores the raw count of contributions for each key in the current time step.
+     */
     private final Map<String, Double> currentWindowCounts = new HashMap<>();
 
     /**
@@ -76,81 +87,56 @@ public class StreamingDPMechanism {
     private final Map<String, Set<String>> currentWindowUniqueUsers = new HashMap<>();
 
     /**
-     * The noise scale parameters for the Gaussian noise added during key selection.
+     * The noise scale parameters for the Gaussian noise added during key selection (Algorithm 1).
      */
     private final double sigmaKey;
 
     /**
-     * The noise scale parameters for the Gaussian noise added during histogram release.
-     * Calibrated for L1 = C * L_m.
+     * The noise scale parameters for the Gaussian noise added during histogram release (Algorithm 2).
+     * Calibrated for L1 sensitivity = C * L_m.
      */
     private final double sigmaHist;
 
     /**
-     * Per-record clamp L_m applied to every incoming contribution.
-     * Ensures per-user sensitivity L1 = C * L_m.
-     */
-    private final double perRecordClamp;
-
-    /**
-     * The maximum number of time steps to process in the stream.
+     * The maximum number of time steps (triggering times) to process in the stream.
      */
     private final int maxTimeSteps;
 
     /**
-     * The minimum number of unique users required for a key to be considered for release.
+     * The minimum number of unique users (base threshold) required for a key to be considered for release.
      * <p>
-     * A key is selected for release if the count of unique users (with DP noise) contributing to that key satisfies:
-     *  noisy_unique_users >= mu + tau_tr_i
-     *      where
-     *  tau_tr_i = time dependent threshold computed as the inverse CDF of the Gaussian distribution at confidence level {@link #BETA} - 1.
-     * <p>
-     * Refer to Appendix D of the "Differentially Private Stream Processing at Scale" paper for details.
+     * A key is selected for release if the count of unique users (with DP noise) satisfies:
+     * noisy_unique_users >= mu + tau_tr_i
+     * where tau_tr_i is a time-dependent threshold.
      */
     private final long mu;
 
     /**
-     * The confidence level for tau computation.
+     * The confidence level (beta) for computing the accuracy threshold (tau).
      * <p>
+     * Refer to Appendix D of the paper.
      */
     private final double BETA = 1e-5;
 
     /**
-     * The current time step in the stream processing.
+     * The current time step in the stream processing (tr_j).
      */
     private int timeStep = 0;
 
     /**
-     * Set of keys from the previous time step (S^(i-1)).
-     * Used to determine which keys need new trees created (keys in S^(i) \ S^(i-1)).
-     */
-    private Set<String> s_i_prev = new HashSet<>();
-
-    /**
-     * Per-user contribution limiter enforcing C-bounded contributions.
-     * Critical for maintaining L1 = C × Lm sensitivity assumption.
-     */
-    private final ContributionLimiter contributionLimiter = new ContributionLimiter();
-
-    /**
-     * Maximum contributions per user (C from Section 3.2).
-     */
-    private final long maxContributionsPerUser;
-
-    /**
-     * @param sigmaKey                Noise scale for key selection (based on sensitivity 1).
-     * @param sigmaHist               Noise scale for histogram (based on sensitivity C*L).
-     * @param maxTimeSteps            Maximum number of time steps to process.
-     * @param mu                      Base threshold for key selection.
+     * Initializes the streaming DP mechanism with the provided noise scales and parameters.
+     *
+     * @param sigmaKey                Noise scale for key selection (Algorithm 1), based on sensitivity 1.
+     * @param sigmaHist               Noise scale for histogram release (Algorithm 2), calibrated for L1 sensitivity C*L_m.
+     * @param maxTimeSteps            Maximum number of triggering times (T) to process in the stream.
+     * @param mu                      Base threshold for key selection (minimum unique users).
      * @param maxContributionsPerUser Maximum contributions per user (C) for bounding sensitivity.
-     * @param perRecordClamp          Clamp applied to each record's value (L_m).
      */
     public StreamingDPMechanism(double sigmaKey,
                                 double sigmaHist,
                                 int maxTimeSteps,
                                 long mu,
-                                long maxContributionsPerUser,
-                                double perRecordClamp) {
+                                long maxContributionsPerUser) {
         // ensure that mu is non-negative -> mu >= 0
         if (mu < 0) {
             throw new IllegalArgumentException("mu must be non-negative");
@@ -158,15 +144,10 @@ public class StreamingDPMechanism {
         if (maxContributionsPerUser <= 0) {
             throw new IllegalArgumentException("maxContributionsPerUser must be positive");
         }
-        if (perRecordClamp <= 0) {
-            throw new IllegalArgumentException("perRecordClamp must be positive");
-        }
         this.sigmaKey = sigmaKey;
         this.sigmaHist = sigmaHist;
         this.maxTimeSteps = maxTimeSteps;
         this.mu = mu;
-        this.maxContributionsPerUser = maxContributionsPerUser;
-        this.perRecordClamp = perRecordClamp;
     }
 
     /**
@@ -174,34 +155,27 @@ public class StreamingDPMechanism {
      * Enforces per-user contribution bounding (C) as required by Section 3.2.
      *
      * @param key    The aggregation key
-     * @param count  The contribution to add to the key
+     * @param clamped_count  The clamped contribution value
      * @param userId The user ID contributing this value
-     * @return true if contribution was accepted, false if rejected due to exceeding C
      */
-    public boolean addContribution(String key, double count, String userId) {
-        // Enforce contribution bounding: each user can contribute at most C records
-        // NOTE: needed to maintaining L_1 = C * L_m sensitivity assumption
-        if (!contributionLimiter.allow(userId, maxContributionsPerUser)) {
-            log.debug("[DP-MECHANISM] Rejected contribution from user {} (exceeded C={})",
-                     userId, maxContributionsPerUser);
-            return false;
-        }
-
-        // Clamp the per-record contribution to L_m
-        double clamped = FastMath.max(-perRecordClamp, FastMath.min(perRecordClamp, count));
-
+    public void addContribution(String userId, String key, double clamped_count) {
         // accumulate contribution for this key in the current window
-        currentWindowCounts.merge(key, clamped, Double::sum);
+        currentWindowCounts.merge(key, clamped_count, Double::sum);
         // record contribution from this user to this key in the current window
         currentWindowUniqueUsers.computeIfAbsent(key, k -> new HashSet<>()).add(userId);
-        return true;
     }
 
     /**
-     * Proceed by one time step processing all contributions in this window,
-     * running the prediction algorithm (algorithm 3), and updating the DP trees.
+     * Proceeds by one time step (triggering time), processing all contributions in the current window.
+     * <p>
+     * This method performs the following steps:
+     * 1. Identifies all keys that need processing (current micro-batch, predicted releases, and already selected keys).
+     * 2. Executes Algorithm 1 (Streaming Private Key Selection) for new or pending keys.
+     * 3. Executes Algorithm 3 (Empty Key Release Prediction) for keys that were not selected.
+     * 4. Executes Algorithm 2 (Hierarchical Perturbation) for all selected keys to update their noisy sums.
+     * 5. Increments the time step and returns the latest differentially private histogram.
      *
-     * @return The noisy histogram.
+     * @return A map representing the noisy histogram, sorted by counts in descending order.
      */
     public Map<String, Long> snapshot() {
         log.debug("[DP-MECHANISM] snapshot() START - timeStep={}, maxTimeSteps={}", timeStep, maxTimeSteps);
@@ -212,6 +186,9 @@ public class StreamingDPMechanism {
             log.info("[DP-MECHANISM] timeStep >= maxTimeSteps, returning final histogram");
             return produceHistogram();
         }
+
+        // Clear the current sums map to ensure we only output keys processed in this time step
+        currentSums.clear();
 
         // 1. Identify all keys that need processing in this step
         // a) Unique set of keys in this stream window D_tr_i (Step 4 of Algo 1)
@@ -232,10 +209,6 @@ public class StreamingDPMechanism {
                 predictionIt.remove(); // remove prediction as we are processing it now
             }
         }
-
-        // Step 3 of Algo 2 - ensure all previously selected keys are included (S^(i) includes all selected keys)
-        log.warn("[DP-MECHANISM] Including previously selected keys: {}", selectedKeys.size());
-        s_i.addAll(selectedKeys);
 
         log.debug("[DP-MECHANISM] Keys with contributions this window: {}, predicted releases: {}, total selected keys: {}",
                     currentWindowCounts.size(), predictedReleaseTimes.size(), selectedKeys.size());
@@ -326,9 +299,6 @@ public class StreamingDPMechanism {
                 updateHistogramTree(key);
             }
         }
-
-        // Keep S^(i-1) cumulative: once a key is seen, remember it across triggers
-        s_i_prev.addAll(s_i);
 
         // Cleanup current window buffers
         currentWindowCounts.clear();

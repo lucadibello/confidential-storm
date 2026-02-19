@@ -1,6 +1,7 @@
 package ch.usi.inf.examples.confidential_word_count.enclave;
 
 import ch.usi.inf.confidentialstorm.enclave.EnclaveConfiguration;
+import ch.usi.inf.confidentialstorm.enclave.crypto.EncryptionScheme;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.LogLevel;
 import com.google.auto.service.AutoService;
 
@@ -30,5 +31,12 @@ public final class WordCountEnclaveConfigProvider implements EnclaveConfiguratio
     @Override
     public boolean isReplayProtectionEnabled() {
         return true;
+    }
+
+    @Override
+    public EncryptionScheme getEncryptionScheme() {
+        // NOTE: now using AES-256-GCM instead of CHACHA20_POLY1305 since we are using Intel Xeon CPU,
+        // which has hardware acceleration for AES
+        return EncryptionScheme.AES_256_GCM;
     }
 }
