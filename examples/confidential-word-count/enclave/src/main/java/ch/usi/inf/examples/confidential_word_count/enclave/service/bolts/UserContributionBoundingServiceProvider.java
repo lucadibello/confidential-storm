@@ -22,16 +22,6 @@ public class UserContributionBoundingServiceProvider
     }
 
     @Override
-    public TopologySpecification.Component expectedSourceComponent() {
-        return ComponentConstants.BOLT_SENTENCE_SPLIT;
-    }
-
-    @Override
-    public TopologySpecification.Component expectedDestinationComponent() {
-        return ComponentConstants.BOLT_DATA_PERTURBATION;
-    }
-
-    @Override
     public TopologySpecification.Component currentComponent() {
         return ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING;
     }

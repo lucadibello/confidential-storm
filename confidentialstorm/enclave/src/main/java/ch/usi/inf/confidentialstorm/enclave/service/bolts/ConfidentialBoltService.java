@@ -72,34 +72,77 @@ public abstract class ConfidentialBoltService<T> {
         return ++sequenceNumber;
     }
 
+    /**
+     * Constructs a {@code ConfidentialBoltService} using the {@link SealedPayload} created from
+     * the enclave configuration ({@link EnclaveConfig}).
+     */
     protected ConfidentialBoltService() {
         this(SealedPayload.fromConfig());
     }
 
+    /**
+     * Constructs a {@code ConfidentialBoltService} with the given {@link SealedPayload}.
+     * Intended for use in tests where a custom or mock sealed-payload instance is needed.
+     *
+     * @param sealedPayload the sealed payload handler to use for encryption and decryption
+     * @throws NullPointerException if {@code sealedPayload} is {@code null}
+     */
     protected ConfidentialBoltService(SealedPayload sealedPayload) {
         this.sealedPayload = Objects.requireNonNull(sealedPayload, "sealedPayload cannot be null");
     }
 
     /**
-     * Get the expected source component for the sealed values in the request.
+     * Returns the Storm component name that this enclave service corresponds to.
+     * <p>
+     * This is the name used when registering the bolt with the {@link org.apache.storm.topology.TopologyBuilder}
+     * (e.g. {@code builder.setBolt("my-bolt", new MyBolt(), 2)}).  It must exactly match the
+     * name stored in the encrypted topology graph so that upstream and downstream lookups resolve
+     * correctly.
+     * <p>
+     * Subclasses <strong>must</strong> override this method.  The enclave service does not have
+     * access to Storm's {@link org.apache.storm.task.TopologyContext} at runtime, so the name
+     * cannot be inferred automatically.
      *
-     * @return the expected source component
-     */
-    public abstract TopologySpecification.Component expectedSourceComponent();
-
-    /**
-     * Get the expected destination component for the sealed values in the request.
-     *
-     * @return the expected destination component
-     */
-    public abstract TopologySpecification.Component expectedDestinationComponent();
-
-    /**
-     * Get the current component (i.e., this bolt) in the topology.
-     *
-     * @return the current component
+     * @return the Storm component name for this bolt (must be non-{@code null})
      */
     public abstract TopologySpecification.Component currentComponent();
+
+    /**
+     * Returns the single expected upstream component that produces sealed values consumed by
+     * this bolt.
+     * <p>
+     * The default implementation derives the answer from the encrypted topology graph by calling
+     * {@link TopologySpecification#requireSingleUpstream(TopologySpecification.Component)}.
+     * This covers the common case of a bolt with exactly one predecessor.
+     * <p>
+     * Override this method if the bolt has <em>multiple</em> upstream sources (fan-in) or if
+     * the graph-derived answer is insufficient for your verification logic.
+     *
+     * @return the expected source component
+     * @throws IllegalArgumentException if no upstream component is registered for {@link #currentComponent()}
+     * @throws IllegalStateException    if more than one upstream component is registered (fan-in)
+     */
+    public TopologySpecification.Component expectedSourceComponent() {
+        return TopologySpecification.requireSingleUpstream(currentComponent());
+    }
+
+    /**
+     * Returns the single expected downstream component that this bolt routes its encrypted output to.
+     * <p>
+     * The default implementation derives the answer from the encrypted topology graph by calling
+     * {@link TopologySpecification#requireSingleDownstream(TopologySpecification.Component)}.
+     * This covers the common case of a bolt with exactly one successor.
+     * <p>
+     * Override this method if the bolt fans out to <em>multiple</em> downstream components or if
+     * the graph-derived answer is insufficient for your AAD-building logic.
+     *
+     * @return the expected destination component
+     * @throws IllegalArgumentException if no downstream component is registered for {@link #currentComponent()}
+     * @throws IllegalStateException    if more than one downstream component is registered (fan-out)
+     */
+    public TopologySpecification.Component expectedDestinationComponent() {
+        return TopologySpecification.requireSingleDownstream(currentComponent());
+    }
 
     /**
      * Extract all sealed/encrypted values from the request that need to be verified.

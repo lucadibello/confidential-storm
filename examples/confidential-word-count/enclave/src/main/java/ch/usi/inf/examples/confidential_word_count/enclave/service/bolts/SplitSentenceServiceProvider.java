@@ -94,16 +94,6 @@ public final class SplitSentenceServiceProvider
     }
 
     @Override
-    public TopologySpecification.Component expectedSourceComponent() {
-        return ComponentConstants.SPOUT_RANDOM_JOKE;
-    }
-
-    @Override
-    public TopologySpecification.Component expectedDestinationComponent() {
-        return ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING;
-    }
-
-    @Override
     public TopologySpecification.Component currentComponent() {
         return ComponentConstants.BOLT_SENTENCE_SPLIT;
     }

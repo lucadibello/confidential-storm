@@ -53,19 +53,10 @@ public class DataPerturbationServiceProvider extends AbstractDataPerturbationSer
     public double getPerRecordClamp() {
         return DPConfig.PER_RECORD_CLAMP;
     }
+
     @Override
     public long getMaxUserContributions() {
         return DPConfig.MAX_CONTRIBUTIONS_PER_USER;
-    }
-
-    @Override
-    public TopologySpecification.Component expectedSourceComponent() {
-        return ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING;
-    }
-
-    @Override
-    public TopologySpecification.Component expectedDestinationComponent() {
-        return ComponentConstants.BOLT_HISTOGRAM_AGGREGATION;
     }
 
     @Override
