@@ -7,12 +7,24 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Builder for creating {@link AADSpecification} instances.
+ */
 public final class AADSpecificationBuilder {
     // NOTE: LinkedHashMap is used to preserve insertion order (necessary to generate consistent AAD byte representation)
     private final Map<String, Object> attributes = new LinkedHashMap<>();
     private TopologySpecification.Component sourceComponent;
     private TopologySpecification.Component destinationComponent;
 
+    /**
+     * Adds an attribute to the AAD.
+     *
+     * @param key   the attribute key (cannot be null, "source" and "destination" are reserved)
+     * @param value the attribute value
+     * @return this builder instance
+     * @throws NullPointerException     if key is null
+     * @throws IllegalArgumentException if key is reserved
+     */
     public AADSpecificationBuilder put(String key, Object value) {
         Objects.requireNonNull(key, "AAD key cannot be null");
         if ("source".equals(key) || "destination".equals(key)) {
@@ -22,6 +34,12 @@ public final class AADSpecificationBuilder {
         return this;
     }
 
+    /**
+     * Adds all attributes from the given map to the AAD.
+     *
+     * @param fields the map of attributes to add
+     * @return this builder instance
+     */
     public AADSpecificationBuilder putAll(Map<String, Object> fields) {
         if (fields == null || fields.isEmpty()) {
             return this;
@@ -30,16 +48,35 @@ public final class AADSpecificationBuilder {
         return this;
     }
 
+    /**
+     * Sets the source component in the AAD.
+     *
+     * @param component the source component
+     * @return this builder instance
+     * @throws NullPointerException if component is null
+     */
     public AADSpecificationBuilder sourceComponent(TopologySpecification.Component component) {
         this.sourceComponent = Objects.requireNonNull(component, "Component cannot be null");
         return this;
     }
 
+    /**
+     * Sets the destination component in the AAD.
+     *
+     * @param component the destination component
+     * @return this builder instance
+     * @throws NullPointerException if component is null
+     */
     public AADSpecificationBuilder destinationComponent(TopologySpecification.Component component) {
         this.destinationComponent = Objects.requireNonNull(component, "Component cannot be null");
         return this;
     }
 
+    /**
+     * Builds the AADSpecification.
+     *
+     * @return the created AADSpecification
+     */
     public AADSpecification build() {
         // if empty, return singleton instance
         if (attributes.isEmpty() && sourceComponent == null && destinationComponent == null) {

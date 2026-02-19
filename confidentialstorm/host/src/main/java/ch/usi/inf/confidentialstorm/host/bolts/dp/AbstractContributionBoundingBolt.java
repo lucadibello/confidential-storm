@@ -1,8 +1,8 @@
 package ch.usi.inf.confidentialstorm.host.bolts.dp;
 
-import ch.usi.inf.confidentialstorm.common.api.UserContributionBoundingService;
-import ch.usi.inf.confidentialstorm.common.api.model.UserContributionBoundingRequest;
-import ch.usi.inf.confidentialstorm.common.api.model.UserContributionBoundingResponse;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.UserContributionBoundingService;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributionBoundingRequest;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributionBoundingResponse;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.ConfidentialBolt;
@@ -14,10 +14,18 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
-public abstract class AbstractContributionBoundingBolt extends ConfidentialBolt<UserContributionBoundingService> {
+/**
+ * Base implementation for a bolt that performs user contribution bounding.
+ * This bolt delegates the bounding and clamping logic to an enclave-based {@link UserContributionBoundingService}.
+ */
+public abstract class AbstractContributionBoundingBolt
+        extends ConfidentialBolt<UserContributionBoundingService> {
     private static final Logger LOG = LoggerFactory.getLogger(AbstractContributionBoundingBolt.class);
     private int boltId;
 
+    /**
+     * Constructs a new AbstractContributionBoundingBolt.
+     */
     public AbstractContributionBoundingBolt() {
         super(UserContributionBoundingService.class);
     }
@@ -68,7 +76,12 @@ public abstract class AbstractContributionBoundingBolt extends ConfidentialBolt<
         if (!resp.isDropped()) {
             // If authorized, emit tuple format: (word, clampedCount, userId)
             LOG.debug("[UserContributionBoundingBolt {}] Forwarding word", boltId);
-            getCollector().emit(input, new Values(resp.word(), resp.clampedCount(), resp.userId()));
+
+            // pass to next bolt: (word, clampedCount, userId, dpRoutingKey -> for partitioning)
+            getCollector().emit(input, new Values(
+                    resp.word(), resp.clampedCount(),
+                    resp.userId(), resp.dpRoutingKey()
+            ));
         }
 
         getCollector().ack(input);

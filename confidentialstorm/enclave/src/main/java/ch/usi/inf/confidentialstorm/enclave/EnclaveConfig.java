@@ -1,12 +1,14 @@
 package ch.usi.inf.confidentialstorm.enclave;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
+import ch.usi.inf.confidentialstorm.enclave.crypto.EncryptionScheme;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.LogLevel;
 
 import java.util.ServiceLoader;
 
 /**
  * Configuration parameters for the secure enclave.
+ * These parameters are loaded via a {@link EnclaveConfiguration} provider.
  */
 public final class EnclaveConfig {
     /**
@@ -46,6 +48,7 @@ public final class EnclaveConfig {
      * Minimum log level for enclave logging (fixed value).
      */
     public static final LogLevel LOG_LEVEL = provider.getLogLevel();
+
     /**
      * Whether we should segregate exceptions within the enclave or not.
      * <p>
@@ -53,16 +56,24 @@ public final class EnclaveConfig {
      * If false, exceptions may propagate normally to the untrusted application.
      */
     public static final boolean ENABLE_EXCEPTION_ISOLATION = provider.isExceptionIsolationEnabled();
+
     /**
      * Whether route validation is enabled. If true, the enclave will validate routing information
      * before processing data. Routing information is stored in the AAD payload of each encrypted tuple.
      */
     public static final boolean ENABLE_ROUTE_VALIDATION = provider.isRouteValidationEnabled();
+
     /**
      * Whether replay protection is enabled. If true, the enclave will include additional metadata
      * to prevent replay attacks on the encrypted data.
      */
     public static final boolean ENABLE_REPLAY_PROTECTION = provider.isReplayProtectionEnabled();
+
+    /**
+     * The encryption scheme used for sealing payloads.
+     * Immutable at runtime; becomes a build-time constant in GraalVM native-image.
+     */
+    public static final EncryptionScheme ENCRYPTION_SCHEME = provider.getEncryptionScheme();
 
     private EnclaveConfig() {
         // Prevent instantiation

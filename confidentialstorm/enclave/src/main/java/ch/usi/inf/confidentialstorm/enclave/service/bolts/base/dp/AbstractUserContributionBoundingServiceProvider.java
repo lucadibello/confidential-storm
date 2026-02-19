@@ -1,10 +1,11 @@
 package ch.usi.inf.confidentialstorm.enclave.service.bolts.base.dp;
 
-import ch.usi.inf.confidentialstorm.common.api.UserContributionBoundingService;
-import ch.usi.inf.confidentialstorm.common.api.model.UserContributionBoundingRequest;
-import ch.usi.inf.confidentialstorm.common.api.model.UserContributionBoundingResponse;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.UserContributionBoundingService;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributionBoundingRequest;
+import ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributionBoundingResponse;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+import ch.usi.inf.confidentialstorm.enclave.crypto.Hash;
 import ch.usi.inf.confidentialstorm.enclave.dp.UserContributionLimiter;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
@@ -13,6 +14,10 @@ import org.apache.commons.math3.util.FastMath;
 
 import java.util.Objects;
 
+/**
+ * Abstract base implementation of the {@link UserContributionBoundingService}.
+ * This class handles user-level contribution bounding and per-record clamping.
+ */
 public abstract class AbstractUserContributionBoundingServiceProvider
         extends ConfidentialBoltService<UserContributionBoundingRequest>
         implements UserContributionBoundingService {
@@ -42,6 +47,13 @@ public abstract class AbstractUserContributionBoundingServiceProvider
     protected abstract long getMaxContributionsPerUser();
 
 
+    /**
+     * Checks if a user contribution is within the allowed limits and clamps its value.
+     *
+     * @param request the request containing the word, count, and userId
+     * @return the bounding response (authorized or dropped)
+     * @throws EnclaveServiceException if an error occurs during processing
+     */
     @Override
     public UserContributionBoundingResponse checkAndClamp(UserContributionBoundingRequest request) throws EnclaveServiceException {
         try {
@@ -80,8 +92,12 @@ public abstract class AbstractUserContributionBoundingServiceProvider
             EncryptedValue encryptedClampedCount = encrypt(clamped, seq);
             EncryptedValue encryptedUserId = encrypt(userId, seq);
 
-            // Return authorized response with tuple format: (word, clampedCount, userId)
-            return UserContributionBoundingResponse.authorized(encryptedWord, encryptedClampedCount, encryptedUserId);
+            // Generate word-only routing key for data perturbation partitioning
+            // (ensures all contributions for the same word land on the same DP replica)
+            byte[] dpRoutingKey = Hash.computeHash(("word:" + word).getBytes());
+
+            // Return authorized response with tuple format: (word, clampedCount, userId, routingKey)
+            return UserContributionBoundingResponse.authorized(encryptedWord, encryptedClampedCount, encryptedUserId, dpRoutingKey);
         } catch (Throwable t) {
             // use exception manager
             exceptionCtx.handleException(t);

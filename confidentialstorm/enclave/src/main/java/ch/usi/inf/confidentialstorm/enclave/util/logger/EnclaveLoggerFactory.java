@@ -2,10 +2,19 @@ package ch.usi.inf.confidentialstorm.enclave.util.logger;
 
 import ch.usi.inf.confidentialstorm.enclave.EnclaveConfig;
 
+/**
+ * Factory for creating {@link EnclaveLogger} instances.
+ */
 public final class EnclaveLoggerFactory {
     private EnclaveLoggerFactory() {
     }
 
+    /**
+     * Gets a logger for the given class.
+     *
+     * @param clazz the class
+     * @return the logger instance
+     */
     public static EnclaveLogger getLogger(Class<?> clazz) {
         return new EnclaveLoggerImpl(clazz);
     }

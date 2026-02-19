@@ -3,7 +3,8 @@ package ch.usi.inf.confidentialstorm.enclave.security;
 import java.util.BitSet;
 
 /**
- * This replay window tracks seen sequence numbers for a single producer using a fixed-size sliding window (bitset for efficiency).
+ * Tracks seen sequence numbers for a single producer using a fixed-size sliding window.
+ * Uses a {@link BitSet} for efficient tracking of sequence numbers within the window.
  */
 public final class ReplayWindow {
     /**
@@ -21,16 +22,21 @@ public final class ReplayWindow {
      */
     private BitSet window;
 
+    /**
+     * Constructs a new ReplayWindow with the given size.
+     *
+     * @param windowSize the number of sequence numbers to track
+     */
     public ReplayWindow(int windowSize) {
         this.windowSize = windowSize;
         this.window = new BitSet(windowSize);
     }
 
     /**
-     * Check if the given sequence number is acceptable (not a replay and within the window). The bitset window always
-     * keeps the maxSeen as the LSB (bit 0), with older sequence numbers at increasing offsets.
+     * Check if the given sequence number is acceptable (not a replay and within the window).
+     * The bitset window always keeps the maxSeen as the LSB (bit 0), with older sequence numbers at increasing offsets.
      * <p>
-     * When the sequence number is greater than maxSeen, the window is shifted accordingly in order to accommodate the new maxSeen.
+     * When the sequence number is greater than maxSeen, the window is shifted accordingly.
      *
      * @param sequence the sequence number to check
      * @return true if accepted, false otherwise

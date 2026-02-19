@@ -51,8 +51,7 @@ public final class SyntheticHistogramServiceImpl
                 sigmaHist,
                 maxTimeSteps,
                 mu,
-                DPConfig.MAX_CONTRIBUTIONS_PER_USER,
-                DPConfig.PER_RECORD_CLAMP
+                DPConfig.MAX_CONTRIBUTIONS_PER_USER
         );
     }
 
@@ -69,7 +68,7 @@ public final class SyntheticHistogramServiceImpl
 
             // record contribution to DP mechanism
             // NOTE: we assume that the count has already been clamped per-record if needed!
-            mechanism.addContribution(key, count, userId);
+            mechanism.addContribution(userId, key, count);
         } catch (Throwable t) {
             super.exceptionCtx.handleException(t);
         }

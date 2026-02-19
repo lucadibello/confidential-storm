@@ -9,6 +9,11 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Manages the lifecycle of an enclave and its associated service.
+ *
+ * @param <S> the type of the enclave service
+ */
 public class EnclaveManager<S> {
     private static final Logger LOG = LoggerFactory.getLogger(EnclaveManager.class);
     private final Class<S> serviceClass;
@@ -19,16 +24,32 @@ public class EnclaveManager<S> {
     private EnclaveType activeEnclaveType;
     private S service;
 
+    /**
+     * Constructs a new EnclaveManager with default enclave type (TEE_SDK).
+     *
+     * @param serviceClass the class of the enclave service
+     */
     public EnclaveManager(Class<S> serviceClass) {
         this(serviceClass, EnclaveType.TEE_SDK);
     }
 
+    /**
+     * Constructs a new EnclaveManager with specific enclave type.
+     *
+     * @param serviceClass the class of the enclave service
+     * @param enclaveType  the enclave type to use
+     */
     public EnclaveManager(Class<S> serviceClass, EnclaveType enclaveType) {
         LOG.info("Creating EnclaveManager for service {}", serviceClass.getName());
         this.serviceClass = serviceClass;
         this.defaultEnclaveType = enclaveType;
     }
 
+    /**
+     * Initializes the enclave and loads the service.
+     *
+     * @param topoConf the topology configuration
+     */
     public void initializeEnclave(Map<String, Object> topoConf) {
         // create the enclave + initialize the service
         LOG.info("Preparing enclave for service {}...", serviceClass.getName());
@@ -47,6 +68,9 @@ public class EnclaveManager<S> {
         }
     }
 
+    /**
+     * Destroys the enclave.
+     */
     public void destroy() {
         if (enclave != null) {
             try {
@@ -57,10 +81,20 @@ public class EnclaveManager<S> {
         }
     }
 
+    /**
+     * Gets the enclave service instance.
+     *
+     * @return the service
+     */
     public S getService() {
         return service;
     }
 
+    /**
+     * Gets the active enclave type.
+     *
+     * @return the enclave type
+     */
     public EnclaveType getActiveEnclaveType() {
         // if not initialized yet, return the default one
         return activeEnclaveType != null ? activeEnclaveType : defaultEnclaveType;

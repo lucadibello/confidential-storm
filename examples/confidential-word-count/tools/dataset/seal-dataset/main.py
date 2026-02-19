@@ -3,10 +3,10 @@ import os
 import logging
 import json
 import base64
+import argparse
 
 # needed for encryption + data integrity
-from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
-from cryptography.hazmat.primitives.hashes import Hash, SHA256
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305, AESGCM
 
 
 # Setup logger
@@ -22,14 +22,40 @@ logger = logging.getLogger(__name__)
 SOURCE_NAME = "_DATASET"  # ComponentConstants.DATASET
 DESTINATION_NAME = "random-joke-spout"  # ComponentConstants.RANDOM_JOKE_SPOUT
 
+# Supported encryption schemes — must match EncryptionScheme.java enum names
+SUPPORTED_SCHEMES = ["CHACHA20_POLY1305", "AES_256_GCM", "NONE"]
+DEFAULT_SCHEME = "CHACHA20_POLY1305"
 
-def encrypt_value(aead: ChaCha20Poly1305, plaintext: bytes, header: str) -> dict:
+
+def make_aead(scheme: str, key: bytes):
     """
-    Encrypt a value using ChaCha20-Poly1305 AEAD.
+    Create an AEAD cipher instance for the given scheme, or None for NONE.
+    """
+    if scheme == "CHACHA20_POLY1305":
+        return ChaCha20Poly1305(key)
+    elif scheme == "AES_256_GCM":
+        return AESGCM(key)
+    elif scheme == "NONE":
+        return None
+    else:
+        raise ValueError(f"Unknown encryption scheme: {scheme}")
+
+
+def encrypt_value(aead, scheme: str, plaintext: bytes, header: str) -> dict:
+    """
+    Encrypt (or pass through) a value using the selected scheme.
     Returns a dict with header, nonce (base64), and ciphertext (base64).
     """
-    nonce = os.urandom(12)
-    ct = aead.encrypt(nonce, plaintext, header.encode("utf-8"))
+    header_bytes = header.encode("utf-8")
+
+    if scheme == "NONE":
+        # Passthrough: zero nonce, plaintext stored as-is
+        nonce = bytes(12)
+        ct = plaintext
+    else:
+        nonce = os.urandom(12)
+        ct = aead.encrypt(nonce, plaintext, header_bytes)
+
     return {
         "header": header,
         "nonce": base64.b64encode(nonce).decode("ascii"),
@@ -45,7 +71,7 @@ def load_stream_key() -> bytes:
     if not key_hex:
         logger.error(
             "Missing STREAM_KEY_HEX env var. "
-            "Set it to a 64-char hex string (32 bytes) for ChaCha20-Poly1305."
+            "Set it to a 64-char hex string (32 bytes)."
         )
         sys.exit(1)
 
@@ -64,10 +90,17 @@ def load_stream_key() -> bytes:
     return key
 
 
-def main(dataset_path: str, output_path: str):
+def main(dataset_path: str, output_path: str, scheme: str):
     # Load fixed key once
     key = load_stream_key()
-    aead = ChaCha20Poly1305(key)
+    aead = make_aead(scheme, key)
+
+    logger.info(f"Using encryption scheme: {scheme}")
+    if scheme == "NONE":
+        logger.warning(
+            "NONE scheme selected — dataset will NOT be encrypted. "
+            "Use only for benchmarking."
+        )
 
     # parse json file -> prepare each tuple
     with open(dataset_path, "r", encoding="utf-8") as f:
@@ -105,10 +138,14 @@ def main(dataset_path: str, output_path: str):
         payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
         # Encrypt user_id separately (smaller blob, decrypt only when needed for DP)
-        encrypted_user_id = encrypt_value(aead, user_id_json.encode("utf-8"), header)
+        encrypted_user_id = encrypt_value(
+            aead, scheme, user_id_json.encode("utf-8"), header
+        )
 
         # Encrypt payload (body, category, id, rating - without user_id)
-        encrypted_payload = encrypt_value(aead, payload_json.encode("utf-8"), header)
+        encrypted_payload = encrypt_value(
+            aead, scheme, payload_json.encode("utf-8"), header
+        )
 
         # log every 1000 entries
         if i % 1000 == 0:
@@ -130,36 +167,40 @@ def main(dataset_path: str, output_path: str):
         json.dump(encrypted_entries, out_f, ensure_ascii=False, indent=2)
 
     logger.info(
-        f"Encrypted dataset written to '{output_path}' "
-        f"({len(encrypted_entries)} entries with separate user_id encryption)."
+        f"Sealed dataset written to '{output_path}' "
+        f"({len(encrypted_entries)} entries, scheme={scheme})."
     )
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Seal (encrypt) a jokes dataset for Confidential Storm."
+    )
+    parser.add_argument("dataset_path", help="Path to the input JSON dataset")
+    parser.add_argument("output_path", help="Path to write the sealed output JSON")
+    parser.add_argument(
+        "--scheme",
+        choices=SUPPORTED_SCHEMES,
+        default=DEFAULT_SCHEME,
+        help=(
+            f"Encryption scheme (default: {DEFAULT_SCHEME}). "
+            "Must match the EncryptionScheme configured in the enclave."
+        ),
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    # ensure correct number of arguments
-    if len(sys.argv) != 3:
-        logger.error("Usage: python prepare-dataset.py <dataset_path> <output_path>")
-        sys.exit(1)
-
-    dataset_path = sys.argv[1]
-    output_path = sys.argv[2]
-
-    # Ensure arguments are strings
-    if not isinstance(dataset_path, str):
-        logger.error("dataset_path must be a string")
-        sys.exit(1)
-    if not isinstance(output_path, str):
-        logger.error("output_path must be a string")
-        sys.exit(1)
+    args = parse_args()
 
     # Ensure that source dataset exists
-    if not os.path.exists(dataset_path):
-        logger.error(f"dataset_path '{dataset_path}' does not exist")
+    if not os.path.exists(args.dataset_path):
+        logger.error(f"dataset_path '{args.dataset_path}' does not exist")
         sys.exit(1)
 
     # Ensure the parent directory for output exists
-    parent_dir = os.path.dirname(output_path) or "."
+    parent_dir = os.path.dirname(args.output_path) or "."
     os.makedirs(parent_dir, exist_ok=True)
 
     # Seal source dataset -> produce encrypted dataset
-    main(dataset_path, output_path)
+    main(args.dataset_path, args.output_path, args.scheme)

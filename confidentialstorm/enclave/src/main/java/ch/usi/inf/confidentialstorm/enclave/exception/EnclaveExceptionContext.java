@@ -6,6 +6,10 @@ import ch.usi.inf.confidentialstorm.enclave.exception.strategies.IsolateEnclaveE
 import ch.usi.inf.confidentialstorm.enclave.exception.strategies.PassthroughEnclaveExceptionStrategy;
 import ch.usi.inf.confidentialstorm.enclave.exception.strategies.base.IEnclaveExceptionStrategy;
 
+/**
+ * Singleton context for handling exceptions within the enclave.
+ * It uses a strategy pattern to decide how exceptions should be handled (isolation or passthrough).
+ */
 public class EnclaveExceptionContext {
     private static EnclaveExceptionContext instance = null;
     private IEnclaveExceptionStrategy strategy;
@@ -14,6 +18,11 @@ public class EnclaveExceptionContext {
         // Default strategy can be set here
     }
 
+    /**
+     * Gets the singleton instance of EnclaveExceptionContext.
+     *
+     * @return the instance
+     */
     public static EnclaveExceptionContext getInstance() {
         if (instance == null) {
             instance = new EnclaveExceptionContext();
@@ -30,10 +39,21 @@ public class EnclaveExceptionContext {
         return instance;
     }
 
+    /**
+     * Sets the exception handling strategy.
+     *
+     * @param strategy the strategy to use
+     */
     public void setStrategy(IEnclaveExceptionStrategy strategy) {
         this.strategy = strategy;
     }
 
+    /**
+     * Handles an exception using the current strategy.
+     *
+     * @param t the exception to handle
+     * @throws EnclaveServiceException if the strategy decides to throw it
+     */
     public void handleException(Throwable t) throws EnclaveServiceException {
         // if no strategy is set, throw an exception that would reach the host
         if (strategy == null) {

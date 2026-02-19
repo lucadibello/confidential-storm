@@ -1,7 +1,9 @@
 package ch.usi.inf.examples.confidential_word_count.host;
 
+import ch.usi.inf.confidentialstorm.common.annotation.ConfidentialTopologyBuilder;
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
-import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramBolt;
+import ch.usi.inf.examples.confidential_word_count.host.bolts.DataPerturbationBolt;
+import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramAggregatorBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.SplitSentenceBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.UserContributionBoundingBolt;
 import ch.usi.inf.examples.confidential_word_count.host.spouts.RandomJokeSpout;
@@ -87,42 +89,55 @@ public class WordCountTopology extends ConfigurableTopology {
         }
     }
 
-    @ch.usi.inf.confidentialstorm.common.annotation.ConfidentialTopologyBuilder
+    @ConfidentialTopologyBuilder
     public static TopologyBuilder getTopologyBuilder() {
         TopologyBuilder builder = new TopologyBuilder();
 
         // RandomJokeSpout: emits random jokes (json entries with "body" field)
         builder.setSpout(
-                ComponentConstants.RANDOM_JOKE_SPOUT.toString(),
+                ComponentConstants.SPOUT_RANDOM_JOKE.toString(),
                 new RandomJokeSpout(),
                 1
         );
 
         // SplitSentenceBolt: splits body into words
         builder.setBolt(
-                ComponentConstants.SENTENCE_SPLIT.toString(),
+                ComponentConstants.BOLT_SENTENCE_SPLIT.toString(),
                 new SplitSentenceBolt(),
                 2
-        ).shuffleGrouping(ComponentConstants.RANDOM_JOKE_SPOUT.toString());
+        ).shuffleGrouping(ComponentConstants.SPOUT_RANDOM_JOKE.toString());
 
         // UserContributionBoundingBolt: bounds user contributions to the histogram
         builder.setBolt(
-                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString(),
+                ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING.toString(),
                 new UserContributionBoundingBolt(),
                 2
         ).fieldsGrouping(
-                ComponentConstants.SENTENCE_SPLIT.toString(),
+                ComponentConstants.BOLT_SENTENCE_SPLIT.toString(),
                 new Fields("routingKey")
         );
 
-        // HistogramBolt: merges partial counters into a single (global) histogram
+        // DataPerturbationBolt: computes the histogram and perturbs it to ensure differential privacy
+        // Uses parallelism=2 with word-only routing so each replica sees all contributions for its assigned keys
         builder.setBolt(
-                ComponentConstants.HISTOGRAM_GLOBAL.toString(),
-                new HistogramBolt(),
-                1
-        ).globalGrouping(
-                ComponentConstants.USER_CONTRIBUTION_BOUNDING.toString()
+                ComponentConstants.BOLT_DATA_PERTURBATION.toString(),
+                new DataPerturbationBolt(),
+                2
+        ).fieldsGrouping(
+                ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING.toString(),
+                new Fields("dpRoutingKey")
         );
+
+        // HistogramAggregatorBolt: receives encrypted partial histograms from DataPerturbation replicas
+        // and merges them inside the enclave to produce the final global histogram
+        builder.setBolt(
+                ComponentConstants.BOLT_HISTOGRAM_AGGREGATION.toString(),
+                new HistogramAggregatorBolt(),
+                1
+        ).shuffleGrouping(
+                ComponentConstants.BOLT_DATA_PERTURBATION.toString()
+        );
+
         return builder;
     }
 

@@ -13,7 +13,7 @@ public final class UserContributionLimiter {
 
     /**
      * Per-user contribution limiter enforcing C-bounded contributions.
-     * Critical for maintaining L1 = C × Lm sensitivity assumption.
+     * Critical for maintaining L1 = C x Lm sensitivity assumption.
      *
      * @param userId           identifier of the user. If null, the contribution is always allowed (event-level privacy rather than user-level privacy)
      * @param maxContributions maximum contributions per user (C from Section 3.2).
@@ -30,7 +30,7 @@ public final class UserContributionLimiter {
 
     /**
      * Per-user contribution limiter enforcing C-bounded contributions.
-     * Critical for maintaining L1 = C × Lm sensitivity assumption.
+     * Critical for maintaining L1 = C x Lm sensitivity assumption.
      *
      * @param userId           identifier of the user. If null, the contribution is always allowed (event-level privacy rather than user-level privacy)
      * @param contributions    number of contributions to add for the user
@@ -51,6 +51,12 @@ public final class UserContributionLimiter {
         }
     }
 
+    /**
+     * Gets the contribution count for a user.
+     *
+     * @param userId the user ID
+     * @return the contribution count
+     */
     public long getUserCount(@Nullable Object userId) {
         if (userId == null) {
             return 0;

@@ -1,0 +1,35 @@
+package ch.usi.inf.confidentialstorm.common.api.dp.bounding.model;
+
+import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+
+import java.io.Serial;
+import java.io.Serializable;
+import java.util.Objects;
+
+/**
+ * Request for checking and clamping user contribution.
+ * Tuple format: (word, count, userId)
+ *
+ * @param word   Encrypted word/key
+ * @param count  Encrypted count value
+ * @param userId Encrypted user ID
+ */
+public record UserContributionBoundingRequest(EncryptedValue word, EncryptedValue count, EncryptedValue userId)
+        implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 2L;
+
+    /**
+     * Constructs a new UserContributionBoundingRequest.
+     *
+     * @param word   the encrypted word/key
+     * @param count  the encrypted count value
+     * @param userId the encrypted user ID
+     * @throws NullPointerException if any parameter is null
+     */
+    public UserContributionBoundingRequest {
+        Objects.requireNonNull(word, "Word cannot be null");
+        Objects.requireNonNull(count, "Count cannot be null");
+        Objects.requireNonNull(userId, "UserId cannot be null");
+    }
+}
