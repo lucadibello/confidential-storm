@@ -53,6 +53,28 @@
                 </executions>
             </plugin>
             <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.1</version>
+                <executions>
+                    <execution>
+                        <id>generate-topology-graph</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>ch.usi.inf.confidentialstorm.host.tools.TopologyGraphGenerator</mainClass>
+                            <arguments>
+                                <argument>ch.usi.inf.examples.confidential_word_count.host.WordCountTopology</argument>
+                                <argument>${project.basedir}/../enclave/src/main/resources/topology.graph.enc</argument>
+                            </arguments>
+                            <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
                 <version>3.5.1</version>

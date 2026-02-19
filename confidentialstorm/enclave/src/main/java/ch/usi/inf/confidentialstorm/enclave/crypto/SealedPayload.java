@@ -8,7 +8,7 @@ import ch.usi.inf.confidentialstorm.common.topology.TopologySpecification;
 import ch.usi.inf.confidentialstorm.enclave.EnclaveConfig;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
-import ch.usi.inf.confidentialstorm.enclave.util.EnclaveJsonUtil;
+import ch.usi.inf.confidentialstorm.common.util.EnclaveJsonUtil;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 

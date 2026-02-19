@@ -46,13 +46,10 @@ public final class SpoutPreprocessingServiceProvider
 
     @Override
     public TopologySpecification.Component expectedSourceComponent() {
-        return ComponentConstants._DATASET; // data comes from the dataset component
-    }
-
-    @Override
-    public TopologySpecification.Component expectedDestinationComponent() {
-        // the data will be routed to the same spout component, which will then forward it to the correct downstream bolt
-        return ComponentConstants.BOLT_SENTENCE_SPLIT;
+        // The data originates from the dataset loader, which is a synthetic component not registered
+        // as a Storm bolt and therefore absent from the encrypted topology graph. This override is
+        // intentional: the default graph-based lookup cannot resolve this synthetic source.
+        return ComponentConstants._DATASET;
     }
 
     @Override

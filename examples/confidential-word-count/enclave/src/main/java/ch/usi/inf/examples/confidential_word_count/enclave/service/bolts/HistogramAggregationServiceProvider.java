@@ -15,16 +15,6 @@ public class HistogramAggregationServiceProvider extends AbstractHistogramAggreg
     }
 
     @Override
-    public TopologySpecification.Component expectedSourceComponent() {
-        return ComponentConstants.BOLT_DATA_PERTURBATION;
-    }
-
-    @Override
-    public TopologySpecification.Component expectedDestinationComponent() {
-        return ComponentConstants.BOLT_HISTOGRAM_AGGREGATION;
-    }
-
-    @Override
     public TopologySpecification.Component currentComponent() {
         return ComponentConstants.BOLT_HISTOGRAM_AGGREGATION;
     }
