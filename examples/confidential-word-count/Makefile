@@ -16,7 +16,7 @@ ENCLAVE_PROFILE ?= -Pnative
 # Valid values: CHACHA20_POLY1305 (default), AES_256_GCM, NONE
 ENCRYPTION_SCHEME ?= CHACHA20_POLY1305
 
-.PHONY: all build help clean common enclave host submit run-local \
+.PHONY: all build help clean common generate-graph enclave host submit run-local \
        seal-dataset seal-chacha20 seal-aes256gcm seal-none \
        test-enclave dataset-with-users percentile
 
@@ -28,6 +28,7 @@ help:
 	@echo "  Build & run"
 	@echo "    make [all|build]       - Build common, enclave (native), and host artifacts"
 	@echo "    make common            - Build the shared Java library"
+	@echo "    make generate-graph    - Generate encrypted topology graph (before enclave build)"
 	@echo "    make enclave           - Build enclave artifacts (default profile: $(ENCLAVE_PROFILE))"
 	@echo "    make host              - Build the Storm topology (depends on enclave output)"
 	@echo "    make clean             - Run 'mvn clean' for the example project"
@@ -55,13 +56,17 @@ help:
 # Build
 # ---------------------------------------------------------------------------
 
-build: clean common enclave host
+build: clean common generate-graph enclave host
 
 clean:
 	$(MVN) -f $(ROOT_POM) clean
 
 common: install-framework
 	$(MVN) -f $(ROOT_POM) -pl common -am $(MAVEN_FLAGS) $(MAVEN_GOALS)
+
+generate-graph: install-framework
+	$(MVN) -f $(ROOT_POM) -pl enclave -am $(MAVEN_FLAGS) install
+	$(MVN) -f $(ROOT_POM) -pl host -am $(MAVEN_FLAGS) process-classes
 
 enclave: install-framework
 	$(MVN) -f $(ROOT_POM) -pl enclave -am $(MAVEN_FLAGS) $(ENCLAVE_PROFILE) $(MAVEN_GOALS)

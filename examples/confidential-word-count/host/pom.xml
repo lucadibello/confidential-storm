@@ -36,6 +36,22 @@
             </resource>
         </resources>
         <plugins>
+            <!-- Delete the encrypted topology graph on clean so it is always regenerated -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <version>3.3.2</version>
+                <configuration>
+                    <filesets>
+                        <fileset>
+                            <directory>${project.basedir}/../enclave/src/main/resources</directory>
+                            <includes>
+                                <include>topology.graph.enc</include>
+                            </includes>
+                        </fileset>
+                    </filesets>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
