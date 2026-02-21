@@ -12,6 +12,7 @@ import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.FileOutputStream;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.*;
@@ -83,6 +84,19 @@ public class TopologyGraphGenerator {
                     "No static method annotated with @ConfidentialTopologyBuilder found in " + className);
         }
 
+        if (!Modifier.isStatic(builderMethod.getModifiers())) {
+            throw new IllegalStateException(
+                    "@ConfidentialTopologyBuilder method '" + builderMethod.getName() +
+                    "' in " + className + " must be static");
+        }
+        if (!TopologyBuilder.class.isAssignableFrom(builderMethod.getReturnType())) {
+            throw new IllegalStateException(
+                    "@ConfidentialTopologyBuilder method '" + builderMethod.getName() +
+                    "' in " + className + " must return TopologyBuilder, but returns " +
+                    builderMethod.getReturnType().getName());
+        }
+        builderMethod.setAccessible(true);
+
         System.out.println("Found builder method: " + builderMethod.getName());
 
         // 2. Invoke the method to obtain the TopologyBuilder and build the StormTopology
@@ -98,8 +112,11 @@ public class TopologyGraphGenerator {
             Bolt bolt = entry.getValue();
 
             Map<GlobalStreamId, Grouping> inputs = bolt.get_common().get_inputs();
+            Set<String> uniqueSources = new LinkedHashSet<>();
             for (GlobalStreamId streamId : inputs.keySet()) {
-                String sourceComponentId = streamId.get_componentId();
+                uniqueSources.add(streamId.get_componentId());
+            }
+            for (String sourceComponentId : uniqueSources) {
                 adjacencyList.computeIfAbsent(sourceComponentId, k -> new ArrayList<>()).add(destBoltId);
             }
         }

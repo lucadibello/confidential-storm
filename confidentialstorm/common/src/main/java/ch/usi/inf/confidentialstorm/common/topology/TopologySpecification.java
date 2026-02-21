@@ -1,7 +1,6 @@
 package ch.usi.inf.confidentialstorm.common.topology;
 
 import java.io.Serializable;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;

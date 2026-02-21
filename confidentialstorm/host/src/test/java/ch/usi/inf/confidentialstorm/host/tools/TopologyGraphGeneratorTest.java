@@ -23,7 +23,8 @@ public class TopologyGraphGeneratorTest {
         });
 
         assertTrue(output.exists());
-        assertTrue(output.length() > 12); // IV + data
+        // Minimum: 12-byte IV + 16-byte GCM auth tag (even for zero-length plaintext)
+        assertTrue(output.length() >= 28, "output too short to contain valid IV + GCM tag");
     }
 
     public static class MockTopology {

@@ -111,29 +111,30 @@ public class EncryptedTopologyProvider implements TopologyProvider {
             // Parse JSON: { "adjacencyList": { "src": ["dst1", "dst2"] } }
             Map<String, Object> root = EnclaveJsonUtil.parseJson(json);
 
-            if (root.containsKey("adjacencyList")) {
-                Object adjObj = root.get("adjacencyList");
-                if (adjObj instanceof Map) {
-                    Map<String, Object> rawMap = (Map<String, Object>) adjObj;
-                    Map<String, List<String>> result = new HashMap<>();
+            Object adjObj = root.get("adjacencyList");
+            if (!(adjObj instanceof Map)) {
+                throw new IllegalStateException(
+                        "Decrypted topology JSON is missing or has an invalid 'adjacencyList' key. " +
+                        "Re-run TopologyGraphGenerator to regenerate " + RESOURCE_NAME);
+            }
 
-                    for (Map.Entry<String, Object> entry : rawMap.entrySet()) {
-                        Object val = entry.getValue();
-                        if (val instanceof List<?> rawList) {
-                            List<String> strList = new ArrayList<>();
-                            for (Object item : rawList) {
-                                if (item != null) {
-                                    strList.add(item.toString());
-                                }
-                            }
-                            result.put(entry.getKey(), Collections.unmodifiableList(strList));
+            Map<String, Object> rawMap = (Map<String, Object>) adjObj;
+            Map<String, List<String>> result = new HashMap<>();
+
+            for (Map.Entry<String, Object> entry : rawMap.entrySet()) {
+                Object val = entry.getValue();
+                if (val instanceof List<?> rawList) {
+                    List<String> strList = new ArrayList<>();
+                    for (Object item : rawList) {
+                        if (item != null) {
+                            strList.add(item.toString());
                         }
                     }
-                    return Collections.unmodifiableMap(result);
+                    result.put(entry.getKey().toLowerCase(Locale.ROOT), Collections.unmodifiableList(strList));
                 }
             }
 
-            return Collections.emptyMap();
+            return Collections.unmodifiableMap(result);
 
         } catch (Exception e) {
             throw new RuntimeException("Failed to load or decrypt topology configuration. Integrity check failed.", e);
@@ -153,7 +154,7 @@ public class EncryptedTopologyProvider implements TopologyProvider {
         for (Map.Entry<String, List<String>> entry : forward.entrySet()) {
             String src = entry.getKey();
             for (String dst : entry.getValue()) {
-                reverse.computeIfAbsent(dst, k -> new ArrayList<>()).add(src);
+                reverse.computeIfAbsent(dst.toLowerCase(Locale.ROOT), k -> new ArrayList<>()).add(src);
             }
         }
         // Make all lists unmodifiable
@@ -187,8 +188,8 @@ public class EncryptedTopologyProvider implements TopologyProvider {
     }
 
     /**
-     * Looks up the neighbours of a component in the given adjacency map,
-     * falling back to a lowercase key lookup for case-insensitive matching.
+     * Looks up the neighbours of a component in the given adjacency map
+     * using case-insensitive matching (keys are normalized to lowercase at load time).
      *
      * @param adjacency the adjacency map to search
      * @param component the component to look up
@@ -200,12 +201,8 @@ public class EncryptedTopologyProvider implements TopologyProvider {
 
         if (adjacency.isEmpty()) return Collections.emptyList();
 
-        String key = component.getName();
+        String key = component.getName().toLowerCase(Locale.ROOT);
         List<String> neighbours = adjacency.get(key);
-
-        if (neighbours == null) {
-            neighbours = adjacency.get(key.toLowerCase(Locale.ROOT));
-        }
 
         if (neighbours == null) return Collections.emptyList();
 
