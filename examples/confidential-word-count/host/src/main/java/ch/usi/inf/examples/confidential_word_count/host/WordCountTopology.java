@@ -6,6 +6,8 @@ import ch.usi.inf.examples.confidential_word_count.host.bolts.DataPerturbationBo
 import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramAggregatorBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.SplitSentenceBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.UserContributionBoundingBolt;
+import ch.usi.inf.examples.confidential_word_count.host.bolts.tunnel.SplitBoundTunnelReceiverBolt;
+import ch.usi.inf.examples.confidential_word_count.host.bolts.tunnel.SplitBoundTunnelSenderBolt;
 import ch.usi.inf.examples.confidential_word_count.host.spouts.RandomJokeSpout;
 import org.apache.storm.Config;
 import org.apache.storm.LocalCluster;
@@ -107,13 +109,27 @@ public class WordCountTopology extends ConfigurableTopology {
                 2
         ).shuffleGrouping(ComponentConstants.SPOUT_RANDOM_JOKE.toString());
 
+        // CloakedTunnel: sender buffers split output into fixed-size encrypted batches
+        builder.setBolt(
+                ComponentConstants.TUNNEL_SPLIT_BOUND_SENDER.toString(),
+                new SplitBoundTunnelSenderBolt(),
+                2
+        ).shuffleGrouping(ComponentConstants.BOLT_SENTENCE_SPLIT.toString());
+
+        // CloakedTunnel: receiver decrypts batches and re-emits individual tuples
+        builder.setBolt(
+                ComponentConstants.TUNNEL_SPLIT_BOUND_RECEIVER.toString(),
+                new SplitBoundTunnelReceiverBolt(),
+                2
+        ).shuffleGrouping(ComponentConstants.TUNNEL_SPLIT_BOUND_SENDER.toString());
+
         // UserContributionBoundingBolt: bounds user contributions to the histogram
         builder.setBolt(
                 ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING.toString(),
                 new UserContributionBoundingBolt(),
                 2
         ).fieldsGrouping(
-                ComponentConstants.BOLT_SENTENCE_SPLIT.toString(),
+                ComponentConstants.TUNNEL_SPLIT_BOUND_RECEIVER.toString(),
                 new Fields("routingKey")
         );
 
