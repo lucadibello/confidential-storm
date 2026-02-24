@@ -9,24 +9,67 @@ import ch.usi.inf.confidentialstorm.enclave.crypto.aad.DecodedAAD;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
-
 import java.util.*;
 
 /**
  * Enclave service that aggregates encrypted partial histograms from multiple DataPerturbation replicas.
  * <p>
- * Each round collects one partial histogram per replica (identified by producerId from AAD).
- * Once all expected replicas have contributed, the merged histogram is returned and state is reset.
+ * Each epoch collects one partial histogram per replica (identified by producerId from AAD).
+ * Partials are tagged with an epoch number, allowing the aggregator to handle out-of-order
+ * arrivals from replicas that process tick tuples at different rates.
+ * <p>
+ * Once all expected replicas have contributed for a given epoch, the merged histogram is returned
+ * and that epoch's state is cleaned up.
+ * <p>
+ * The host-side bolt must call {@link #setExpectedReplicaCount(int)} during initialization
+ * before any partials are submitted.
  */
 public abstract class AbstractHistogramAggregationServiceProvider
-        extends ConfidentialBoltService<HistogramAggregationRequest>
-        implements HistogramAggregationService {
+    extends ConfidentialBoltService<HistogramAggregationRequest>
+    implements HistogramAggregationService
+{
 
-    private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(AbstractHistogramAggregationServiceProvider.class);
+    private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(
+        AbstractHistogramAggregationServiceProvider.class
+    );
 
-    private final Map<String, Long> currentMergedHistogram = new HashMap<>();
-    private final Set<String> currentRoundContributors = new HashSet<>();
-    private int roundNumber = 0;
+    /**
+     * Maximum number of concurrent epochs to track.
+     * Epochs beyond this limit cause a crash to prevent unbounded memory growth, as this likely indicates a problem with producers not sending expected partials.
+     */
+    private static final int MAX_PENDING_EPOCHS = 16;
+
+    /**
+     * Per-epoch aggregation state.
+     */
+    private static final class EpochState {
+
+        final Map<String, Long> mergedHistogram = new HashMap<>();
+        final Set<String> contributors = new HashSet<>();
+    }
+
+    /**
+     * Map of epoch number to its aggregation state.
+     * Uses TreeMap so the lowest (oldest) epoch can be efficiently found for eviction.
+     */
+    private final TreeMap<Integer, EpochState> epochStates = new TreeMap<>();
+
+    /**
+     * The number of DataPerturbation replicas whose partials must be merged.
+     * Set at runtime via {@link #setExpectedReplicaCount(int)}.
+     */
+    private int expectedReplicaCount = -1;
+
+    @Override
+    public void setExpectedReplicaCount(int count) {
+        if (count <= 0) {
+            throw new IllegalArgumentException(
+                "expectedReplicaCount must be > 0, got: " + count
+            );
+        }
+        this.expectedReplicaCount = count;
+        log.info("[AGGREGATION] Expected replica count set to {}", count);
+    }
 
     /**
      * Return the number of DataPerturbation replicas whose partials must be merged
@@ -34,62 +77,122 @@ public abstract class AbstractHistogramAggregationServiceProvider
      *
      * @return the expected replica count
      */
-    protected abstract int getExpectedReplicaCount();
+    protected int getExpectedReplicaCount() {
+        if (expectedReplicaCount <= 0) {
+            throw new IllegalStateException(
+                "expectedReplicaCount not set — setExpectedReplicaCount() must be called before mergePartial()"
+            );
+        }
+        return expectedReplicaCount;
+    }
 
     /**
-     * Merges a partial histogram into the current aggregation round.
+     * Merges a partial histogram into the aggregation epoch identified by the AAD.
      *
      * @param request the request containing the encrypted partial histogram
      * @return a response indicating if the aggregation is complete or pending
      * @throws EnclaveServiceException if an error occurs during merging
      */
     @Override
-    public HistogramAggregationResponse mergePartial(HistogramAggregationRequest request) throws EnclaveServiceException {
+    public HistogramAggregationResponse mergePartial(
+        HistogramAggregationRequest request
+    ) throws EnclaveServiceException {
         try {
-            // Validate route but skip replay protection (multiple producers with independent sequences)
+            // Validate request
             verify(request);
 
             EncryptedValue partial = request.encryptedPartialHistogram();
 
-            // Extract producer ID from the AAD of the encrypted partial
+            // Extract producer ID and epoch from the AAD of the encrypted partial
             DecodedAAD aad = DecodedAAD.fromBytes(partial.associatedData());
-            String senderId = aad.producerId().orElseThrow(
-                    () -> new SecurityException("Missing producer_id in partial histogram AAD"));
+            String senderId = aad
+                .producerId()
+                .orElseThrow(() ->
+                    new SecurityException(
+                        "Missing producer_id in partial histogram AAD"
+                    )
+                );
+            int epoch = aad
+                .epoch()
+                .orElseThrow(() ->
+                    new SecurityException(
+                        "Missing epoch in partial histogram AAD"
+                    )
+                );
 
-            // Reject duplicate contributions from the same producer in the current round
-            if (currentRoundContributors.contains(senderId)) {
-                log.warn("[AGGREGATION] Duplicate partial from producer {} in round {}, ignoring", senderId, roundNumber);
-                return HistogramAggregationResponse.pending(currentRoundContributors.size(), getExpectedReplicaCount());
+            // Get or create the epoch state
+            EpochState state = epochStates.computeIfAbsent(epoch, k ->
+                new EpochState()
+            );
+
+            // Evict oldest epochs if we exceed the pending limit
+            while (epochStates.size() > MAX_PENDING_EPOCHS) {
+                int oldestEpoch = epochStates.firstKey();
+                epochStates.remove(oldestEpoch);
+                log.warn(
+                    "[AGGREGATION] Evicted stale epoch {} (pending epochs exceeded {})",
+                    oldestEpoch,
+                    MAX_PENDING_EPOCHS
+                );
+                throw new IllegalStateException(
+                    "Too many pending epochs, possible producer issue or out-of-order arrivals"
+                );
+            }
+
+            // Reject duplicate contributions from the same producer in the same epoch
+            if (state.contributors.contains(senderId)) {
+                log.warn(
+                    "[AGGREGATION] Duplicate partial from producer {} in epoch {}, ignoring",
+                    senderId,
+                    epoch
+                );
+                return HistogramAggregationResponse.pending(
+                    state.contributors.size(),
+                    getExpectedReplicaCount()
+                );
             }
 
             // Decrypt partial histogram inside enclave
             Map<String, Object> partialMap = decryptToMap(partial);
 
-            // Merge into accumulator
+            // Merge into epoch accumulator
             for (Map.Entry<String, Object> entry : partialMap.entrySet()) {
                 long value = ((Number) entry.getValue()).longValue();
-                currentMergedHistogram.merge(entry.getKey(), value, Long::sum);
+                state.mergedHistogram.merge(entry.getKey(), value, Long::sum);
             }
-            currentRoundContributors.add(senderId);
+            state.contributors.add(senderId);
 
-            log.debug("[AGGREGATION] Received partial from producer {} ({}/{} in round {})",
-                    senderId, currentRoundContributors.size(), getExpectedReplicaCount(), roundNumber);
+            log.info(
+                "[AGGREGATION] Received partial from producer {} ({}/{} in epoch {})",
+                senderId,
+                state.contributors.size(),
+                getExpectedReplicaCount(),
+                epoch
+            );
 
-            // Check if all replicas have contributed
-            if (currentRoundContributors.size() >= getExpectedReplicaCount()) {
+            // Check if all replicas have contributed for this epoch
+            if (state.contributors.size() >= getExpectedReplicaCount()) {
                 // Capture the completed histogram
-                Map<String, Long> result = new HashMap<>(currentMergedHistogram);
+                Map<String, Long> result = new HashMap<>(state.mergedHistogram);
 
-                // Reset state for next round
-                currentMergedHistogram.clear();
-                currentRoundContributors.clear();
-                roundNumber++;
+                // Remove completed epoch
+                epochStates.remove(epoch);
 
-                log.debug("[AGGREGATION] Round {} complete with {} keys", roundNumber - 1, result.size());
-                return HistogramAggregationResponse.complete(result, getExpectedReplicaCount());
+                log.info(
+                    "[AGGREGATION] Epoch {} complete with {} keys",
+                    epoch,
+                    result.size()
+                );
+                return HistogramAggregationResponse.complete(
+                    result,
+                    getExpectedReplicaCount()
+                );
             }
 
-            return HistogramAggregationResponse.pending(currentRoundContributors.size(), getExpectedReplicaCount());
+            return HistogramAggregationResponse.pending(
+                state.contributors.size(),
+                getExpectedReplicaCount()
+            );
         } catch (Throwable t) {
             exceptionCtx.handleException(t);
             return null;

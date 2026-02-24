@@ -15,18 +15,21 @@ public final class DecodedAAD {
     private final String destinationName;
     private final Long sequenceNumber;
     private final String producerId;
+    private final Integer epoch;
 
     private DecodedAAD(Map<String, Object> attributes,
                        String sourceName,
                        String destinationName,
                        Long sequenceNumber,
-                       String producerId
+                       String producerId,
+                       Integer epoch
     ) {
         this.attributes = attributes;
         this.sourceName = sourceName;
         this.destinationName = destinationName;
         this.sequenceNumber = sequenceNumber;
         this.producerId = producerId;
+        this.epoch = epoch;
     }
 
     /**
@@ -38,14 +41,15 @@ public final class DecodedAAD {
     public static DecodedAAD fromBytes(byte[] aadBytes) {
         if (aadBytes == null || aadBytes.length == 0) {
             // empty
-            return new DecodedAAD(Collections.emptyMap(), null, null, null, null);
+            return new DecodedAAD(Collections.emptyMap(), null, null, null, null, null);
         }
         Map<String, Object> parsed = AADUtils.parseAadJson(aadBytes);
         Object source = parsed.remove("source");
         Object destination = parsed.remove("destination");
         Object producerId = parsed.remove("producer_id");
-        // optional: remove sequence number if present
+        // optional: remove sequence number and epoch if present
         Object sequenceNumber = parsed.remove("seq");
+        Object epoch = parsed.remove("epoch");
         Map<String, Object> attrs = Collections.unmodifiableMap(new LinkedHashMap<>(parsed));
 
         // construct DecodedAAD instance
@@ -53,7 +57,8 @@ public final class DecodedAAD {
                 String.valueOf(source),
                 String.valueOf(destination),
                 toLongValue(sequenceNumber),
-                String.valueOf(producerId));
+                String.valueOf(producerId),
+                toIntegerValue(epoch));
     }
 
     private static Long toLongValue(Object value) {
@@ -66,6 +71,23 @@ public final class DecodedAAD {
         if (value instanceof String) {
             try {
                 return Long.parseLong((String) value);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static Integer toIntegerValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        if (value instanceof String) {
+            try {
+                return Integer.parseInt((String) value);
             } catch (NumberFormatException ignored) {
                 return null;
             }
@@ -89,6 +111,15 @@ public final class DecodedAAD {
      */
     public Optional<String> producerId() {
         return Optional.ofNullable(producerId);
+    }
+
+    /**
+     * Gets the epoch number from the AAD.
+     *
+     * @return an Optional containing the epoch number, if present
+     */
+    public Optional<Integer> epoch() {
+        return Optional.ofNullable(epoch);
     }
 
     /**
@@ -145,6 +176,7 @@ public final class DecodedAAD {
                 ", destinationName='" + destinationName + '\'' +
                 ", sequenceNumber=" + sequenceNumber +
                 ", producerId='" + producerId + '\'' +
+                ", epoch=" + epoch +
                 '}';
     }
 }

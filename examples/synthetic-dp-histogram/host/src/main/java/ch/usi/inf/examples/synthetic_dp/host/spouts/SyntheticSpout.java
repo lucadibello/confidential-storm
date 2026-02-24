@@ -122,15 +122,6 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
             int keyId = keyDistribution.sample();
             String key = "k" + keyId;
 
-            // Track key frequency for validation
-            keyFrequency.merge(key, 1L, Long::sum);
-
-            // Increment user contribution count
-            userCounts.merge(userId, 1, Integer::sum);
-
-            // Record ground truth for utility evaluation
-            GroundTruthCollector.record(key, 1L);
-
             // Encrypt record using enclave service
             LOG.trace("Encrypting record for user {}: key={}", userId, key);
             SyntheticEncryptedRecord rec = getService().encryptRecord(key, "1", Long.toString(userId));
@@ -139,9 +130,14 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
                 continue;
             }
 
-            // Emit encrypted record to histogram bolt
+            // Only update state after successful encryption
+            userCounts.merge(userId, 1, Integer::sum);
+            keyFrequency.merge(key, 1L, Long::sum);
+            GroundTruthCollector.record(key, 1L);
+
+            // Emit encrypted record to bounding bolt
             totalRecordsEmitted.incrementAndGet();
-            getCollector().emit(new Values(rec.key(), rec.count(), rec.userId()));
+            getCollector().emit(new Values(rec.key(), rec.count(), rec.userId(), rec.routingKey()));
         }
 
         // Log statistics periodically (every 100 batches)
@@ -177,6 +173,6 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        declarer.declare(new Fields("key", "count", "user"));
+        declarer.declare(new Fields("key", "count", "userId", "routingKey"));
     }
 }

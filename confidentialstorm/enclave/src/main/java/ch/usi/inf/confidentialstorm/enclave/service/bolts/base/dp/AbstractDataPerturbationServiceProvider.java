@@ -23,6 +23,7 @@ public abstract class AbstractDataPerturbationServiceProvider
 {
 
     private final StreamingDPMechanism mechanism;
+    private int epoch = 0;
 
     // template methods for subclasses to specify privacy parameters and sensitivity
 
@@ -114,6 +115,11 @@ public abstract class AbstractDataPerturbationServiceProvider
         );
     }
 
+    @Override
+    protected Map<String, Object> getExtraAADAttributes() {
+        return Map.of("epoch", epoch);
+    }
+
     private boolean verifyContribution(DataPerturbationContributionEntryRequest update) {
         // verify that all required fields are present
         return Objects.nonNull(update.word()) && Objects.nonNull(update.userId()) && Objects.nonNull(update.clampedCount());
@@ -150,6 +156,7 @@ public abstract class AbstractDataPerturbationServiceProvider
     @Override
     public DataPerturbationSnapshot getSnapshot() throws EnclaveServiceException {
         try {
+            this.epoch++;
             return new DataPerturbationSnapshot(this.mechanism.snapshot());
         } catch (Throwable t) {
             this.exceptionCtx.handleException(t);
@@ -160,6 +167,8 @@ public abstract class AbstractDataPerturbationServiceProvider
     @Override
     public EncryptedDataPerturbationSnapshot getEncryptedSnapshot() throws EnclaveServiceException {
         try {
+            this.epoch++;
+
             Map<String, Long> snapshot = this.mechanism.snapshot();
 
             // Widen Long -> Object for the generic encrypt(Map<String, Object>, seq) method

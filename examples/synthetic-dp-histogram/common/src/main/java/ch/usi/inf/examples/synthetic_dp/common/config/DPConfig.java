@@ -4,6 +4,10 @@ package ch.usi.inf.examples.synthetic_dp.common.config;
  * Defines the differential privacy parameters and contribution bounding settings for the synthetic benchmark.
  * <p>
  * Refer to section 5.1 of the paper "Differentially Private Stream Processing at Scale" for more details.
+ * <p>
+ * Runtime-configurable values (MU, MAX_TIME_STEPS, PARALLELISM) are read from system properties
+ * via getter methods so that {@link System#setProperty} calls in the topology's {@code main()}
+ * take effect before the values are read.
  */
 public final class DPConfig {
     /**
@@ -22,22 +26,6 @@ public final class DPConfig {
      */
     public static final double DELTA = 1e-9;
 
-    // Privacy Budget Split (50% for Key Selection, 50% for Histogram)
-    public static final double EPSILON_K = EPSILON / 2.0;
-    public static final double DELTA_K = (2.0 / 3.0) * DELTA;
-    public static final double EPSILON_H = EPSILON / 2.0;
-    public static final double DELTA_H = DELTA / 3.0;
-
-    /**
-     * The minimum number of unique user contributions required for releasing a key in the histogram.
-     */
-    public static final long MU = Long.getLong("dp.mu", 50L);
-
-    /**
-     * The maximum number of time steps to consider for the data stream.
-     */
-    public static final int MAX_TIME_STEPS = Integer.getInteger("dp.max.time.steps", 100);
-
     /**
      * The maximum number of contributions a single user can make across all time steps.
      */
@@ -48,6 +36,32 @@ public final class DPConfig {
      * NOTE: we set L=1 since the aggregation function is COUNT.
      */
     public static final double PER_RECORD_CLAMP = 1.0;
+
+    /**
+     * The minimum number of unique user contributions required for releasing a key in the histogram.
+     * Configurable via {@code -Ddp.mu=<value>} or {@code --mu <value>}.
+     */
+    public static long mu() {
+        return Long.getLong("dp.mu", 50L);
+    }
+
+    /**
+     * The maximum number of time steps to consider for the data stream.
+     * Configurable via {@code -Ddp.max.time.steps=<value>} or {@code --max-time-steps <value>}.
+     */
+    public static int maxTimeSteps() {
+        return Integer.getInteger("dp.max.time.steps", 100);
+    }
+
+    /**
+     * Parallelism hint for the bounding and perturbation bolts.
+     * Default is 8 (benchmark mode, designed for 32-CPU servers).
+     * Configurable via {@code -Dsynthetic.parallelism=<value>} or {@code --parallelism <value>}
+     * or {@code --test} flag (sets to 1).
+     */
+    public static int parallelism() {
+        return Integer.getInteger("synthetic.parallelism", 8);
+    }
 
     /**
      * Computes the L1 sensitivity based on the contribution bounding parameters.
@@ -67,8 +81,9 @@ public final class DPConfig {
                 ", DELTA=" + DELTA +
                 ", MAX_CONTRIBUTIONS_PER_USER=" + MAX_CONTRIBUTIONS_PER_USER +
                 ", PER_RECORD_CLAMP=" + PER_RECORD_CLAMP +
-                ", MU=" + MU +
-                ", MAX_TIME_STEPS=" + MAX_TIME_STEPS +
+                ", MU=" + mu() +
+                ", MAX_TIME_STEPS=" + maxTimeSteps() +
+                ", PARALLELISM=" + parallelism() +
                 '}';
     }
 }

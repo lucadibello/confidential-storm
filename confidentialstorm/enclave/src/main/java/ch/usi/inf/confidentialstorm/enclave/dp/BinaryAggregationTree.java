@@ -45,6 +45,16 @@ public final class BinaryAggregationTree {
     private final double[] varianceCache;
 
     /**
+     * Reusable scratch buffers for {@link #computeHonakerEstimate} to avoid per-call heap
+     * allocations inside the hot snapshot path. Each buffer holds at most {@code num_leaves}
+     * node indices (the widest level of the subtree).
+     * <p>
+     * These are only used from {@link #getTotalSum}, which is single-threaded inside the enclave.
+     */
+    private final int[] currentLevel;
+    private final int[] nextLevel;
+
+    /**
      * Constructs a binary aggregation tree for differential privacy.
      *
      * @param n     the number of data points in the data stream D = {x_1, ..., x_n} each x_i \in [0,L]
@@ -63,6 +73,10 @@ public final class BinaryAggregationTree {
 
         // pre-compute and cache Honaker variances for all leaf indices
         this.varianceCache = precomputeTotalVariances();
+
+        // allocate reusable scratch buffers sized to the widest tree level
+        this.currentLevel = new int[num_leaves];
+        this.nextLevel    = new int[num_leaves];
     }
 
     /**
@@ -189,26 +203,27 @@ public final class BinaryAggregationTree {
         // - Level 0 contains just nodeIndex (subtree root)
         // - Level k contains 2^k nodes (a subtree of a complete binary tree is still complete)
 
-        // keep track of nodes at the current level
-        List<Integer> currentLevelNodes = new ArrayList<>();
-        currentLevelNodes.add(nodeIndex);
+        // Use pre-allocated scratch arrays instead of ArrayList to avoid per-call heap allocation
+        int currentSize = 0;
+        int nextSize;
+
+        currentLevel[currentSize++] = nodeIndex;
 
         for (int j = 0; j < k; j++) {
             double sum_level_j = 0; // Sum(level_j) = sum of values at level j
-
-            // keep track of nodes for the next level
-            List<Integer> nextLevelNodes = new ArrayList<>();
+            nextSize = 0;
 
             // for each node in the current level, add its value and prepare its children for the next level
-            for (int idx : currentLevelNodes) {
+            for (int ci = 0; ci < currentSize; ci++) {
+                int idx = currentLevel[ci];
                 // check if idx is within bounds of the tree
                 if (idx < tree.size()) {
                     sum_level_j += tree.get(idx);
 
                     // Prepare children for next level
                     if (j < k - 1) {
-                        nextLevelNodes.add(2 * idx + 1);
-                        nextLevelNodes.add(2 * idx + 2);
+                        nextLevel[nextSize++] = 2 * idx + 1;
+                        nextLevel[nextSize++] = 2 * idx + 2;
                     }
                 }
             }
@@ -226,8 +241,9 @@ public final class BinaryAggregationTree {
             // FORMULA: estimate = Sum_{j=0 to k-1} (c_j * Sum(level_j)) =
             honaker_estimate += c_j * sum_level_j;
 
-            // move to the next level and bring its children
-            currentLevelNodes = nextLevelNodes;
+            // swap current and next buffers (copy next into current for the next iteration)
+            System.arraycopy(nextLevel, 0, currentLevel, 0, nextSize);
+            currentSize = nextSize;
         }
 
         // return the final Honaker estimate

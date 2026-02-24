@@ -1,14 +1,21 @@
 [
   { "name": "ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticEncryptedRecord" },
-  { "name": "ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticUpdateRequest" },
-  { "name": "ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticSnapshotResponse" },
+
+  { "name": "ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributionBoundingRequest" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributionBoundingResponse" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.DataPerturbationRequest" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.DataPerturbationContributionEntryRequest" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.DataPerturbationContributionEntryResponse" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.DataPerturbationSnapshot" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.EncryptedDataPerturbationSnapshot" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.dp.aggregation.model.HistogramAggregationRequest" },
+  { "name": "ch.usi.inf.confidentialstorm.common.api.dp.aggregation.model.HistogramAggregationResponse" },
+  { "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue" },
 
   { "name": "org.apache.teaclave.javasdk.common.EnclaveInvocationContext" },
   { "name": "org.apache.teaclave.javasdk.common.EnclaveInvocationResult" },
   { "name": "org.apache.teaclave.javasdk.common.ServiceHandler" },
   { "name": "[Lorg.apache.teaclave.javasdk.common.ServiceHandler;" },
-
-  { "name": "ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue" },
 
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveCryptoException"},
   { "name": "ch.usi.inf.confidentialstorm.common.crypto.exception.RoutingKeyDerivationException"},

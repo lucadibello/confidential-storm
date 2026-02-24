@@ -184,6 +184,8 @@ public class StreamingDPMechanism {
         // NOTE: no further processing as we won't have DP guarantees in the next release
         if (timeStep >= maxTimeSteps) {
             log.info("[DP-MECHANISM] timeStep >= maxTimeSteps, returning final histogram");
+            // Free all accumulated per-key state that will never be used again
+            trimExpiredState();
             return produceHistogram();
         }
 
@@ -346,7 +348,7 @@ public class StreamingDPMechanism {
         currentSums.put(key, noisySum); // NOTE: store result for histogram production
 
         // Clear the buffer since we've now incorporated it into the tree
-        unreleasedHistogramBuffer.put(key, 0.0);
+        unreleasedHistogramBuffer.remove(key);
     }
 
     /**
@@ -425,6 +427,21 @@ public class StreamingDPMechanism {
 
         // return sorted histogram
         return sortedHistogram;
+    }
+
+    /**
+     * Frees all accumulated per-key state once the mechanism has exhausted its time budget
+     * (timeStep >= maxTimeSteps). At that point no further DP-valid releases can occur, so
+     * all forests, selection state, prediction maps, and the unreleased buffer are dead weight.
+     */
+    private void trimExpiredState() {
+        keySelectionForest.clear();
+        histogramForest.clear();
+        selectedKeys.clear();
+        observedUsersForKeySelection.clear();
+        predictedReleaseTimes.clear();
+        unreleasedHistogramBuffer.clear();
+        log.info("[DP-MECHANISM] trimExpiredState: released all per-key state after maxTimeSteps={}", maxTimeSteps);
     }
 
     /**

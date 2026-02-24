@@ -9,12 +9,16 @@ import java.util.Map;
 public final class SyntheticTopologyProvider implements TopologyProvider {
 
     private static final Map<Component, List<Component>> DOWNSTREAM = Map.of(
-            ComponentConstants.SPOUT, List.of(ComponentConstants.HISTOGRAM_GLOBAL),
-            ComponentConstants.HISTOGRAM_GLOBAL, Collections.emptyList()
+            ComponentConstants.SPOUT, List.of(ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING),
+            ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING, List.of(ComponentConstants.BOLT_DATA_PERTURBATION),
+            ComponentConstants.BOLT_DATA_PERTURBATION, List.of(ComponentConstants.BOLT_HISTOGRAM_AGGREGATION),
+            ComponentConstants.BOLT_HISTOGRAM_AGGREGATION, Collections.emptyList()
     );
 
     private static final Map<Component, List<Component>> UPSTREAM = Map.of(
-            ComponentConstants.HISTOGRAM_GLOBAL, List.of(ComponentConstants.SPOUT)
+            ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING, List.of(ComponentConstants.SPOUT),
+            ComponentConstants.BOLT_DATA_PERTURBATION, List.of(ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING),
+            ComponentConstants.BOLT_HISTOGRAM_AGGREGATION, List.of(ComponentConstants.BOLT_DATA_PERTURBATION)
     );
 
     @Override
