@@ -280,6 +280,17 @@ public abstract class ConfidentialBoltService<T> {
         }
     }
 
+    /**
+     * Returns additional attributes to include in the AAD specification.
+     * Subclasses can override this to add domain-specific fields (e.g., epoch).
+     * The default implementation returns an empty map.
+     *
+     * @return additional AAD attributes (never null)
+     */
+    protected Map<String, Object> getExtraAADAttributes() {
+        return Collections.emptyMap();
+    }
+
     private AADSpecification getAADSpecification(int sequenceNumber) {
 
         AADSpecificationBuilder aadBuilder = AADSpecification.builder();
@@ -290,12 +301,17 @@ public abstract class ConfidentialBoltService<T> {
                     .sourceComponent(Objects.requireNonNull(currentComponent(), "Current component cannot be null"))
                     .destinationComponent(expectedDestinationComponent());
         }
-        // if replay protection is enabled, include producer ID and sequence number in the AAD
+
+        // always include producer ID (needed by aggregation services to identify replica sources)
+        aadBuilder.put("producer_id", producerId);
+
+        // if replay protection is enabled, also include sequence number in the AAD
         if (EnclaveConfig.ENABLE_REPLAY_PROTECTION) {
-            aadBuilder
-                    .put("producer_id", producerId)
-                    .put("seq", sequenceNumber);
+            aadBuilder.put("seq", sequenceNumber);
         }
+
+        // add any subclass-specific extra attributes
+        aadBuilder.putAll(getExtraAADAttributes());
 
         // build the AAD specification with the required fields
         return aadBuilder.build();

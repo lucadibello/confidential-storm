@@ -6,6 +6,7 @@ import ch.usi.inf.confidentialstorm.common.api.dp.aggregation.model.HistogramAgg
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.ConfidentialBolt;
+import org.apache.storm.task.TopologyContext;
 import org.apache.storm.tuple.Tuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +28,25 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
      */
     public AbstractHistogramAggregationBolt() {
         super(HistogramAggregationService.class);
+    }
+
+    @Override
+    protected void afterPrepare(Map<String, Object> topoConf, TopologyContext context) {
+        super.afterPrepare(topoConf, context);
+        configureService(state.getEnclaveManager().getService(), context);
+    }
+
+    /**
+     * Template method called after the enclave service is initialized, allowing subclasses
+     * to perform additional configuration (e.g., passing runtime parameters via ECALLs).
+     * <p>
+     * The default implementation does nothing.
+     *
+     * @param service the initialized enclave service
+     * @param context the topology context
+     */
+    protected void configureService(HistogramAggregationService service, TopologyContext context) {
+        // hook for subclasses
     }
 
     /**
