@@ -5,12 +5,12 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import java.io.Serial;
 import java.io.Serializable;
 
-public record SyntheticEncryptedRecord(EncryptedValue key, EncryptedValue count, EncryptedValue userId) implements Serializable {
+public record SyntheticEncryptedRecord(EncryptedValue key, EncryptedValue count, EncryptedValue userId, byte[] routingKey) implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
     public SyntheticEncryptedRecord {
-        if (key == null || count == null || userId == null) {
+        if (key == null || count == null || userId == null || routingKey == null) {
             throw new IllegalArgumentException("Fields cannot be null");
         }
     }

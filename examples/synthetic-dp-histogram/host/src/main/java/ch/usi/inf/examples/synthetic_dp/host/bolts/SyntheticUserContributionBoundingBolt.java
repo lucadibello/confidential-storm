@@ -1,0 +1,30 @@
+package ch.usi.inf.examples.synthetic_dp.host.bolts;
+
+import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+import ch.usi.inf.confidentialstorm.host.bolts.dp.AbstractContributionBoundingBolt;
+import org.apache.storm.topology.OutputFieldsDeclarer;
+import org.apache.storm.tuple.Fields;
+import org.apache.storm.tuple.Tuple;
+
+public class SyntheticUserContributionBoundingBolt extends AbstractContributionBoundingBolt {
+
+    @Override
+    protected EncryptedValue getEncryptedPayload(Tuple input) {
+        return (EncryptedValue) input.getValueByField("key");
+    }
+
+    @Override
+    protected EncryptedValue getEncryptedCount(Tuple input) {
+        return (EncryptedValue) input.getValueByField("count");
+    }
+
+    @Override
+    protected EncryptedValue getEncryptedUserId(Tuple input) {
+        return (EncryptedValue) input.getValueByField("userId");
+    }
+
+    @Override
+    public void declareOutputFields(OutputFieldsDeclarer declarer) {
+        declarer.declare(new Fields("word", "count", "userId", "dpRoutingKey"));
+    }
+}

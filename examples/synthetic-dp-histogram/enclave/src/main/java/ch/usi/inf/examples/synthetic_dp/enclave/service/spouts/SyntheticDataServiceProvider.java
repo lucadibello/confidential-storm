@@ -5,6 +5,7 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.CipherInitialization
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.SealedPayloadProcessingException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+import ch.usi.inf.confidentialstorm.enclave.crypto.Hash;
 import ch.usi.inf.confidentialstorm.enclave.crypto.SealedPayload;
 import ch.usi.inf.confidentialstorm.enclave.crypto.aad.AADSpecification;
 import ch.usi.inf.confidentialstorm.enclave.exception.EnclaveExceptionContext;
@@ -15,11 +16,12 @@ import ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticEncryptedRecor
 import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
 import com.google.auto.service.AutoService;
 
+import java.security.NoSuchAlgorithmException;
 import java.util.UUID;
 
 @AutoService(SyntheticDataService.class)
-public final class SyntheticDataServiceImpl implements SyntheticDataService {
-    private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(SyntheticDataServiceImpl.class);
+public final class SyntheticDataServiceProvider implements SyntheticDataService {
+    private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(SyntheticDataServiceProvider.class);
     private final EnclaveExceptionContext exceptionCtx = EnclaveExceptionContext.getInstance();
     private final SealedPayload sealedPayload = SealedPayload.fromConfig();
     private final String producerId = UUID.randomUUID().toString();
@@ -31,7 +33,7 @@ public final class SyntheticDataServiceImpl implements SyntheticDataService {
             // build AAD using metadata
             AADSpecification aad = AADSpecification.builder()
                     .sourceComponent(ComponentConstants.SPOUT)
-                    .destinationComponent(ComponentConstants.HISTOGRAM_GLOBAL)
+                    .destinationComponent(ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING)
                     .put("producer_id", producerId)
                     .put("seq", seq++)
                     .put("user_id", userId)
@@ -42,9 +44,12 @@ public final class SyntheticDataServiceImpl implements SyntheticDataService {
             EncryptedValue c = sealedPayload.encryptString(count, aad);
             EncryptedValue u = sealedPayload.encryptString(userId, aad);
 
-            // return the encrypted record
-            return new SyntheticEncryptedRecord(k, c, u);
-        } catch (SealedPayloadProcessingException | CipherInitializationException | AADEncodingException e) {
+            // generate routing key for user-based partitioning
+            byte[] routingKey = Hash.computeHash(("user:" + userId).getBytes());
+
+            // return the encrypted record with routing key
+            return new SyntheticEncryptedRecord(k, c, u, routingKey);
+        } catch (SealedPayloadProcessingException | CipherInitializationException | AADEncodingException | NoSuchAlgorithmException e) {
             exceptionCtx.handleException(e);
             log.error("Failed to encrypt record for key {}", key);
             return null;
