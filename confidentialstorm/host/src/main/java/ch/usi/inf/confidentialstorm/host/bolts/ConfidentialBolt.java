@@ -157,6 +157,10 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
         return state.getCollector();
     }
 
+    protected int getTaskId() {
+        return state.getTaskId();
+    }
+
     private String summarizeTuple(Tuple input) {
         if (input == null) {
             return "<null>";

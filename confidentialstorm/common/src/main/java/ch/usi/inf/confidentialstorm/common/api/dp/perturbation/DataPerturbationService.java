@@ -40,4 +40,21 @@ public interface DataPerturbationService {
      * @throws EnclaveServiceException if an error occurs during snapshot encryption
      */
     EncryptedDataPerturbationSnapshot getEncryptedSnapshot() throws EnclaveServiceException;
+
+    /**
+     * Produces an encrypted dummy partial histogram that is cryptographically
+     * indistinguishable from a real encrypted snapshot to any observer outside the enclave.
+     * <p>
+     * This method does NOT advance the epoch, does NOT call the DP mechanism's snapshot(),
+     * and is computationally cheap. It is used by the host bolt to emit a tuple on every
+     * tick even when the real snapshot computation has not yet completed, ensuring uniform
+     * emission timing that hides workload imbalance from an honest-but-curious admin.
+     * <p>
+     * The dummy contains a marker inside the ciphertext that the aggregation enclave
+     * can detect after decryption, allowing it to silently discard the dummy.
+     *
+     * @return an encrypted dummy partial (same type as a real snapshot)
+     * @throws EnclaveServiceException if encryption fails
+     */
+    EncryptedDataPerturbationSnapshot getEncryptedDummyPartial() throws EnclaveServiceException;
 }

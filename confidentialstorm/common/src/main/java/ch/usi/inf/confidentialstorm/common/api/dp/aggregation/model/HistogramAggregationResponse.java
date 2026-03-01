@@ -14,15 +14,19 @@ import java.util.Map;
  * @param mergedHistogram the global aggregated histogram (only if complete is true)
  * @param receivedCount   the number of partials received so far
  * @param expectedCount   the total number of partials expected
+ * @param completedEpoch  the epoch number that was completed (-1 if pending)
+ * @param isDummy         true if the partial was a dummy and was silently discarded
  */
 public record HistogramAggregationResponse(
         boolean complete,
         @Nullable Map<String, Long> mergedHistogram,
         int receivedCount,
-        int expectedCount
+        int expectedCount,
+        int completedEpoch,
+        boolean isDummy
 ) implements Serializable {
     @Serial
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
 
     /**
      * Creates a pending response (still waiting for more partials).
@@ -32,7 +36,7 @@ public record HistogramAggregationResponse(
      * @return the pending response
      */
     public static HistogramAggregationResponse pending(int received, int expected) {
-        return new HistogramAggregationResponse(false, null, received, expected);
+        return new HistogramAggregationResponse(false, null, received, expected, -1, false);
     }
 
     /**
@@ -40,9 +44,21 @@ public record HistogramAggregationResponse(
      *
      * @param histogram the merged histogram
      * @param expected  the total number of partials expected
+     * @param epoch     the epoch number that was completed
      * @return the complete response
      */
-    public static HistogramAggregationResponse complete(Map<String, Long> histogram, int expected) {
-        return new HistogramAggregationResponse(true, histogram, expected, expected);
+    public static HistogramAggregationResponse complete(Map<String, Long> histogram, int expected, int epoch) {
+        return new HistogramAggregationResponse(true, histogram, expected, expected, epoch, false);
+    }
+
+    /**
+     * Creates a dummy response indicating the partial was a dummy and was discarded
+     * by the enclave aggregator. No data was merged.
+     *
+     * @param epoch the epoch the dummy was tagged with
+     * @return a dummy response
+     */
+    public static HistogramAggregationResponse dummy(int epoch) {
+        return new HistogramAggregationResponse(false, null, 0, 0, epoch, true);
     }
 }

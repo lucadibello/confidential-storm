@@ -29,11 +29,15 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
     }
 
     @Override
-    protected void configureService(HistogramAggregationService service, TopologyContext context) {
-        // Discover actual upstream parallelism from the topology
-        int upstreamTasks = context.getComponentTasks(
+    protected int getExpectedUpstreamTaskCount(TopologyContext context) {
+        return context.getComponentTasks(
                 ComponentConstants.BOLT_DATA_PERTURBATION.toString()
         ).size();
+    }
+
+    @Override
+    protected void configureService(HistogramAggregationService service, TopologyContext context) {
+        int upstreamTasks = getExpectedUpstreamTaskCount(context);
 
         LOG.info("SyntheticHistogramAggregationBolt: configuring with upstream parallelism={}, output file: {}",
                 upstreamTasks, outputFile);
@@ -108,6 +112,6 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        // sink bolt - no output
+        super.declareOutputFields(declarer);
     }
 }

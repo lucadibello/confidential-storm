@@ -3,6 +3,7 @@ package ch.usi.inf.examples.synthetic_dp.host;
 import ch.usi.inf.confidentialstorm.common.annotation.ConfidentialTopologyBuilder;
 import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
 import ch.usi.inf.examples.synthetic_dp.common.config.DPConfig;
+import ch.usi.inf.confidentialstorm.host.bolts.dp.AbstractHistogramAggregationBolt;
 import ch.usi.inf.examples.synthetic_dp.host.bolts.SyntheticDataPerturbationBolt;
 import ch.usi.inf.examples.synthetic_dp.host.bolts.SyntheticHistogramAggregationBolt;
 import ch.usi.inf.examples.synthetic_dp.host.bolts.SyntheticUserContributionBoundingBolt;
@@ -65,6 +66,9 @@ public class SyntheticTopology {
         );
 
         // DataPerturbationBolt: applies DP noise via streaming mechanism
+        // Subscribes to two back-edge streams from the aggregator (both via allGrouping):
+        //   1. TOPOLOGY_READY_STREAM: one-time signal when all producers are discovered
+        //   2. TAKE_SNAPSHOT_STREAM: periodic signal that drives synchronized epoch advancement
         builder.setBolt(
                 ComponentConstants.BOLT_DATA_PERTURBATION.toString(),
                 new SyntheticDataPerturbationBolt(),
@@ -72,6 +76,12 @@ public class SyntheticTopology {
         ).fieldsGrouping(
                 ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING.toString(),
                 new Fields("dpRoutingKey")
+        ).allGrouping(
+                ComponentConstants.BOLT_HISTOGRAM_AGGREGATION.toString(),
+                AbstractHistogramAggregationBolt.TOPOLOGY_READY_STREAM
+        ).allGrouping(
+                ComponentConstants.BOLT_HISTOGRAM_AGGREGATION.toString(),
+                AbstractHistogramAggregationBolt.TAKE_SNAPSHOT_STREAM
         );
 
         // HistogramAggregationBolt: merges encrypted partial histograms and writes report
