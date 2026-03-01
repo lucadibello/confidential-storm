@@ -22,6 +22,13 @@ public abstract class AbstractDataPerturbationServiceProvider
         implements DataPerturbationService
 {
 
+    /**
+     * Reserved key used inside the encrypted payload to mark a dummy partial.
+     * The aggregation enclave checks for this key after decryption.
+     * This key is never a valid histogram word because it starts with double underscore.
+     */
+    static final String DUMMY_MARKER_KEY = "__dummy";
+
     private final StreamingDPMechanism mechanism;
     private int epoch = 0;
 
@@ -174,6 +181,24 @@ public abstract class AbstractDataPerturbationServiceProvider
             // Widen Long -> Object for the generic encrypt(Map<String, Object>, seq) method
             Map<String, Object> payload = new LinkedHashMap<>(snapshot.size());
             payload.putAll(snapshot);
+
+            EncryptedValue encrypted = encrypt(payload, nextSequenceNumber());
+            return new EncryptedDataPerturbationSnapshot(encrypted);
+        } catch (Throwable t) {
+            this.exceptionCtx.handleException(t);
+            return null;
+        }
+    }
+
+    @Override
+    public EncryptedDataPerturbationSnapshot getEncryptedDummyPartial() throws EnclaveServiceException {
+        try {
+            // Does NOT call mechanism.snapshot(), does NOT increment epoch.
+            // The payload contains only the dummy marker — encrypted with the same
+            // AEAD scheme, AAD structure (producerId, epoch, seq), and key as real
+            // partials, making it indistinguishable to any observer without the key.
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put(DUMMY_MARKER_KEY, true);
 
             EncryptedValue encrypted = encrypt(payload, nextSequenceNumber());
             return new EncryptedDataPerturbationSnapshot(encrypted);

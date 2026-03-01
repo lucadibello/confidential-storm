@@ -35,9 +35,10 @@ public abstract class AbstractHistogramAggregationServiceProvider
 
     /**
      * Maximum number of concurrent epochs to track.
-     * Epochs beyond this limit cause a crash to prevent unbounded memory growth, as this likely indicates a problem with producers not sending expected partials.
+     * Epochs beyond this limit trigger eviction of the oldest epoch with a warning,
+     * rather than crashing, to tolerate transient timing skew during startup.
      */
-    private static final int MAX_PENDING_EPOCHS = 16;
+    private static final int MAX_PENDING_EPOCHS = 8;
 
     /**
      * Per-epoch aggregation state.
@@ -101,6 +102,7 @@ public abstract class AbstractHistogramAggregationServiceProvider
             // Validate request
             verify(request);
 
+            // Extract encrypted partial histogram from request
             EncryptedValue partial = request.encryptedPartialHistogram();
 
             // Extract producer ID and epoch from the AAD of the encrypted partial
@@ -120,22 +122,35 @@ public abstract class AbstractHistogramAggregationServiceProvider
                     )
                 );
 
-            // Get or create the epoch state
+            // decrypt partial histogram
+            Map<String, Object> partialMap = decryptToMap(partial);
+
+            // check if the partial is a dummy (contains the dummy marker key)
+            if (partialMap.containsKey(AbstractDataPerturbationServiceProvider.DUMMY_MARKER_KEY)) {
+                log.debug(
+                    "[AGGREGATION] Dummy partial from producer {} in epoch {} — discarded",
+                    senderId,
+                    epoch
+                );
+
+                // return a dummy response with the same epoch
+                return HistogramAggregationResponse.dummy(epoch);
+            }
+
+            // Get or create the epoch state (only for real partials)
             EpochState state = epochStates.computeIfAbsent(epoch, k ->
                 new EpochState()
             );
 
-            // Evict oldest epochs if we exceed the pending limit
+            // Evict the oldest epochs if we exceed the pending limit (warn, don't crash)
             while (epochStates.size() > MAX_PENDING_EPOCHS) {
                 int oldestEpoch = epochStates.firstKey();
                 epochStates.remove(oldestEpoch);
                 log.warn(
-                    "[AGGREGATION] Evicted stale epoch {} (pending epochs exceeded {})",
+                    "[AGGREGATION] Evicted stale epoch {} (pending epochs exceeded {}). "
+                    + "Data for that epoch is lost, but the system continues.",
                     oldestEpoch,
                     MAX_PENDING_EPOCHS
-                );
-                throw new IllegalStateException(
-                    "Too many pending epochs, possible producer issue or out-of-order arrivals"
                 );
             }
 
@@ -146,16 +161,15 @@ public abstract class AbstractHistogramAggregationServiceProvider
                     senderId,
                     epoch
                 );
+
+                // Return pending response without merging to avoid double-counting
                 return HistogramAggregationResponse.pending(
                     state.contributors.size(),
                     getExpectedReplicaCount()
                 );
             }
 
-            // Decrypt partial histogram inside enclave
-            Map<String, Object> partialMap = decryptToMap(partial);
-
-            // Merge into epoch accumulator
+            // Merge real partial into epoch accumulator
             for (Map.Entry<String, Object> entry : partialMap.entrySet()) {
                 long value = ((Number) entry.getValue()).longValue();
                 state.mergedHistogram.merge(entry.getKey(), value, Long::sum);
@@ -183,9 +197,12 @@ public abstract class AbstractHistogramAggregationServiceProvider
                     epoch,
                     result.size()
                 );
+
+                // Return the complete histogram for this epoch
                 return HistogramAggregationResponse.complete(
                     result,
-                    getExpectedReplicaCount()
+                    getExpectedReplicaCount(),
+                    epoch
                 );
             }
 
