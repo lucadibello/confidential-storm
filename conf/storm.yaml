@@ -3,12 +3,14 @@ storm.zookeeper.servers:
 
 nimbus.seeds: ["nimbus"]
 
-# configure ports for duplicates (scaling)
-# supervisor.slots.ports:
-#   - 6700
-#   - 6701
-#   - 6702
-#   - 6703
-
 storm.local.dir: "/storm-data"
+
 ui.port: 8080
+
+# Worker slot ports (each slot runs one worker JVM).
+# Uncomment / extend to allow more workers per supervisor.
+supervisor.slots.ports:
+  - 6700
+  - 6701
+  - 6702
+  - 6703

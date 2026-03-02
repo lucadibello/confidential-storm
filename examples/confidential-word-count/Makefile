@@ -16,9 +16,14 @@ ENCLAVE_PROFILE ?= -Pnative
 # Valid values: CHACHA20_POLY1305 (default), AES_256_GCM, NONE
 ENCRYPTION_SCHEME ?= CHACHA20_POLY1305
 
+TOPOLOGY_JAR   := host/target/confidential-word-count-topology.jar
+TOPOLOGY_CLASS := ch.usi.inf.examples.confidential_word_count.host.WordCountTopology
+TOPOLOGY_NAME  := confidential-word-count
+
 .PHONY: all build help clean common generate-graph enclave host submit run-local \
        seal-dataset seal-chacha20 seal-aes256gcm seal-none \
-       test-enclave dataset-with-users percentile
+       test-enclave dataset-with-users percentile \
+       cluster-submit cluster-kill
 
 all: build
 
@@ -35,6 +40,13 @@ help:
 	@echo "    make run-local         - Run the topology locally"
 	@echo "    make test-enclave      - Run enclave unit tests"
 	@echo "    make submit            - Submit topology to a Storm cluster"
+	@echo ""
+	@echo "  Docker cluster (requires 'make cluster-up'):"
+	@echo "    make cluster-submit    - Build and submit topology to the Docker Storm cluster"
+	@echo "    make cluster-kill      - Kill the running topology on the cluster"
+	@echo "    make cluster-up        - Start the Storm Docker cluster"
+	@echo "    make cluster-down      - Stop the Storm Docker cluster"
+	@echo "    make cluster-status    - Show cluster and topology status"
 	@echo ""
 	@echo "  Dataset sealing (requires python3 + cryptography)"
 	@echo "    make seal-dataset      - Seal dataset with ENCRYPTION_SCHEME (default: $(ENCRYPTION_SCHEME))"
@@ -83,13 +95,27 @@ host: install-framework
 
 run-local:
 	@echo "Running Storm topology locally with debug logging (120 seconds)..."
-	@sudo storm local -c topology.debug=true --local-ttl 120 host/target/confidential-word-count-topology.jar ch.usi.inf.examples.confidential_word_count.host.WordCountTopology -- --local
+	@sudo storm local -c topology.debug=true --local-ttl 120 $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) -- --local
 	@echo "Finished local run."
 
 submit:
 	@echo "Submitting Storm topology to cluster..."
-	@storm jar host/target/confidential-word-count-topology.jar ch.usi.inf.examples.confidential_word_count.host.WordCountTopology -- --cluster
+	@storm jar $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) -- --cluster
 	@echo "Finished submission."
+
+# ---------------------------------------------------------------------------
+# Docker cluster submission
+# ---------------------------------------------------------------------------
+
+cluster-submit: build
+	@echo "Submitting $(TOPOLOGY_NAME) to Docker Storm cluster (nimbus=$(NIMBUS_HOST))..."
+	storm jar $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) -- --cluster
+	@echo "Topology submitted. Check status with: make cluster-status"
+
+cluster-kill:
+	@echo "Killing topology '$(TOPOLOGY_NAME)' on the cluster..."
+	storm kill $(TOPOLOGY_NAME) -w 5
+	@echo "Kill request sent (5 s wait)."
 
 # ---------------------------------------------------------------------------
 # Dataset sealing

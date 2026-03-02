@@ -1,11 +1,38 @@
 # Common Makefile logic for Confidential Storm examples
 
 FRAMEWORK_ROOT ?= ../..
+COMPOSE_FILE   ?= $(FRAMEWORK_ROOT)/docker-compose.yml
+NIMBUS_HOST    ?= nimbus
 
-.PHONY: install-framework
+.PHONY: install-framework cluster-up cluster-down cluster-status cluster-logs
 
 # This target ensures the base library is installed in the local maven repo
 install-framework:
 	@echo "[INFO] Ensuring Confidential Storm framework is installed..."
 	$(MAKE) -C $(FRAMEWORK_ROOT) build MAVEN_FLAGS="-DskipTests -q"
 	@echo "[INFO] Framework ready."
+
+# ---------------------------------------------------------------------------
+# Storm Docker cluster helpers
+# ---------------------------------------------------------------------------
+
+cluster-up:
+	@echo "[INFO] Creating storm-net network (if not exists)..."
+	@docker network create storm-net 2>/dev/null || true
+	@echo "[INFO] Starting Storm cluster..."
+	docker compose -f $(COMPOSE_FILE) up -d
+	@echo "[INFO] Storm cluster is starting. UI will be at http://localhost:$${STORM_UI_PORT:-9090}"
+
+cluster-down:
+	@echo "[INFO] Stopping Storm cluster..."
+	docker compose -f $(COMPOSE_FILE) down
+	@echo "[INFO] Cluster stopped."
+
+cluster-status:
+	@docker compose -f $(COMPOSE_FILE) ps
+	@echo ""
+	@echo "--- Active topologies ---"
+	@storm list 2>/dev/null || echo "(nimbus not reachable — is the cluster running?)"
+
+cluster-logs:
+	docker compose -f $(COMPOSE_FILE) logs -f
