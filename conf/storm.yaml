@@ -3,7 +3,7 @@ storm.zookeeper.servers:
 
 nimbus.seeds: ["nimbus"]
 
-storm.local.dir: "/storm-data"
+storm.local.dir: "/data"
 
 ui.port: 8080
 
