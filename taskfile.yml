@@ -12,6 +12,8 @@ vars:
   NVIM_TUNNEL_REMOTE_PORT: 6666
   SSH_TUNNEL_LOCAL_PORT: 8022
   NVIM_TUNNEL_LOCAL_PORT: 8066
+  STORM_UI_REMOTE_PORT: 9090
+  STORM_UI_LOCAL_PORT: 9090
 
 tasks:
   devcontainer:
@@ -63,3 +65,8 @@ tasks:
     desc: Forward the devcontainer’s Neovim headless server port to your machine for remote-UI access
     cmds:
       - ssh -N -L {{.NVIM_TUNNEL_LOCAL_PORT}}:127.0.0.1:{{.NVIM_TUNNEL_REMOTE_PORT}} {{.TUNNEL_USER}}@{{.TUNNEL_SRV}}
+
+  tunnel-storm-ui:
+    desc: Forward the Storm web UI port from the remote server to your local machine
+    cmds:
+      - ssh -N -L {{.STORM_UI_LOCAL_PORT}}:127.0.0.1:{{.STORM_UI_REMOTE_PORT}} {{.TUNNEL_USER}}@{{.TUNNEL_SRV}}
