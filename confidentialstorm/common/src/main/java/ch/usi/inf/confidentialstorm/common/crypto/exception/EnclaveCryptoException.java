@@ -1,12 +1,12 @@
 package ch.usi.inf.confidentialstorm.common.crypto.exception;
 
 import java.io.Serial;
-import java.io.Serializable;
 
 /**
  * Base class for enclave cryptographic errors.
  */
-public class EnclaveCryptoException extends Exception implements Serializable {
+public class EnclaveCryptoException extends Exception {
+
     @Serial
     private static final long serialVersionUID = 1L;
 

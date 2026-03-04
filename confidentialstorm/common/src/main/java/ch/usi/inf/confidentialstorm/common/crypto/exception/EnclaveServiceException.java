@@ -1,14 +1,14 @@
 package ch.usi.inf.confidentialstorm.common.crypto.exception;
 
 import java.io.Serial;
-import java.io.Serializable;
 
 /**
  * Serializable exception that wraps exceptions thrown inside an enclave to propagate them to the host application.
  * <p>
  * The exception extracts the original exception type, message, and stack trace for better diagnostics.
  */
-public class EnclaveServiceException extends Exception implements Serializable {
+public class EnclaveServiceException extends Exception {
+
     @Serial
     private static final long serialVersionUID = 1L;
 
@@ -23,10 +23,12 @@ public class EnclaveServiceException extends Exception implements Serializable {
      * @param originalMessage the message of the original exception
      * @param enclaveStack    the stack trace from the enclave
      */
-    public EnclaveServiceException(String operation,
-                                   String originalType,
-                                   String originalMessage,
-                                   StackTraceElement[] enclaveStack) {
+    public EnclaveServiceException(
+        String operation,
+        String originalType,
+        String originalMessage,
+        StackTraceElement[] enclaveStack
+    ) {
         super(buildMessage(operation, originalType, originalMessage));
         this.originalType = originalType;
         this.originalMessage = originalMessage;
@@ -60,9 +62,16 @@ public class EnclaveServiceException extends Exception implements Serializable {
         this.originalMessage = cause.getMessage();
     }
 
-    private static String buildMessage(String operation, String type, String msg) {
+    private static String buildMessage(
+        String operation,
+        String type,
+        String msg
+    ) {
         StringBuilder builder = new StringBuilder();
-        builder.append(operation).append(" failed in enclave with ").append(type);
+        builder
+            .append(operation)
+            .append(" failed in enclave with ")
+            .append(type);
         if (msg != null && !msg.isBlank()) {
             builder.append(": ").append(msg);
         }
