@@ -4,7 +4,7 @@ FRAMEWORK_ROOT ?= ../..
 COMPOSE_FILE   ?= $(FRAMEWORK_ROOT)/docker-compose.yml
 NIMBUS_HOST    ?= nimbus
 
-.PHONY: install-framework cluster-up cluster-down cluster-status cluster-logs
+.PHONY: install-framework cluster-up cluster-down cluster-status cluster-logs cluster-logs-local
 
 # This target ensures the base library is installed in the local maven repo
 install-framework:
@@ -29,10 +29,25 @@ cluster-down:
 	@echo "[INFO] Cluster stopped."
 
 cluster-status:
-	@docker compose -f $(COMPOSE_FILE) ps
+	@docker compose -f $(COMPOSE_FILE) ps 2>/dev/null || true
 	@echo ""
 	@echo "--- Active topologies ---"
-	@storm list 2>/dev/null || echo "(nimbus not reachable — is the cluster running?)"
+	@storm list 2>/dev/null \
+		|| docker exec storm-nimbus storm list 2>/dev/null \
+		|| echo "(nimbus not reachable — is the cluster running?)"
 
 cluster-logs:
 	docker compose -f $(COMPOSE_FILE) logs -f
+
+STORM_LOGS_DIR ?= $(FRAMEWORK_ROOT)/data/storm-logs
+
+cluster-logs-local:
+	@if ls $(STORM_LOGS_DIR)/supervisor/workers-artifacts/*/6*/worker.log 1>/dev/null 2>&1; then \
+		echo "[INFO] Tailing worker logs from $(STORM_LOGS_DIR)/supervisor ..."; \
+		tail -f $(STORM_LOGS_DIR)/supervisor/workers-artifacts/*/6*/worker.log; \
+	else \
+		echo "[WARN] No worker logs found yet in $(STORM_LOGS_DIR)/supervisor/workers-artifacts/."; \
+		echo "       Is the cluster running with a submitted topology?"; \
+		echo "       Listing available logs:"; \
+		find $(STORM_LOGS_DIR) -name "*.log" -size +0c 2>/dev/null || echo "       (none)"; \
+	fi
