@@ -1,0 +1,62 @@
+# Custom Storm image with Intel SGX runtime support.
+#
+# Extends the official Storm image with:
+#   1. Intel SGX PSW runtime libraries (libsgx-urts, DCAP quoting)
+#   2. Teaclave Java TEE SDK config template required at runtime
+#
+# The Teaclave Java SDK (host-0.1.0.jar) unconditionally reads:
+#   /opt/javaenclave/config/template/java_enclave_configure.json
+# before any classpath-based overrides take effect.  The per-project
+# java_enclave_configure.json bundled in the topology JAR then
+# overrides these defaults.
+#
+# The JNI bridge lib_jni_tee_sdk_svm.so (extracted from the JAR at
+# runtime) dynamically links against libsgx_urts.so and
+# libsgx_dcap_ql.so.1, which must be present on the host filesystem.
+
+ARG STORM_VERSION=2.8.3
+FROM storm:${STORM_VERSION}
+
+ARG TEACLAVE_SDK_VERSION=v0.1.0
+
+# --- Intel SGX PSW runtime ---------------------------------------------------
+# storm:2.8.3 is based on Ubuntu 24.04 (Noble).  The Intel SGX APT
+# repository provides pre-built packages for this distribution.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        gnupg curl ca-certificates; \
+    # Add the Intel SGX APT repository (Noble)
+    curl -fsSL https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key \
+        | gpg --dearmor -o /usr/share/keyrings/intel-sgx.gpg; \
+    echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/intel-sgx.gpg] https://download.01.org/intel-sgx/sgx_repo/ubuntu noble main' \
+        > /etc/apt/sources.list.d/intel-sgx.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        libsgx-urts \
+        libsgx-dcap-ql \
+        libsgx-dcap-default-qpl; \
+    # Clean up
+    apt-get purge -y --auto-remove gnupg; \
+    rm -rf /var/lib/apt/lists/*
+
+# --- SGX device access for the Storm worker user -----------------------------
+# The SGX device nodes (/dev/sgx/enclave, /dev/sgx/provision) are
+# passed through from the host with group ownership matching the host's
+# "sgx" group (GID 107 on most installations).  Storm worker JVMs run
+# as the "storm" user (UID 1000), so we add that user to a matching
+# group inside the container.
+ARG SGX_GID=107
+RUN groupadd -g ${SGX_GID} sgx 2>/dev/null || true; \
+    usermod -aG sgx storm
+
+# --- Teaclave Java TEE SDK config template ------------------------------------
+# Fetch the single required config file from the official Apache
+# Teaclave Java TEE SDK repository, pinned to the version matching
+# the SDK JARs used by this project.
+RUN set -eux; \
+    mkdir -p /opt/javaenclave/config/template; \
+    curl -fsSL \
+        "https://raw.githubusercontent.com/apache/teaclave-java-tee-sdk/${TEACLAVE_SDK_VERSION}/sdk/native/config/template/java_enclave_configure.json" \
+        -o /opt/javaenclave/config/template/java_enclave_configure.json; \
+    echo "Teaclave SDK config template installed successfully."

@@ -179,9 +179,8 @@ RUN set -eux; \
     ln -s "/opt/apache-storm-${STORM_VERSION}" "${STORM_HOME}"; \
     ln -s "${STORM_HOME}/bin/storm" /usr/local/bin/storm
 
-# Minimal Storm client config (nimbus by service name)
-RUN mkdir -p /home/${REMOTE_USER}/.storm && \
-    echo 'nimbus.seeds: ["nimbus"]' > /home/${REMOTE_USER}/.storm/storm.yaml
+# Create Storm client config directory (storm.yaml is bind-mounted at runtime via devcontainer.json)
+RUN mkdir -p /home/${REMOTE_USER}/.storm
 
 # Install Oh My Zsh for the remote user (non-interactive)
 RUN su - "${REMOTE_USER}" -c 'export RUNZSH=no CHSH=no; sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"'

@@ -33,7 +33,10 @@
   "overrideCommand": false,
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "forwardPorts": [2222],
-  "mounts": ["source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind"],
+  "mounts": [
+    "source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind",
+    "source=${localWorkspaceFolder}/conf/storm.yaml,target=/home/dev/.storm/storm.yaml,type=bind,readonly"
+  ],
   "containerEnv": {
     "SSH_AUTH_SOCK": "/ssh-agent",
     "NVIM_LISTEN_ADDRESS": "0.0.0.0:6666"
