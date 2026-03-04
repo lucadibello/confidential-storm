@@ -1,13 +1,16 @@
-# Apache Storm cluster for local development.
+# Apache Storm cluster with Intel SGX support.
 #
 # Prerequisites:
 #   1. Create the external network once:
 #        docker network create storm-net
 #   2. Copy .env.example to .env and adjust values if needed:
 #        cp .env.example .env
+#   3. Ensure the SGX AESM daemon is running on the host (for TEE_SDK mode):
+#        systemctl status aesmd
 #
 # Usage:
-#   docker compose up -d          # start the cluster
+#   docker compose up -d          # build custom image & start the cluster
+#   docker compose up -d --build  # force-rebuild the custom image
 #   docker compose logs -f        # follow all logs
 #   docker compose down           # stop the cluster
 #   docker compose down -v        # stop and remove volumes
@@ -16,7 +19,11 @@
 # inside the container can reach nimbus by hostname.
 
 x-storm-common: &storm-common
-  image: "storm:${STORM_VERSION:-2.8.3}"
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.storm
+    args:
+      STORM_VERSION: "${STORM_VERSION:-2.8.3}"
   restart: unless-stopped
   environment:
     STORM_CONF_DIR: /conf
@@ -61,6 +68,10 @@ services:
         condition: service_healthy
     ports:
       - "${NIMBUS_THRIFT_PORT:-6627}:6627"
+    volumes:
+      - ./conf/storm.yaml:/conf/storm.yaml
+      - storm-data:/data
+      - ./data/storm-logs/nimbus:/logs/storm
     healthcheck:
       test: ["CMD-SHELL", "storm list 2>&1 | grep -qvE 'Exception|error'"]
       interval: 15s
@@ -78,8 +89,15 @@ services:
         condition: service_healthy
     ports:
       - "${STORM_UI_PORT:-9090}:8080"
+    volumes:
+      - ./conf/storm.yaml:/conf/storm.yaml
+      - storm-data:/data
+      - ./data/storm-logs/ui:/logs/storm
 
   # --- Supervisor (worker node) --------------------------------------------
+  # The supervisor runs the actual topology bolts, which need SGX enclave
+  # access.  We pass through the SGX device nodes and the AESM daemon
+  # socket so that the Teaclave SDK can create and attest enclaves.
   supervisor:
     <<: *storm-common
     container_name: storm-supervisor-1
@@ -87,6 +105,14 @@ services:
     depends_on:
       nimbus:
         condition: service_healthy
+    devices:
+      - /dev/sgx_enclave:/dev/sgx/enclave
+      - /dev/sgx_provision:/dev/sgx/provision
+    volumes:
+      - ./conf/storm.yaml:/conf/storm.yaml
+      - storm-data:/data
+      - /var/run/aesmd/aesm.socket:/var/run/aesmd/aesm.socket
+      - ./data/storm-logs/supervisor:/logs/storm
 
   # --- Log Viewer (access worker logs via UI) ------------------------------
   logviewer:
@@ -97,6 +123,10 @@ services:
       - supervisor
     ports:
       - "${LOGVIEWER_PORT:-8000}:8000"
+    volumes:
+      - ./conf/storm.yaml:/conf/storm.yaml
+      - storm-data:/data
+      - ./data/storm-logs/supervisor:/logs/storm
 
 volumes:
   storm-data:
