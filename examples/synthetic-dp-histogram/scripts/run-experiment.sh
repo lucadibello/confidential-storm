@@ -82,9 +82,6 @@ echo "=============================================="
 echo ""
 
 # --- Run ---
-# All topology parameters are passed as main_args (positional args after the topology class).
-# This works in both local mode and cluster mode (storm jar / storm local).
-# Storm does not support -D<key>=<value> JVM flags via its CLI launcher.
 cd "$PROJECT_DIR"
 
 sudo storm local \

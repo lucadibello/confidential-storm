@@ -127,6 +127,16 @@
                                     <mainClass>${topology.mainClass}</mainClass>
                                 </transformer>
                             </transformers>
+                            <relocations>
+                                <relocation>
+                                    <pattern>org.apache.curator</pattern>
+                                    <shadedPattern>ch.usi.inf.confidentialstorm.shaded.curator</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.zookeeper</pattern>
+                                    <shadedPattern>ch.usi.inf.confidentialstorm.shaded.zookeeper</shadedPattern>
+                                </relocation>
+                            </relocations>
                         </configuration>
                     </execution>
                 </executions>

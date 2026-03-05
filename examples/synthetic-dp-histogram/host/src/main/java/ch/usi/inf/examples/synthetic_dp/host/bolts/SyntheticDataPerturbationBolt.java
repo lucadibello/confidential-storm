@@ -19,6 +19,7 @@ public class SyntheticDataPerturbationBolt extends AbstractDataPerturbationBolt 
 
     @Override
     protected void processEncryptedSnapshot(EncryptedDataPerturbationSnapshot snapshot) {
+        System.out.println("[DP-PARTIAL-OUTPUT-CHECK-TIMING] Sending encrypted histogram snapshot");
         getCollector().emit(new Values(snapshot.encryptedHistogram()));
     }
 

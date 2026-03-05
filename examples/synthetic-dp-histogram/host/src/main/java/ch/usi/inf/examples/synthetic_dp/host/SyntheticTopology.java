@@ -3,7 +3,6 @@ package ch.usi.inf.examples.synthetic_dp.host;
 import ch.usi.inf.confidentialstorm.common.annotation.ConfidentialTopologyBuilder;
 import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
 import ch.usi.inf.examples.synthetic_dp.common.config.DPConfig;
-import ch.usi.inf.confidentialstorm.host.bolts.dp.AbstractHistogramAggregationBolt;
 import ch.usi.inf.examples.synthetic_dp.host.bolts.SyntheticDataPerturbationBolt;
 import ch.usi.inf.examples.synthetic_dp.host.bolts.SyntheticHistogramAggregationBolt;
 import ch.usi.inf.examples.synthetic_dp.host.bolts.SyntheticUserContributionBoundingBolt;
@@ -11,7 +10,7 @@ import ch.usi.inf.examples.synthetic_dp.host.spouts.SyntheticSpout;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.storm.Config;
-import org.apache.storm.LocalCluster;
+import org.apache.storm.StormSubmitter;
 import org.apache.storm.generated.StormTopology;
 import org.apache.storm.topology.TopologyBuilder;
 import org.apache.storm.tuple.Fields;
@@ -37,6 +36,10 @@ import org.slf4j.LoggerFactory;
  * <p>
  * Flags:
  * - --test: test mode (sets parallelism=1 for faster startup)
+ *
+ * Execution modes:
+ * - Local:   {@code storm local --local-ttl 120 <jar> SyntheticTopology [-- --test]}
+ * - Cluster: {@code storm jar <jar> SyntheticTopology}
  */
 public class SyntheticTopology {
     private static final Logger LOG = LoggerFactory.getLogger(SyntheticTopology.class);
@@ -66,9 +69,7 @@ public class SyntheticTopology {
         );
 
         // DataPerturbationBolt: applies DP noise via streaming mechanism
-        // Subscribes to two back-edge streams from the aggregator (both via allGrouping):
-        //   1. TOPOLOGY_READY_STREAM: one-time signal when all producers are discovered
-        //   2. TAKE_SNAPSHOT_STREAM: periodic signal that drives synchronized epoch advancement
+        // Epoch synchronization is handled out-of-band via ZooKeeper barriers
         builder.setBolt(
                 ComponentConstants.BOLT_DATA_PERTURBATION.toString(),
                 new SyntheticDataPerturbationBolt(),
@@ -76,12 +77,6 @@ public class SyntheticTopology {
         ).fieldsGrouping(
                 ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING.toString(),
                 new Fields("dpRoutingKey")
-        ).allGrouping(
-                ComponentConstants.BOLT_HISTOGRAM_AGGREGATION.toString(),
-                AbstractHistogramAggregationBolt.TOPOLOGY_READY_STREAM
-        ).allGrouping(
-                ComponentConstants.BOLT_HISTOGRAM_AGGREGATION.toString(),
-                AbstractHistogramAggregationBolt.TAKE_SNAPSHOT_STREAM
         );
 
         // HistogramAggregationBolt: merges encrypted partial histograms and writes report
@@ -168,18 +163,11 @@ public class SyntheticTopology {
         LOG.info("Topology Config: numUsers={}, numKeys={}, batchSize={}, sleepMs={}, seed={}",
                 numUsers, numKeys, batchSize, sleepMs, seed);
 
-        // start local cluster
-        LOG.info("Starting topology for {} seconds...", runtimeSeconds);
-        long startTime = System.currentTimeMillis();
-        try (LocalCluster cluster = new LocalCluster()) {
-            StormTopology topo = builder.createTopology();
-            cluster.submitTopology("SyntheticDP" + runId, conf, topo);
-            Thread.sleep(runtimeSeconds * 1000L);
-            cluster.killTopology("SyntheticDP" + runId);
-        }
-
-        long elapsed = (System.currentTimeMillis() - startTime) / 1000;
-        LOG.info("Topology completed after {} seconds", elapsed);
-        LOG.info("Results written to: data/synthetic-report-run{}.txt", runId);
+        // submit topology to cluster
+        LOG.info("Submitting topology...");
+        String topoName = "SyntheticDP" + runId;
+        StormTopology topo = builder.createTopology();
+        StormSubmitter.submitTopologyWithProgressBar(topoName, conf, topo);
+        LOG.info("Topology '{}' submitted to cluster.", topoName);
     }
 }

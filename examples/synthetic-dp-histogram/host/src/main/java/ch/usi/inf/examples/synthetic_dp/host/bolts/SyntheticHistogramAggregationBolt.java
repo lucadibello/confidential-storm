@@ -55,9 +55,15 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
     protected void processCompleteHistogram(Map<String, Long> mergedHistogram) {
         roundCount++;
         LOG.info("Processing complete histogram round #{} with {} keys", roundCount, mergedHistogram.size());
+        System.out.println("[DP-GLOBAL-OUTPUT-CHECK-TIMING] Round " + roundCount + " - Received complete histogram with " + mergedHistogram.size() + " keys");
 
         Map<String, Long> groundTruth = GroundTruthCollector.snapshot();
         writeReport(mergedHistogram, groundTruth);
+    }
+
+    @Override
+    protected void processStaleHistogram(Map<String, Long> staleHistogram) {
+        System.out.println("[DP-GLOBAL-STALE-CHECK-TIMING] Round " + roundCount + " - Received stale histogram with " + staleHistogram.size() + " keys");
     }
 
     private void writeReport(Map<String, Long> dp, Map<String, Long> gt) {
@@ -112,6 +118,6 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        super.declareOutputFields(declarer);
+        // Terminal sink — no output streams
     }
 }
