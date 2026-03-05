@@ -8,6 +8,8 @@ import ch.usi.inf.examples.synthetic_dp.host.GroundTruthCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
 import org.apache.storm.tuple.Tuple;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -20,6 +22,7 @@ import java.util.Map;
 public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregationBolt {
     private static final String OUTPUT_DIR = System.getProperty("synthetic.output.dir", "data");
     private static final int RUN_ID = Integer.getInteger("synthetic.run.id", 1);
+    private static final Logger LOG = LoggerFactory.getLogger(SyntheticHistogramAggregationBolt.class);
 
     private final String outputFile;
     private int roundCount = 0;
@@ -55,7 +58,8 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
     protected void processCompleteHistogram(Map<String, Long> mergedHistogram) {
         roundCount++;
         LOG.info("Processing complete histogram round #{} with {} keys", roundCount, mergedHistogram.size());
-        System.out.println("[DP-GLOBAL-OUTPUT-CHECK-TIMING] Round " + roundCount + " - Received complete histogram with " + mergedHistogram.size() + " keys");
+        // log with special tag for easier parsing in logs
+        LOG.info("[DP-GLOBAL-OUTPUT-CHECK-TIMING] Round " + roundCount + " - Received complete histogram with " + mergedHistogram.size() + " keys");
 
         Map<String, Long> groundTruth = GroundTruthCollector.snapshot();
         writeReport(mergedHistogram, groundTruth);
@@ -63,7 +67,7 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
 
     @Override
     protected void processStaleHistogram(Map<String, Long> staleHistogram) {
-        System.out.println("[DP-GLOBAL-STALE-CHECK-TIMING] Round " + roundCount + " - Received stale histogram with " + staleHistogram.size() + " keys");
+        LOG.info("[DP-GLOBAL-STALE-CHECK-TIMING] Round " + roundCount + " - Received stale histogram with " + staleHistogram.size() + " keys");
     }
 
     private void writeReport(Map<String, Long> dp, Map<String, Long> gt) {
