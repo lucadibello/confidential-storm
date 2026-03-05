@@ -4,7 +4,8 @@ FRAMEWORK_ROOT ?= ../..
 COMPOSE_FILE   ?= $(FRAMEWORK_ROOT)/docker-compose.yml
 NIMBUS_HOST    ?= nimbus
 
-.PHONY: install-framework cluster-up cluster-down cluster-status cluster-logs cluster-logs-local
+.PHONY: install-framework cluster-up cluster-down cluster-status cluster-logs cluster-logs-local \
+       cluster-submit cluster-kill
 
 # This target ensures the base library is installed in the local maven repo
 install-framework:
@@ -19,6 +20,7 @@ install-framework:
 cluster-up:
 	@echo "[INFO] Creating storm-net network (if not exists)..."
 	@docker network create storm-net 2>/dev/null || true
+	@mkdir -p $(FRAMEWORK_ROOT)/data/storm-logs/{nimbus,ui,supervisor,logviewer}
 	@echo "[INFO] Starting Storm cluster..."
 	docker compose -f $(COMPOSE_FILE) up -d
 	@echo "[INFO] Storm cluster is starting. UI will be at http://localhost:$${STORM_UI_PORT:-9090}"
@@ -27,6 +29,16 @@ cluster-down:
 	@echo "[INFO] Stopping Storm cluster..."
 	docker compose -f $(COMPOSE_FILE) down
 	@echo "[INFO] Cluster stopped."
+
+cluster-submit: build
+	@echo "[INFO] Submitting $(TOPOLOGY_NAME) to Docker Storm cluster (nimbus=$(NIMBUS_HOST))..."
+	storm jar $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS)
+	@echo "[INFO] Topology submitted. Check status with: make cluster-status"
+
+cluster-kill:
+	@echo "[INFO] Killing topology '$(TOPOLOGY_NAME)' on the cluster..."
+	storm kill $(TOPOLOGY_NAME) -w 5
+	@echo "[INFO] Kill request sent (5 s wait)."
 
 cluster-status:
 	@docker compose -f $(COMPOSE_FILE) ps 2>/dev/null || true

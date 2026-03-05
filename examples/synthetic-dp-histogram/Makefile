@@ -9,11 +9,10 @@ ENCLAVE_PROFILE ?= -Pnative
 
 TOPOLOGY_JAR   := host/target/synthetic-dp-histogram-host-1.0-SNAPSHOT.jar
 TOPOLOGY_CLASS := ch.usi.inf.examples.synthetic_dp.host.SyntheticTopology
-TOPOLOGY_NAME  := synthetic-dp-histogram
+TOPOLOGY_NAME  := SyntheticDP1
 
 .PHONY: all build help clean common enclave host \
-        run-local run-test submit \
-        cluster-submit cluster-kill
+        run-local run-test
 
 all: build
 
@@ -26,14 +25,14 @@ help:
 	@echo "  make clean            - Run 'mvn clean' for the example project"
 	@echo "  make run-local        - Run locally in benchmark mode (parallelism=8)"
 	@echo "  make run-test         - Run locally in test mode (parallelism=1)"
-	@echo "  make submit           - Submit the topology to a cluster via storm jar"
 	@echo ""
 	@echo "  Docker cluster (requires 'make cluster-up'):"
-	@echo "    make cluster-submit - Build and submit topology to the Docker Storm cluster"
-	@echo "    make cluster-kill   - Kill the running topology on the cluster"
-	@echo "    make cluster-up     - Start the Storm Docker cluster"
-	@echo "    make cluster-down   - Stop the Storm Docker cluster"
-	@echo "    make cluster-status - Show cluster and topology status"
+	@echo "    make cluster-submit    - Build and submit topology to the Docker Storm cluster"
+	@echo "    make cluster-kill      - Kill the running topology on the cluster"
+	@echo "    make cluster-up        - Start the Storm Docker cluster"
+	@echo "    make cluster-down      - Stop the Storm Docker cluster"
+	@echo "    make cluster-status    - Show cluster and topology status"
+	@echo "    make cluster-logs-local - Tail worker logs from host filesystem"
 	@echo ""
 	@echo "Variables:"
 	@echo "  MVN=<path>                Override Maven binary (default: mvn)"
@@ -65,23 +64,3 @@ run-test:
 	@sudo storm local --local-ttl 60 $(TOPOLOGY_JAR) \
 	  $(TOPOLOGY_CLASS) -- --test
 	@echo "Finished test run."
-
-submit: build
-	@echo "Submitting Synthetic DP topology to cluster..."
-	@storm jar $(TOPOLOGY_JAR) \
-	  $(TOPOLOGY_CLASS) -- --cluster
-	@echo "Finished submission."
-
-# ---------------------------------------------------------------------------
-# Docker cluster submission
-# ---------------------------------------------------------------------------
-
-cluster-submit: build
-	@echo "Submitting $(TOPOLOGY_NAME) to Docker Storm cluster (nimbus=$(NIMBUS_HOST))..."
-	storm jar $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) -- --cluster
-	@echo "Topology submitted. Check status with: make cluster-status"
-
-cluster-kill:
-	@echo "Killing topology '$(TOPOLOGY_NAME)' on the cluster..."
-	storm kill $(TOPOLOGY_NAME) -w 5
-	@echo "Kill request sent (5 s wait)."
