@@ -4,8 +4,10 @@ target/
 build/
 out/
 
-# Output histogram snapshot
+# Output data (histogram snapshots, storm logs, etc.)
 data/
+# Ignore data/ directories inside subprojects (e.g. examples/*/data/)
+**/data/
 
 references/
 
@@ -75,13 +77,6 @@ __pycache__/
 
 # worktrees
 worktrees/
-
-# Keep only the .gitkeep files in the data directories to ensure the directories are tracked
-data/*
-!data/.gitkeep
-!data/storm/.gitkeep
-!data/zk/.gitkeep
-!data/zk-log/.gitkeep
 
 # Gradle
 .gradle/

@@ -2,6 +2,7 @@ package ch.usi.inf.examples.confidential_word_count.host.bolts;
 
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.dp.AbstractHistogramAggregationBolt;
+import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
 import org.apache.storm.tuple.Fields;
@@ -28,6 +29,13 @@ public class HistogramAggregatorBolt extends AbstractHistogramAggregationBolt {
     protected void afterPrepare(Map<String, Object> topoConf, TopologyContext context) {
         super.afterPrepare(topoConf, context);
         this.io = Executors.newSingleThreadExecutor();
+    }
+
+    @Override
+    protected int getExpectedUpstreamTaskCount(TopologyContext context) {
+        return context.getComponentTasks(
+                ComponentConstants.BOLT_DATA_PERTURBATION.toString()
+        ).size();
     }
 
     @Override
