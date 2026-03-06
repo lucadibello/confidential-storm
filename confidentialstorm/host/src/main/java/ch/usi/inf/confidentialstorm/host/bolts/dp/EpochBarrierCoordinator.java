@@ -15,7 +15,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -78,7 +77,7 @@ public class EpochBarrierCoordinator implements Closeable {
                 .build();
         client.start();
 
-        // SharedCount with seed value 0 — leader will set it to 1 after startup
+        // SharedCount with seed value 0 -- leader will set it to 1 after startup
         this.sharedEpoch = new SharedCount(client, CURRENT_EPOCH_PATH, 0);
 
         // Register listener for epoch changes
@@ -105,7 +104,7 @@ public class EpochBarrierCoordinator implements Closeable {
 
     /**
      * Sets the callback to invoke when the global epoch advances.
-     * The callback runs on a Curator {@link SharedCountListener} event thread — it must be non-blocking.
+     * The callback runs on a Curator {@link SharedCountListener} event thread -- it must be non-blocking.
      */
     public void setOnEpochAdvanced(Runnable callback) {
         this.onEpochAdvanced = callback;
@@ -206,7 +205,7 @@ public class EpochBarrierCoordinator implements Closeable {
      * using {@link SharedCount#trySetCount(VersionedValue, int)} for compare-and-swap safety.
      * <p>
      * Any replica may call this. The versioned CAS ensures that only one replica
-     * actually performs the write if multiple race — the first one to write wins,
+     * actually performs the write if multiple race -- the first one to write wins,
      * and subsequent attempts fail harmlessly because the version has changed.
      * The {@link SharedCountListener} then notifies all replicas of the new value.
      * Only the leader prunes old completion nodes to avoid concurrent delete races.
@@ -235,7 +234,7 @@ public class EpochBarrierCoordinator implements Closeable {
                     }
                     return true;
                 }
-                // Another replica already advanced — that's fine, the listener will notify us
+                // Another replica already advanced -- that's fine, the listener will notify us
             }
         } catch (Exception e) {
             LOG.debug("[EpochBarrier] Task {} failed to check/advance epoch {} (benign)", taskId, currentTargetEpoch, e);
@@ -256,7 +255,7 @@ public class EpochBarrierCoordinator implements Closeable {
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
         closed = true;
         try {
             sharedEpoch.close();

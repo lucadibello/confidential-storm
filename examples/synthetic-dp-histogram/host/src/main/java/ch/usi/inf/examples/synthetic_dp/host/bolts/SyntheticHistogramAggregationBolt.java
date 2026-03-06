@@ -123,6 +123,6 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        // Terminal sink — no output streams
+        // Terminal sink -- no output streams
     }
 }

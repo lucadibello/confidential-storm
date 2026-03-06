@@ -22,7 +22,7 @@ import java.util.*;
  * enclave service, and releases complete histograms on a tick schedule.
  * <p>
  * Epoch synchronization is handled out-of-band by {@link EpochBarrierCoordinator} in the
- * upstream DataPerturbation bolts — no back-edge streams are needed.
+ * upstream DataPerturbation bolts -- no back-edge streams are needed.
  */
 public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<HistogramAggregationService> {
     protected static final Logger LOG = LoggerFactory.getLogger(AbstractHistogramAggregationBolt.class);
