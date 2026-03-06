@@ -3,6 +3,11 @@ package ch.usi.inf.confidentialstorm.host.bolts.dp;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.framework.recipes.barriers.DistributedBarrier;
+import org.apache.curator.framework.recipes.shared.SharedCount;
+import org.apache.curator.framework.recipes.shared.SharedCountListener;
+import org.apache.curator.framework.recipes.shared.SharedCountReader;
+import org.apache.curator.framework.recipes.shared.VersionedValue;
+import org.apache.curator.framework.state.ConnectionState;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.storm.Config;
 import org.apache.zookeeper.CreateMode;
@@ -11,7 +16,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -20,16 +24,18 @@ import java.util.stream.Collectors;
 /**
  * Coordinates epoch synchronization across DataPerturbationBolt replicas using ZooKeeper.
  * <p>
- * Uses a shared ZK epoch counter ({@code /current-epoch}) instead of blocking barriers.
- * Replicas only advance their local epoch when the global counter indicates all replicas
- * have completed the previous epoch. This prevents epoch drift without blocking the bolt thread.
+ * Uses a Curator {@link SharedCount} on {@code /current-epoch} as the global epoch counter.
+ * The {@code SharedCountListener} notifies all replicas immediately when the epoch advances,
+ * so they can start their next background computation without waiting for the next tick.
+ * <p>
+ * Replicas register completion under {@code /completed/{epoch}/{taskId}}. Any replica may
+ * advance the counter when all completions are present.
  * <p>
  * Coordination phases:
  * <ol>
  *   <li><b>Startup barrier:</b> All replicas register and wait until all are ready.</li>
- *   <li><b>Epoch gating:</b> A shared counter gates when replicas may start the next snapshot.
- *       Replicas register completion under {@code /completed/{epoch}/{taskId}}.
- *       The leader advances the counter when all replicas have completed.</li>
+ *   <li><b>Epoch gating:</b> The shared counter gates when replicas may start the next snapshot.
+ *       The {@code SharedCountListener} pushes epoch changes to all replicas reactively.</li>
  * </ol>
  */
 public class EpochBarrierCoordinator implements Closeable {
@@ -41,14 +47,16 @@ public class EpochBarrierCoordinator implements Closeable {
     private static final String COMPLETED_PATH = "/completed";
 
     private final CuratorFramework client;
+    private final SharedCount sharedEpoch;
     private final int taskId;
     private final int totalReplicas;
     private final boolean isLeader;
 
     private volatile boolean ready = false;
+    private volatile boolean closed = false;
 
-    /** Cached target epoch to avoid ZK reads on every tick when nothing changed. */
-    private volatile int cachedTargetEpoch = 0;
+    /** Callback invoked when the epoch advances (from SharedCount listener). May be null. */
+    private volatile Runnable onEpochAdvanced;
 
     @SuppressWarnings("unchecked")
     public EpochBarrierCoordinator(Map<String, Object> topoConf, String topologyId,
@@ -70,20 +78,51 @@ public class EpochBarrierCoordinator implements Closeable {
                 .build();
         client.start();
 
+        // SharedCount with seed value 0 — leader will set it to 1 after startup
+        this.sharedEpoch = new SharedCount(client, CURRENT_EPOCH_PATH, 0);
+
+        // Register listener for epoch changes
+        sharedEpoch.addListener(new SharedCountListener() {
+            @Override
+            public void countHasChanged(SharedCountReader reader, int newCount) {
+                LOG.debug("[EpochBarrier] Task {} received epoch change notification: {}",
+                        taskId, newCount);
+                Runnable callback = onEpochAdvanced;
+                if (callback != null) {
+                    callback.run();
+                }
+            }
+
+            @Override
+            public void stateChanged(CuratorFramework client, ConnectionState newState) {
+                LOG.info("[EpochBarrier] Task {} ZK connection state: {}", taskId, newState);
+            }
+        });
+
         LOG.info("[EpochBarrier] Task {} initialized (leader={}, replicas={})",
                 taskId, isLeader, totalReplicas);
     }
 
     /**
+     * Sets the callback to invoke when the global epoch advances.
+     * The callback runs on a Curator {@link SharedCountListener} event thread — it must be non-blocking.
+     */
+    public void setOnEpochAdvanced(Runnable callback) {
+        this.onEpochAdvanced = callback;
+    }
+
+    /**
      * Waits for all replicas to be ready, then invokes onReady on a background thread.
-     * The leader also initializes the epoch counter to 1 (the first target epoch).
+     * The leader also sets the epoch counter to 1 (the first target epoch).
      */
     public void awaitStartup(Runnable onReady) {
         Thread startupThread = new Thread(() -> {
             try {
+                // Start the SharedCount (must happen before any reads/writes)
+                sharedEpoch.start();
+
                 DistributedBarrier barrier = new DistributedBarrier(client, STARTUP_BARRIER_PATH);
 
-                // only the leader initializes the barrier for everyone to wait on
                 if (isLeader) {
                     barrier.setBarrier();
                 }
@@ -94,7 +133,6 @@ public class EpochBarrierCoordinator implements Closeable {
                         .withMode(CreateMode.EPHEMERAL)
                         .forPath(myPath);
 
-                // if leader: wait for all replicas to register before removing barrier and proceeding
                 if (isLeader) {
                     LOG.info("[EpochBarrier] Leader task {} waiting for {}/{} replicas",
                             taskId, 0, totalReplicas);
@@ -103,17 +141,16 @@ public class EpochBarrierCoordinator implements Closeable {
                         if (children.size() >= totalReplicas) {
                             LOG.info("[EpochBarrier] All {} replicas registered", totalReplicas);
 
-                            // Initialize the epoch counter to 1 (first target)
-                            initializeEpochCounter(1);
+                            // Set the epoch counter to 1 (first target)
+                            sharedEpoch.setCount(1);
+                            LOG.info("[EpochBarrier] Initialized epoch counter to 1");
 
                             barrier.removeBarrier();
                             break;
                         }
                         Thread.sleep(500);
                     }
-                }
-                // if slave: wait for leader to remove barrier before proceeding
-                else {
+                } else {
                     LOG.info("[EpochBarrier] Task {} waiting on startup barrier", taskId);
                     boolean success = barrier.waitOnBarrier(60, TimeUnit.SECONDS);
                     if (!success) {
@@ -121,7 +158,6 @@ public class EpochBarrierCoordinator implements Closeable {
                     }
                 }
 
-                // signal ready and execute callback
                 ready = true;
                 onReady.run();
                 LOG.info("[EpochBarrier] Task {} startup complete", taskId);
@@ -142,36 +178,10 @@ public class EpochBarrierCoordinator implements Closeable {
     }
 
     /**
-     * Creates the {@code /current-epoch} ZK node with the given initial value.
-     * Called by the leader after all replicas have registered.
-     */
-    private void initializeEpochCounter(int initialValue) {
-        try {
-            byte[] data = intToBytes(initialValue);
-            if (client.checkExists().forPath(CURRENT_EPOCH_PATH) != null) {
-                client.setData().forPath(CURRENT_EPOCH_PATH, data);
-            } else {
-                client.create().creatingParentsIfNeeded().forPath(CURRENT_EPOCH_PATH, data);
-            }
-            cachedTargetEpoch = initialValue;
-            LOG.info("[EpochBarrier] Initialized /current-epoch = {}", initialValue);
-        } catch (Exception e) {
-            LOG.error("[EpochBarrier] Failed to initialize epoch counter", e);
-        }
-    }
-
-    /**
-     * Non-blocking read of {@code /current-epoch} from ZK.
-     * Returns the cached value on ZK error.
+     * Returns the current target epoch from the SharedCount (locally cached by Curator).
      */
     public int getTargetEpoch() {
-        try {
-            byte[] data = client.getData().forPath(CURRENT_EPOCH_PATH);
-            cachedTargetEpoch = bytesToInt(data);
-        } catch (Exception e) {
-            LOG.debug("[EpochBarrier] Task {} failed to read /current-epoch, using cached={}", taskId, cachedTargetEpoch);
-        }
-        return cachedTargetEpoch;
+        return sharedEpoch.getCount();
     }
 
     /**
@@ -186,57 +196,58 @@ public class EpochBarrierCoordinator implements Closeable {
                     .forPath(path);
             LOG.debug("[EpochBarrier] Task {} registered completion for epoch {}", taskId, epoch);
         } catch (Exception e) {
-            // Node may already exist if we re-register (e.g. after a retry)
             LOG.debug("[EpochBarrier] Task {} completion registration for epoch {} failed (may already exist)", taskId, epoch, e);
         }
     }
 
     /**
-     * Leader only: checks if all replicas have completed {@code currentTargetEpoch},
-     * and if so, advances {@code /current-epoch} to {@code currentTargetEpoch + 1}.
+     * Checks if all replicas have completed {@code currentTargetEpoch},
+     * and if so, advances {@code /current-epoch} to {@code currentTargetEpoch + 1}
+     * using {@link SharedCount#trySetCount(VersionedValue, int)} for compare-and-swap safety.
+     * <p>
+     * Any replica may call this. The versioned CAS ensures that only one replica
+     * actually performs the write if multiple race — the first one to write wins,
+     * and subsequent attempts fail harmlessly because the version has changed.
+     * The {@link SharedCountListener} then notifies all replicas of the new value.
+     * Only the leader prunes old completion nodes to avoid concurrent delete races.
      *
-     * @return true if the epoch was advanced
+     * @return true if this replica successfully advanced the epoch
      */
     public boolean tryAdvanceEpoch(int currentTargetEpoch) {
-        if (!isLeader) return false;
-
         String completedPath = COMPLETED_PATH + "/" + currentTargetEpoch;
         try {
-            // if no replicas have registered completion for the current epoch, the path won't exist
             if (client.checkExists().forPath(completedPath) == null) {
                 return false;
             }
 
-            // count how many replicas have registered completion for the current epoch
             List<String> children = client.getChildren().forPath(completedPath);
 
-            // check if all replicas have registered completion for the current epoch
             if (children.size() >= totalReplicas) {
-
-                // prepare for the next epoch by advancing the global epoch counter
                 int nextEpoch = currentTargetEpoch + 1;
-                client.setData().forPath(CURRENT_EPOCH_PATH, intToBytes(nextEpoch));
-                cachedTargetEpoch = nextEpoch;
+                VersionedValue<Integer> previous = sharedEpoch.getVersionedValue();
+                boolean success = previous.getValue() == currentTargetEpoch
+                        && sharedEpoch.trySetCount(previous, nextEpoch);
+                if (success) {
+                    LOG.info("[EpochBarrier] Task {} advanced to epoch {}", taskId, nextEpoch);
 
-                LOG.info("[EpochBarrier] Advanced to epoch {}", nextEpoch);
-
-                // remove completion nodes for the previous epoch to prevent ZK bloat
-                pruneCompletedEpoch(currentTargetEpoch - 1);
-                return true;
+                    if (isLeader) {
+                        pruneCompletedEpoch(currentTargetEpoch - 1);
+                    }
+                    return true;
+                }
+                // Another replica already advanced — that's fine, the listener will notify us
             }
         } catch (Exception e) {
-            LOG.warn("[EpochBarrier] Leader failed to check/advance epoch {}", currentTargetEpoch, e);
+            LOG.debug("[EpochBarrier] Task {} failed to check/advance epoch {} (benign)", taskId, currentTargetEpoch, e);
         }
         return false;
     }
 
     private void pruneCompletedEpoch(int oldEpoch) {
         if (oldEpoch < 0) return;
-
         try {
             String path = COMPLETED_PATH + "/" + oldEpoch;
-
-            if (client.checkExists().forPath(path) != null) { // if the path doesn't exist, nothing to prune
+            if (client.checkExists().forPath(path) != null) {
                 client.delete().deletingChildrenIfNeeded().forPath(path);
             }
         } catch (Exception e) {
@@ -244,16 +255,14 @@ public class EpochBarrierCoordinator implements Closeable {
         }
     }
 
-    private static byte[] intToBytes(int value) {
-        return ByteBuffer.allocate(4).putInt(value).array();
-    }
-
-    private static int bytesToInt(byte[] data) {
-        return ByteBuffer.wrap(data).getInt();
-    }
-
     @Override
     public void close() throws IOException {
+        closed = true;
+        try {
+            sharedEpoch.close();
+        } catch (Exception e) {
+            LOG.debug("[EpochBarrier] Task {} error closing SharedCount", taskId, e);
+        }
         try {
             client.close();
         } catch (Exception e) {
