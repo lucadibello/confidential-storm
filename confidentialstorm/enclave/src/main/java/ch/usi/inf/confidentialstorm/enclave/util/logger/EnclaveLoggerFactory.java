@@ -35,11 +35,7 @@ public final class EnclaveLoggerFactory {
                 return;
             }
             String log = String.format("[%s] %s: %s", level.name(), clazz.getSimpleName(), message);
-            if (level == LogLevel.ERROR) {
-                System.err.println(log);
-            } else {
-                System.out.println(log);
-            }
+            System.err.println(log);
         }
 
         private void log(LogLevel level, String format, Object... args) {

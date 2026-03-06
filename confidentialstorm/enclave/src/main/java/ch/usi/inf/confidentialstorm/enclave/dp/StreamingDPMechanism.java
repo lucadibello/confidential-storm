@@ -384,7 +384,7 @@ public class StreamingDPMechanism {
                 // Key predicted to be selected at future time tr_p due to noise
                 predictedReleaseTimes.put(key, tr_p);
 
-                log.info("[PREDICTION] Key {} will be released at future step tr_p={} (checked {} iterations)",
+                log.debug("[PREDICTION] Key {} will be released at future step tr_p={} (checked {} iterations)",
                         key, tr_p, iterationCount);
                 break; // Found the earliest release time
             }
