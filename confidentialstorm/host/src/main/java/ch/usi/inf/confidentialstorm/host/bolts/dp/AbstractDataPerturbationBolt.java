@@ -22,86 +22,60 @@ import java.util.concurrent.atomic.AtomicReference;
  * Base implementation for a bolt that performs data perturbation (DP).
  * This bolt delegates the DP mechanism to an enclave-based {@link DataPerturbationService}.
  * <p>
- * <b>Epoch timing</b> is driven by the downstream {@link AbstractHistogramAggregationBolt},
- * which broadcasts "take snapshot" signals on a fixed tick schedule. All DP bolt instances
- * receive the signal at the same time (via allGrouping), ensuring synchronized emission.
+ * <b>Epoch synchronization</b> uses a Curator {@code SharedCount} via {@link EpochBarrierCoordinator}.
+ * The global counter ({@code /current-epoch}) only advances when ALL replicas have completed
+ * the current epoch, ensuring all replicas call {@code getEncryptedSnapshot()} the same number
+ * of times, keeping enclave timeSteps perfectly in sync.
  * <p>
- * <b>Background computation</b>: The expensive {@code snapshot()} call runs on a dedicated
- * background thread. When the "take snapshot" signal arrives:
- * <ul>
- *   <li>If the background computation has finished → emit the real encrypted partial.</li>
- *   <li>If it's still running → emit an encrypted dummy partial (indistinguishable from
- *       a real one to the honest-but-curious admin).</li>
- * </ul>
- * After emitting, the next computation is kicked off on the background thread.
+ * <b>Tick-driven emission</b>: Every replica emits exactly once per tick tuple -- either the
+ * real partial (if the background computation finished) or a dummy (if still computing).
  * <p>
- * <b>Startup protocol</b>:
+ * <b>Listener-driven computation start</b>: A {@code SharedCountListener} on the epoch counter
+ * notifies all replicas immediately when the epoch advances. The listener callback starts the
+ * next background computation without waiting for the next tick, eliminating wasted ticks.
+ * <p>
+ * <b>Tick lifecycle</b>:
  * <ol>
- *   <li><b>Probe phase</b>: On the first tick (before topology-ready), a blocking probe
- *       snapshot is taken so the aggregator can discover this producer.</li>
- *   <li><b>Steady state</b>: After receiving "topology ready", all further snapshots use
- *       the background thread + signal-driven emission.</li>
+ *   <li>Tick arrives -> read targetEpoch (locally cached by Curator's {@code SharedCount})</li>
+ *   <li>Fallback: if behind target and no bg thread running (listener missed), start bg thread</li>
+ *   <li>If bg thread finished: emit real partial, advance localEpoch, register completion</li>
+ *   <li>If bg thread still running or just started: emit dummy (except on the very first tick)</li>
+ *   <li>Try to advance global epoch via versioned CAS</li>
  * </ol>
  */
 public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<DataPerturbationService> {
     protected static final Logger LOG = LoggerFactory.getLogger(AbstractDataPerturbationBolt.class);
 
-    /**
-     * Tick frequency used only for the probe phase during startup.
-     * After topology-ready, the aggregator's TAKE_SNAPSHOT_STREAM drives all timing.
-     */
-    private static final int PROBE_TICK_FREQ_SECS = 5;
+    private static final int DEFAULT_TICK_INTERVAL_SECS = 5;
+    private static final int DEFAULT_EPOCH_TIMEOUT_SECS = 30;
 
     /**
-     * Whether the topology-ready signal has been received from the aggregator.
+     * How many times this replica has called getEncryptedSnapshot() and emitted the result.
+     * Must stay in sync with the enclave's internal epoch/timeStep.
      */
-    private boolean topologyReady = false;
-
-    /**
-     * Whether the one-time probe snapshot has been sent for producer discovery.
-     */
-    private boolean probeSent = false;
-
-
-    /**
-     * Whether the next snapshot to emit is the first one since topology-ready.
-     */
-    private boolean isFirstSnapshot = true;
-
-    /**
-     * The last signal epoch processed by this bolt.
-     * Used to deduplicate queued take-snapshot signals that Storm may deliver in burst,
-     * preventing fast bolts from advancing their enclave epoch multiple times per tick cycle.
-     */
-    private int lastProcessedSignalEpoch = Integer.MIN_VALUE;
+    private int localEpoch = 0;
 
     /**
      * Holds the result of the background snapshot computation.
-     * Set by the background thread, consumed by the main bolt thread on the next signal.
+     * Set by the background thread, consumed by the main bolt thread on the next tick.
      * null means the computation is still in progress (or hasn't started).
-     * Transient: initialized in {@link #afterPrepare} (not serializable by Storm).
      */
     private transient AtomicReference<EncryptedDataPerturbationSnapshot> completedSnapshot;
 
     /**
      * The background thread running the snapshot computation.
-     * Only one computation runs at a time.
      */
     private transient Thread snapshotThread;
 
     /**
      * Lock to serialize access to the enclave service.
-     * The StreamingDPMechanism inside the enclave is NOT thread-safe — addContribution()
-     * and snapshot() must not run concurrently. This lock is acquired by the main bolt
-     * thread (for addContribution and getEncryptedDummyPartial) and by the background
-     * snapshot thread (for getEncryptedSnapshot).
-     * Transient: initialized in {@link #afterPrepare} (plain Object is not serializable).
+     * The StreamingDPMechanism inside the enclave is NOT thread-safe -- addContribution()
+     * and snapshot() must not run concurrently.
      */
     private transient Object serviceLock;
 
-    /**
-     * Constructs a new AbstractDataPerturbationBolt.
-     */
+    private transient EpochBarrierCoordinator coordinator;
+
     public AbstractDataPerturbationBolt() {
         super(DataPerturbationService.class);
     }
@@ -112,22 +86,59 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
         this.completedSnapshot = new AtomicReference<>(null);
         this.snapshotThread = null;
         this.serviceLock = new Object();
+
+        int totalReplicas = context.getComponentTasks(context.getThisComponentId()).size();
+        int minTaskId = context.getComponentTasks(context.getThisComponentId()).stream()
+                .mapToInt(Integer::intValue).min().orElse(getTaskId());
+        boolean isLeader = getTaskId() == minTaskId;
+
+        this.coordinator = new EpochBarrierCoordinator(
+                topoConf, context.getStormId(), getTaskId(),
+                totalReplicas, DEFAULT_EPOCH_TIMEOUT_SECS, isLeader);
+
+        // Register the SharedCountListener callback: when the global epoch advances,
+        // start the next background computation immediately (from the Curator event thread).
+        DataPerturbationService service = state.getEnclaveManager().getService();
+        coordinator.setOnEpochAdvanced(() -> {
+            if (coordinator.getTargetEpoch() > localEpoch
+                    && (snapshotThread == null || !snapshotThread.isAlive())) {
+                LOG.info("[DataPerturbation] Task {} starting bg snapshot from watch (localEpoch={}, targetEpoch={})",
+                        getTaskId(), localEpoch, coordinator.getTargetEpoch());
+                startBackgroundSnapshot(service);
+            }
+        });
+
+        coordinator.awaitStartup(() ->
+                LOG.info("[DataPerturbation] Task {} ready -- starting epoch processing", getTaskId()));
+    }
+
+    @Override
+    protected void beforeCleanup() {
+        if (coordinator != null) {
+            try {
+                coordinator.close();
+            } catch (Exception e) {
+                LOG.warn("[DataPerturbation] Error closing EpochBarrierCoordinator", e);
+            }
+        }
     }
 
     @Override
     public Map<String, Object> getComponentConfiguration() {
         Map<String, Object> config = Objects.requireNonNullElse(super.getComponentConfiguration(), new HashMap<>());
-        // Tick is only used for the probe phase during startup.
-        // After topology-ready, the aggregator's TAKE_SNAPSHOT_STREAM drives all timing.
-        config.put(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, PROBE_TICK_FREQ_SECS);
+        config.put(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, getTickIntervalSecs());
         return config;
     }
 
     /**
+     * Returns the tick interval in seconds. Subclasses may override.
+     */
+    protected int getTickIntervalSecs() {
+        return DEFAULT_TICK_INTERVAL_SECS;
+    }
+
+    /**
      * Override to return true to use encrypted snapshots instead of plaintext.
-     * When enabled, the background-thread + dummy model is activated.
-     *
-     * @return true to use encrypted snapshots
      */
     protected boolean useEncryptedSnapshots() {
         return false;
@@ -136,68 +147,16 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     /**
      * Template method to process an encrypted histogram snapshot from the data perturbation service.
      * Only called when {@link #useEncryptedSnapshots()} returns true.
-     *
-     * @param snapshot the encrypted snapshot (real or dummy — indistinguishable to the host)
-     * @throws EnclaveServiceException if there is an error processing the snapshot
      */
     protected void processEncryptedSnapshot(EncryptedDataPerturbationSnapshot snapshot) throws EnclaveServiceException {
         throw new UnsupportedOperationException("Override processEncryptedSnapshot() when useEncryptedSnapshots() is true");
     }
 
-    /**
-     * Checks if the tuple is a topology-ready signal from the histogram aggregation bolt.
-     */
-    private boolean isTopologyReadyTuple(Tuple tuple) {
-        return AbstractHistogramAggregationBolt.TOPOLOGY_READY_STREAM
-                .equals(tuple.getSourceStreamId());
-    }
-
-    /**
-     * Checks if the tuple is a "take snapshot" signal from the histogram aggregation bolt.
-     */
-    private boolean isTakeSnapshotTuple(Tuple tuple) {
-        return AbstractHistogramAggregationBolt.TAKE_SNAPSHOT_STREAM
-                .equals(tuple.getSourceStreamId());
-    }
-
     @Override
     protected void processTuple(Tuple input, DataPerturbationService service) throws EnclaveServiceException {
-
-        /*
-        Control tuple - Tick tuple during probe phase:
-            This mechanism allows to signal the presence of this DP bolt to the aggregator before the topology is fully ready.
-            The bolt sends a probe snapshot on the first tick tuple it receives (before topology-ready), allowing the aggregator
-            to discover this producer. If the probe request gets lost, the bolt will keep sending it on every tick until
-            the topology is ready.
-
-            -> These ticks are ignored as soon as the topology-ready signal is received.
-         */
         if (isTickTuple(input)) {
-            handleProbePhase(input, service);
-        }
-
-        /*
-        Control tuple - Topology-ready signal:
-            HistogramAggregationBolt signals that all DataPerturbationBolts are ready -> produce snapshots next tick
-         */
-        else if (isTopologyReadyTuple(input)) {
-            handleTopologyReady(input);
-        }
-
-        /*
-        Control tuple - Take-snapshot signal:
-            HistogramAggregationBolt signals to produce a snapshot for the current epoch -> emit real or dummy,
-            then kick off next computation
-         */
-        else if (isTakeSnapshotTuple(input)) {
-            handleTakeSnapshotSignal(input, service);
-        }
-
-        /*
-        Normal data tuple: add contribution to the service.
-         */
-        else {
-            // Normal data tuple — must synchronize with background snapshot thread
+            handleEpochTick(service);
+        } else {
             synchronized (serviceLock) {
                 service.addContribution(new DataPerturbationContributionEntryRequest(
                         getUserIdEntry(input),
@@ -205,117 +164,88 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                         getClampedCountEntry(input)
                 ));
             }
-            getCollector().ack(input);
-        }
-    }
-
-    private void handleProbePhase(Tuple input, DataPerturbationService service) throws EnclaveServiceException {
-        if (!topologyReady && !probeSent) {
-            LOG.info("[DataPerturbation] Received tick tuple during probe phase - sending probe snapshot for producer discovery");
-            if (useEncryptedSnapshots()) {
-                EncryptedDataPerturbationSnapshot probeSnapshot = service.getEncryptedSnapshot();
-                processEncryptedSnapshot(probeSnapshot);
-            } else {
-                DataPerturbationSnapshot snapshot = service.getSnapshot();
-                processSnapshot(snapshot.histogramSnapshot());
-            }
-            probeSent = true;
         }
         getCollector().ack(input);
     }
 
     /**
-     * Topology-ready signal: enable the signal-driven emission cycle.
+     * Tick-driven epoch handler. Every tick, each replica either:
+     * - Emits a real partial (bg thread finished), OR
+     * - Emits a dummy (bg thread still running or just started by listener), OR
+     * - Does nothing (very first tick, localEpoch==0 and no result yet).
+     *
+     * Background computation is started reactively by the {@code SharedCountListener}
+     * callback when the epoch advances. The tick handler only starts a computation as
+     * a fallback if the listener notification was missed.
      */
-    private void handleTopologyReady(Tuple input) {
-        topologyReady = true;
-        LOG.info("[DataPerturbation] Topology ready signal received — awaiting first take-snapshot signal");
-        getCollector().ack(input);
-    }
-
-    /**
-     * "Take snapshot" signal from aggregator: emit real or dummy, then kick off next computation.
-     */
-    private void handleTakeSnapshotSignal(Tuple input, DataPerturbationService service) throws EnclaveServiceException {
-        // Ignore signals before topology is ready (shouldn't happen, but be safe)
-        if (!topologyReady) {
-            getCollector().ack(input);
+    private void handleEpochTick(DataPerturbationService service) throws EnclaveServiceException {
+        if (!coordinator.isReady()) {
+            LOG.debug("[DataPerturbation] Task {} ignoring tick -- startup not complete", getTaskId());
             return;
         }
 
-        // Deduplicate queued signals: Storm may deliver multiple take-snapshot tuples
-        // in burst (e.g., if the bolt was busy with data tuples). Without this guard,
-        // fast bolts process all queued signals back-to-back, each advancing the enclave
-        // epoch, causing epoch drift relative to slow bolts.
-        int signalEpoch = input.getIntegerByField("epoch");
-        if (signalEpoch <= lastProcessedSignalEpoch) {
-            LOG.debug("[DataPerturbation] Ignoring stale take-snapshot signal (epoch {} <= {})",
-                    signalEpoch, lastProcessedSignalEpoch);
-            getCollector().ack(input);
-            return;
-        }
-        lastProcessedSignalEpoch = signalEpoch;
+        int targetEpoch = coordinator.getTargetEpoch();
 
-        // NOTE: if this code reaches here, means that every bolt has received this signal at more or less the same time
-        // (via `allGrouping` from the aggregator) - so we are synchronized!
-        if (isFirstSnapshot) {
-            // trigger the first snapshot computation - no result will be emitted on this first signal
-            LOG.info("[DataPerturbation] First take-snapshot signal received — starting background snapshot cycle");
-            isFirstSnapshot = false;
-            completedSnapshot.set(null); // ensure no dummy is emitted on the first signal
-            startBackgroundSnapshot(service);
-            getCollector().ack(input);
-            return;
-        }
-
-        // Encrypted mode: non-blocking emit with background computation + dummy fallback
         if (useEncryptedSnapshots()) {
-            // Collect the result from the background thread (if finished)
-            EncryptedDataPerturbationSnapshot result = completedSnapshot.getAndSet(null);
+            handleEncryptedTick(service, targetEpoch);
+        } else {
+            handlePlaintextTick(service, targetEpoch);
+        }
+    }
 
-            if (result != null) {
-                // Background computation finished — emit the real result and start the next computation
-                processEncryptedSnapshot(result);
-                startBackgroundSnapshot(service);
-            } else if (snapshotThread != null && snapshotThread.isAlive()) {
-                // Background computation still running — emit a dummy partial
-                LOG.debug("[DataPerturbation] Background snapshot still computing on take-snapshot signal");
-                synchronized (serviceLock) {
-                    result = service.getEncryptedDummyPartial();
-                }
-                processEncryptedSnapshot(result);
-                // Don't start a new computation — the current one will finish and be picked up on the next signal
-            } else {
-                // No result and no running thread — this can happen if the previous thread finished
-                // but completedSnapshot was already consumed, or on edge cases. Start a new computation.
-                LOG.debug("[DataPerturbation] No pending result and no running thread — starting computation");
-                startBackgroundSnapshot(service);
-                // Emit a dummy for this signal since computation just started
-                synchronized (serviceLock) {
-                    result = service.getEncryptedDummyPartial();
-                }
-                processEncryptedSnapshot(result);
+    private void handleEncryptedTick(DataPerturbationService service, int targetEpoch) throws EnclaveServiceException {
+        // Fallback: if the SharedCountListener didn't start a bg thread (e.g. missed
+        // notification due to timing), start one now before checking for results.
+        if (targetEpoch > localEpoch && (snapshotThread == null || !snapshotThread.isAlive())) {
+            LOG.info("[DataPerturbation] Task {} starting bg snapshot from tick fallback (localEpoch={}, targetEpoch={})",
+                    getTaskId(), localEpoch, targetEpoch);
+            startBackgroundSnapshot(service);
+        }
+
+        // Check for completed background computation
+        EncryptedDataPerturbationSnapshot result = completedSnapshot.getAndSet(null);
+
+        if (result != null) {
+            // Background thread finished -- emit real partial
+            processEncryptedSnapshot(result);
+            localEpoch++;
+            coordinator.registerCompletion(localEpoch);
+            LOG.info("[DataPerturbation] Task {} emitted real partial for epoch {}", getTaskId(), localEpoch);
+        } else if (localEpoch > 0) {
+            // Background thread still running (or just started) -- emit dummy
+            synchronized (serviceLock) {
+                processEncryptedSnapshot(service.getEncryptedDummyPartial());
             }
+            LOG.debug("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
+                    getTaskId(), localEpoch, targetEpoch);
         }
-        // Plaintext mode: blocking compute-then-emit
-        else {
-            DataPerturbationSnapshot snapshot = service.getSnapshot();
-            processSnapshot(snapshot.histogramSnapshot());
-        }
+        // else: localEpoch == 0, first tick -- bg thread was just started, nothing to emit yet
 
-        getCollector().ack(input);
+        // Try to advance the global epoch (every replica will try to trigger this)
+        coordinator.tryAdvanceEpoch(targetEpoch);
+    }
+
+    private void handlePlaintextTick(DataPerturbationService service, int targetEpoch) throws EnclaveServiceException {
+        if (targetEpoch > localEpoch) {
+            synchronized (serviceLock) {
+                DataPerturbationSnapshot snapshot = service.getSnapshot();
+                if (snapshot != null) {
+                    processSnapshot(snapshot.histogramSnapshot());
+                }
+            }
+            localEpoch++;
+            coordinator.registerCompletion(localEpoch);
+            coordinator.tryAdvanceEpoch(targetEpoch);
+        }
     }
 
     /**
      * Starts the snapshot computation on a background thread.
-     * If a previous computation is still running, this is a no-op — the current
-     * computation will eventually finish and its result will be picked up by a future
-     * take-snapshot signal. This prevents the main bolt thread from blocking on join()
-     * and avoids cascading epoch advancement when queued signals are processed in burst.
+     * Safe to call from any thread (bolt executor or Curator {@code SharedCountListener} callback).
      */
-    private void startBackgroundSnapshot(DataPerturbationService service) {
+    private synchronized void startBackgroundSnapshot(DataPerturbationService service) {
         if (snapshotThread != null && snapshotThread.isAlive()) {
-            LOG.debug("[DataPerturbation] Previous snapshot still computing — skipping new computation");
+            LOG.debug("[DataPerturbation] Previous snapshot still computing -- skipping");
             return;
         }
 
@@ -329,30 +259,14 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 LOG.debug("[DataPerturbation] Background snapshot computation complete");
             } catch (EnclaveServiceException e) {
                 LOG.error("[DataPerturbation] Background snapshot computation failed", e);
-                // completedSnapshot remains null — next signal will emit a dummy
             }
         }, "dp-snapshot-" + getTaskId());
         snapshotThread.setDaemon(true);
         snapshotThread.start();
     }
 
-    /**
-     * Template method to extract the user ID entry from the input tuple.
-     */
     protected abstract EncryptedValue getUserIdEntry(Tuple input);
-
-    /**
-     * Template method to extract the word entry from the input tuple.
-     */
     protected abstract EncryptedValue getWordEntry(Tuple input);
-
-    /**
-     * Template method to extract the (clamped) count entry from the input tuple.
-     */
     protected abstract EncryptedValue getClampedCountEntry(Tuple input);
-
-    /**
-     * Template method to process the histogram snapshot obtained from the data perturbation service.
-     */
     protected abstract void processSnapshot(Map<String, Long> histogramSnapshot) throws EnclaveServiceException;
 }

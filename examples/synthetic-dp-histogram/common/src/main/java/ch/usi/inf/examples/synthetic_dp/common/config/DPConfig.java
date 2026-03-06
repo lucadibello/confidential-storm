@@ -60,7 +60,7 @@ public final class DPConfig {
      * or {@code --test} flag (sets to 1).
      */
     public static int parallelism() {
-        return Integer.getInteger("synthetic.parallelism", 8);
+        return Integer.getInteger("synthetic.parallelism", 4);
     }
 
     /**

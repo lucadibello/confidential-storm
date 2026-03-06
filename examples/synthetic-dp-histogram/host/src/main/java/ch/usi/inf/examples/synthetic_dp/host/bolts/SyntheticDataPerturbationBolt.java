@@ -7,10 +7,15 @@ import org.apache.storm.topology.OutputFieldsDeclarer;
 import org.apache.storm.tuple.Fields;
 import org.apache.storm.tuple.Tuple;
 import org.apache.storm.tuple.Values;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
 public class SyntheticDataPerturbationBolt extends AbstractDataPerturbationBolt {
+
+    // create logger for this class
+    private static final Logger LOG = LoggerFactory.getLogger(SyntheticDataPerturbationBolt.class);
 
     @Override
     protected boolean useEncryptedSnapshots() {
