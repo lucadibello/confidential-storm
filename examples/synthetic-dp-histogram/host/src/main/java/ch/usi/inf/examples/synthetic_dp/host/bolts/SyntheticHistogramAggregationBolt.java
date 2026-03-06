@@ -57,20 +57,21 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
     @Override
     protected void processCompleteHistogram(Map<String, Long> mergedHistogram) {
         roundCount++;
-        LOG.info("Processing complete histogram round #{} with {} keys", roundCount, mergedHistogram.size());
-        // log with special tag for easier parsing in logs
-        LOG.info("[DP-GLOBAL-OUTPUT-CHECK-TIMING] Round " + roundCount + " - Received complete histogram with " + mergedHistogram.size() + " keys");
+        LOG.info("[DP-GLOBAL-COMPLETE] Received complete histogram for round #{} with {} keys", roundCount, mergedHistogram.size());
 
         Map<String, Long> groundTruth = GroundTruthCollector.snapshot();
-        writeReport(mergedHistogram, groundTruth);
+        writeReport(mergedHistogram, groundTruth, false);
     }
 
     @Override
     protected void processStaleHistogram(Map<String, Long> staleHistogram) {
-        LOG.info("[DP-GLOBAL-STALE-CHECK-TIMING] Round " + roundCount + " - Received stale histogram with " + staleHistogram.size() + " keys");
+        LOG.info("[DP-GLOBAL-STALE] Received stale histogram for round #{} with {} keys", roundCount, staleHistogram.size());
+
+        Map<String, Long> groundTruth = GroundTruthCollector.snapshot();
+        writeReport(staleHistogram, groundTruth, true);
     }
 
-    private void writeReport(Map<String, Long> dp, Map<String, Long> gt) {
+    private void writeReport(Map<String, Long> dp, Map<String, Long> gt, boolean stale) {
         // L0: Number of retained keys (keys with count > 0)
         long l0 = dp.values().stream().filter(v -> v > 0).count();
 
@@ -100,21 +101,21 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
         File file = new File(outputFile);
         file.getParentFile().mkdirs();
 
-        boolean isFirstRound = roundCount == 1;
-        try (PrintWriter out = new PrintWriter(new FileWriter(file, !isFirstRound))) {
-            if (isFirstRound) {
+        boolean isFirstWrite = roundCount == 1 && !stale;
+        try (PrintWriter out = new PrintWriter(new FileWriter(file, !isFirstWrite))) {
+            if (isFirstWrite) {
                 out.println("# Synthetic DP Histogram Benchmark - Run " + RUN_ID);
                 out.println("# Timestamp: " + Instant.now());
-                out.println("# Format: tick, timestamp, keys_retained(l0), l_inf, l_1, l_2, dp_keys, gt_keys");
+                out.println("# Format: tick, timestamp, stale, keys_retained(l0), l_inf, l_1, l_2, dp_keys, gt_keys");
                 out.println("#");
             }
 
-            out.printf("tick_%04d,%s,%d,%d,%d,%.2f,%d,%d%n",
-                    roundCount, Instant.now(), l0, lInf, l1, l2, dp.size(), gt.size());
+            out.printf("tick_%04d,%s,%s,%d,%d,%d,%.2f,%d,%d%n",
+                    roundCount, Instant.now(), stale ? "stale" : "fresh", l0, lInf, l1, l2, dp.size(), gt.size());
             out.flush();
 
-            LOG.info("Round {} metrics: l0={}, l_inf={}, l_1={}, l_2={:.2f}",
-                    roundCount, l0, lInf, l1, l2);
+            LOG.info("Round {} metrics: l0={}, l_inf={}, l_1={}, l_2={:.2f}, stale={}",
+                    roundCount, l0, lInf, l1, l2, stale);
         } catch (IOException e) {
             LOG.error("Error writing report to {}", outputFile, e);
         }
