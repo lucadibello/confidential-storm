@@ -1,8 +1,6 @@
 package ch.usi.inf.confidentialstorm.enclave.dp;
 
 import java.security.SecureRandom;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.apache.commons.math3.util.FastMath;
 
@@ -18,9 +16,9 @@ import org.apache.commons.math3.util.FastMath;
  */
 public final class BinaryAggregationTree {
     /**
-     * Binary tree stored as a list, where each node contains a double value.
+     * Binary tree stored as a primitive array, where each node contains a double value.
      */
-    private final List<Double> tree;
+    private final double[] tree;
 
     // tree parameters
     /**
@@ -63,7 +61,7 @@ public final class BinaryAggregationTree {
     public BinaryAggregationTree(int n, double sigma) {
         // precompute tree parameters
         height = (int) FastMath.ceil(FastMath.log(n) / FastMath.log(2)); // H = ceil(log2(n))
-        num_leaves = (int) FastMath.pow(2, height); // L = 2^ceil(log2(n))
+        num_leaves = 1 << height; // L = 2^ceil(log2(n))
 
         // store sigma for Honaker variance computation
         this.sigma = sigma;
@@ -114,11 +112,11 @@ public final class BinaryAggregationTree {
         int index = num_leaves - 1 + i;
         // Traverse from the leaf to the root, adding c to each node
         while (index > 0) {
-            tree.set(index, tree.get(index) + c);
+            tree[index] += c;
             index = (index - 1) / 2; // move up to the parent node
         }
         // Finally, update the root node
-        tree.set(0, tree.get(0) + c);
+        tree[0] += c;
     }
 
     /**
@@ -217,8 +215,8 @@ public final class BinaryAggregationTree {
             for (int ci = 0; ci < currentSize; ci++) {
                 int idx = currentLevel[ci];
                 // check if idx is within bounds of the tree
-                if (idx < tree.size()) {
-                    sum_level_j += tree.get(idx);
+                if (idx < tree.length) {
+                    sum_level_j += tree[idx];
 
                     // Prepare children for next level
                     if (j < k - 1) {
@@ -235,7 +233,7 @@ public final class BinaryAggregationTree {
             //  c_j = (1/2^j) / [ (1 - 2^-k) / (1/2) ] -> simplification
             //  c_j = (1/2^j) * (2 * (1 - 2^-k)) -> simplification
             //  c_j = 2^-j / (2 * (1 - 2^-k))
-            double c_j = FastMath.pow(2.0, -j) / (2.0 * (1.0 - FastMath.pow(2.0, -k)));
+            double c_j = (1.0 / (1L << j)) / (2.0 * (1.0 - 1.0 / (1L << k)));
 
             // accumulate weighted sum
             // FORMULA: estimate = Sum_{j=0 to k-1} (c_j * Sum(level_j)) =
@@ -257,23 +255,16 @@ public final class BinaryAggregationTree {
      * @param sigma the standard deviation of the Gaussian noise distribution
      * @return the initialized tree as a list of doubles with size (2 * NUM_LEAVES - 1)
      */
-    private List<Double> initializeTree(double sigma) {
-        // create a list to hold the tree nodes
-        List<Double> tree = new ArrayList<>(2 * num_leaves - 1);
+    private double[] initializeTree(double sigma) {
+        int size = 2 * num_leaves - 1;
+        double[] tree = new double[size];
 
-        // fill the tree with Gaussian noise
+        // fill the tree with Gaussian noise N(0, sigma^2)
         SecureRandom rnd = new SecureRandom();
-        for (int i = 0; i < 2 * num_leaves - 1; i++) {
-            // NOTE: nextGaussian() samples from N(0,1)
-            // If X ~ N(mu, 1) => Y = aX ~ N(a*mu, a^2)
-            // Here: mu=0 and a=sigma => Y ~ N(0, sigma^2)
-
-            // sample noise from N(0, sigma^2)
-            double noise = rnd.nextGaussian() * sigma;
-            tree.add(noise);
+        for (int i = 0; i < size; i++) {
+            tree[i] = rnd.nextGaussian() * sigma;
         }
 
-        // return the initialized tree
         return tree;
     }
 
@@ -309,7 +300,7 @@ public final class BinaryAggregationTree {
                     // Variance contribution for this node (using Honaker formula)
                     // Formula: Variance(node_i) = sigma^2 / (2 * (1 - 2^-kappa))
                     // Refer to Appendix C of the paper, equation 1
-                    double nodeVariance = (sigma * sigma) / (2.0 * (1.0 - FastMath.pow(2.0, -kappa)));
+                    double nodeVariance = (sigma * sigma) / (2.0 * (1.0 - 1.0 / (1L << kappa)));
                     totalVariance += nodeVariance;
                 }
 

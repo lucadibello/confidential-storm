@@ -112,11 +112,14 @@ public class StreamingDPMechanism {
     private final long mu;
 
     /**
-     * The confidence level (beta) for computing the accuracy threshold (tau).
+     * Precomputed quantile Phi^{-1}(1 - beta) of the standard normal distribution,
+     * where beta = 1e-5 (confidence level from Appendix D of the paper).
      * <p>
-     * Refer to Appendix D of the paper.
+     * Used in {@link #computeTau} to avoid allocating a {@link NormalDistribution}
+     * object on every call. Identity: N(0, sigma).inverseCDF(p) = sigma * N(0,1).inverseCDF(p).
      */
-    private final double BETA = 1e-5;
+    private static final double PROBIT_1_MINUS_BETA =
+            new NormalDistribution(0, 1).inverseCumulativeProbability(1.0 - 1e-5);
 
     /**
      * The current time step in the stream processing (tr_j).
@@ -275,7 +278,7 @@ public class StreamingDPMechanism {
                 // Compute the Honaker variance at this time step
                 double currentVariance = t_key.getHonakerVariance(timeStep);
                 // Compute tau for the current time step using the inverse CDF of the Gaussian distribution at beta - 1
-                double tau_tr_i = computeTau(currentVariance, this.BETA);
+                double tau_tr_i = computeTau(currentVariance);
                 if (noisyUniqueUsers >= (double) mu + tau_tr_i) {
                     // KEY SELECTED FOR RELEASE!
                     selectedKeys.add(key);
@@ -377,7 +380,7 @@ public class StreamingDPMechanism {
             // Step 6 of Algo 3 - Perform streaming private key selection via Algorithm 1 at time tr_p
             double predictedNoisyCount = keyTree.getTotalSum(tr_p);
             double futureVariance = keyTree.getHonakerVariance(tr_p);
-            double futureTau = computeTau(futureVariance, this.BETA);
+            double futureTau = computeTau(futureVariance);
 
             // Step 7 of Algo 3 - if key is selected, then write <key, tr_p> to state store and break
             if (predictedNoisyCount >= (double) mu + futureTau) {
@@ -394,16 +397,16 @@ public class StreamingDPMechanism {
     /**
      * Computes the tau value based on the Gaussian distribution.
      * <p>
+     * Uses the identity N(0, sigma).inverseCDF(p) = sigma * N(0,1).inverseCDF(p)
+     * with precomputed {@link #PROBIT_1_MINUS_BETA} to avoid per-call allocation.
+     * <p>
      * Refer to Appendix D of the "Differentially Private Stream Processing at Scale" paper.
      *
      * @param lambda_square The total Honaker variance at time step i.
-     * @param beta       The desired confidence level.
      * @return The computed tau value.
      */
-    private static double computeTau(double lambda_square, double beta) {
-        double std_dev = FastMath.sqrt(lambda_square);
-        NormalDistribution distribution = new NormalDistribution(0, std_dev);
-        return distribution.inverseCumulativeProbability(1.0 - beta);
+    private static double computeTau(double lambda_square) {
+        return FastMath.sqrt(lambda_square) * PROBIT_1_MINUS_BETA;
     }
 
     /**
