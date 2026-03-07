@@ -74,6 +74,13 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
      */
     private transient Object serviceLock;
 
+    /**
+     * Guards against epoch chaining: set to true when a real partial is emitted
+     * during a tick, reset at the start of each tick. Prevents the SharedCountListener
+     * from starting a new background snapshot if we already advanced this tick.
+     */
+    private volatile boolean advancedThisTick = false;
+
     private transient EpochBarrierCoordinator coordinator;
 
     public AbstractDataPerturbationBolt() {
@@ -100,7 +107,8 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
         // start the next background computation immediately (from the Curator event thread).
         DataPerturbationService service = state.getEnclaveManager().getService();
         coordinator.setOnEpochAdvanced(() -> {
-            if (coordinator.getTargetEpoch() > localEpoch
+            if (!advancedThisTick
+                    && coordinator.getTargetEpoch() > localEpoch
                     && (snapshotThread == null || !snapshotThread.isAlive())) {
                 LOG.info("[DataPerturbation] Task {} starting bg snapshot from watch (localEpoch={}, targetEpoch={})",
                         getTaskId(), localEpoch, coordinator.getTargetEpoch());
@@ -194,15 +202,12 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     }
 
     private void handleEncryptedTick(DataPerturbationService service, int targetEpoch) throws EnclaveServiceException {
-        // Fallback: if the SharedCountListener didn't start a bg thread (e.g. missed
-        // notification due to timing), start one now before checking for results.
-        if (targetEpoch > localEpoch && (snapshotThread == null || !snapshotThread.isAlive())) {
-            LOG.info("[DataPerturbation] Task {} starting bg snapshot from tick fallback (localEpoch={}, targetEpoch={})",
-                    getTaskId(), localEpoch, targetEpoch);
-            startBackgroundSnapshot(service);
-        }
+        advancedThisTick = false;
 
-        // Check for completed background computation
+        // 1. Check if a previously started bg computation finished.
+        //    IMPORTANT: must check BEFORE the fallback to avoid starting a redundant
+        //    snapshot when the listener-started one already completed (which would
+        //    call getEncryptedSnapshot() twice, double-incrementing the enclave epoch).
         EncryptedDataPerturbationSnapshot result = completedSnapshot.getAndSet(null);
 
         if (result != null) {
@@ -210,16 +215,24 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
             processEncryptedSnapshot(result);
             localEpoch++;
             coordinator.registerCompletion(localEpoch);
+            advancedThisTick = true;
             LOG.info("[DataPerturbation] Task {} emitted real partial for epoch {}", getTaskId(), localEpoch);
-        } else if (localEpoch > 0) {
-            // Background thread still running (or just started) -- emit dummy
-            synchronized (serviceLock) {
-                processEncryptedSnapshot(service.getEncryptedDummyPartial());
+        } else if (targetEpoch > localEpoch) {
+            // 2. No result ready -- start bg snapshot if not already running (fallback)
+            if (snapshotThread == null || !snapshotThread.isAlive()) {
+                LOG.info("[DataPerturbation] Task {} starting bg snapshot from tick fallback (localEpoch={}, targetEpoch={})",
+                        getTaskId(), localEpoch, targetEpoch);
+                startBackgroundSnapshot(service);
             }
-            LOG.debug("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
-                    getTaskId(), localEpoch, targetEpoch);
+            // 3. Emit dummy if we've already produced at least one real partial
+            if (localEpoch > 0) {
+                synchronized (serviceLock) {
+                    processEncryptedSnapshot(service.getEncryptedDummyPartial());
+                }
+                LOG.debug("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
+                        getTaskId(), localEpoch, targetEpoch);
+            }
         }
-        // else: localEpoch == 0, first tick -- bg thread was just started, nothing to emit yet
 
         // Try to advance the global epoch (every replica will try to trigger this)
         coordinator.tryAdvanceEpoch(targetEpoch);
