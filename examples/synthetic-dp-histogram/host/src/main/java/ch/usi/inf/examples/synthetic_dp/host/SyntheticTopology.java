@@ -1,6 +1,7 @@
 package ch.usi.inf.examples.synthetic_dp.host;
 
 import ch.usi.inf.confidentialstorm.common.annotation.ConfidentialTopologyBuilder;
+import ch.usi.inf.confidentialstorm.host.profiling.ProfilerConfig;
 import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
 import ch.usi.inf.examples.synthetic_dp.common.config.DPConfig;
 import ch.usi.inf.examples.synthetic_dp.host.bolts.SyntheticDataPerturbationBolt;
@@ -36,10 +37,6 @@ import org.slf4j.LoggerFactory;
  * <p>
  * Flags:
  * - --test: test mode (sets parallelism=1 for faster startup)
- *
- * Execution modes:
- * - Local:   {@code storm local --local-ttl 120 <jar> SyntheticTopology [-- --test]}
- * - Cluster: {@code storm jar <jar> SyntheticTopology}
  */
 public class SyntheticTopology {
     private static final Logger LOG = LoggerFactory.getLogger(SyntheticTopology.class);
@@ -139,6 +136,9 @@ public class SyntheticTopology {
         LOG.info("Run ID: {}", runId);
         LOG.info("Runtime: {} seconds ({} minutes)", runtimeSeconds, runtimeSeconds / 60.0);
         LOG.info("DP Config: {}", DPConfig.describe());
+        LOG.info("Profiler: enabled={}, sampleRate={}, reportTicks={}, outputDir={}",
+                ProfilerConfig.ENABLED, ProfilerConfig.SAMPLE_RATE,
+                ProfilerConfig.REPORT_INTERVAL_TICKS, ProfilerConfig.OUTPUT_DIR);
         LOG.info("=======================================");
 
         // build topology
