@@ -23,7 +23,11 @@ install-framework:
 cluster-up:
 	@echo "[INFO] Creating storm-net network (if not exists)..."
 	@docker network create storm-net 2>/dev/null || true
-	@mkdir -p $(FRAMEWORK_ROOT)/data/storm-logs/{nimbus,ui,supervisor,logviewer}
+	@mkdir -p $(FRAMEWORK_ROOT)/data/storm-logs/nimbus
+	@mkdir -p $(FRAMEWORK_ROOT)/data/storm-logs/ui
+	@mkdir -p $(FRAMEWORK_ROOT)/data/storm-logs/supervisor
+	@mkdir -p $(FRAMEWORK_ROOT)/data/storm-logs/supervisor/profiler
+	@mkdir -p $(FRAMEWORK_ROOT)/data/storm-logs/logviewer
 	@echo "[INFO] Starting Storm cluster..."
 	docker compose -f $(COMPOSE_FILE) up -d
 	@echo "[INFO] Storm cluster is starting. UI will be at http://localhost:$${STORM_UI_PORT:-9090}"

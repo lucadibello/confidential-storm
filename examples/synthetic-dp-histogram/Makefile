@@ -44,7 +44,7 @@ help:
 	@echo "Profiling variables (build-time, baked into JAR via maven-templating-plugin):"
 	@echo "  PROFILER_SAMPLE_RATE=0.05   Fraction of fast ECALLs to time (default: 0.01)"
 	@echo "  PROFILER_REPORT_TICKS=5     Ticks between log dumps (default: 10)6
-	@echo "  PROFILER_OUTPUT_DIR=/tmp    CSV report output dir (default: /logs/storm)"
+	@echo "  PROFILER_OUTPUT_DIR=/tmp    CSV report output dir (default: /logs/storm/profiler)"
 
 build: clean common enclave host
 
@@ -76,7 +76,7 @@ run-test:
 # These are baked into the JAR at compile time via maven-templating-plugin.
 PROFILER_SAMPLE_RATE ?= 0.05
 PROFILER_REPORT_TICKS ?= 10
-PROFILER_OUTPUT_DIR ?= /logs/storm
+PROFILER_OUTPUT_DIR ?= /logs/storm/profiler
 
 PROFILER_MAVEN_FLAGS := -Dprofiler.enabled=true \
   -Dprofiler.sample.rate=$(PROFILER_SAMPLE_RATE) \
