@@ -7,6 +7,7 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.DataPerturbationSnapshot;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.host.bolts.ConfidentialBolt;
+import ch.usi.inf.confidentialstorm.host.profiling.ProfilerConfig;
 import org.apache.storm.Config;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.tuple.Tuple;
@@ -82,6 +83,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     private volatile boolean advancedThisTick = false;
 
     private transient EpochBarrierCoordinator coordinator;
+    private transient long contributionsThisEpoch;
 
     public AbstractDataPerturbationBolt() {
         super(DataPerturbationService.class);
@@ -166,11 +168,17 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
             handleEpochTick(service);
         } else {
             synchronized (serviceLock) {
+                long t0 = ProfilerConfig.ENABLED && getProfiler().shouldSample() ? System.nanoTime() : 0;
                 service.addContribution(new DataPerturbationContributionEntryRequest(
                         getUserIdEntry(input),
                         getWordEntry(input),
                         getClampedCountEntry(input)
                 ));
+                if (t0 != 0) getProfiler().recordEcall("addContribution", System.nanoTime() - t0);
+            }
+            if (ProfilerConfig.ENABLED) {
+                getProfiler().incrementEcallTotal("addContribution");
+                contributionsThisEpoch++;
             }
         }
         getCollector().ack(input);
@@ -194,11 +202,17 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
 
         int targetEpoch = coordinator.getTargetEpoch();
 
+        if (ProfilerConfig.ENABLED) {
+            getProfiler().recordGauge("epoch_lag", targetEpoch - localEpoch);
+        }
+
         if (useEncryptedSnapshots()) {
             handleEncryptedTick(service, targetEpoch);
         } else {
             handlePlaintextTick(service, targetEpoch);
         }
+
+        if (ProfilerConfig.ENABLED) getProfiler().onTick();
     }
 
     private void handleEncryptedTick(DataPerturbationService service, int targetEpoch) throws EnclaveServiceException {
@@ -216,6 +230,11 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
             localEpoch++;
             coordinator.registerCompletion(localEpoch);
             advancedThisTick = true;
+            if (ProfilerConfig.ENABLED) {
+                getProfiler().incrementCounter("real_emissions");
+                getProfiler().recordGauge("contributions_this_epoch", contributionsThisEpoch);
+                contributionsThisEpoch = 0;
+            }
             LOG.info("[DataPerturbation] Task {} emitted real partial for epoch {}", getTaskId(), localEpoch);
         } else if (targetEpoch > localEpoch) {
             // 2. No result ready -- start bg snapshot if not already running (fallback)
@@ -227,7 +246,13 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
             // 3. Emit dummy if we've already produced at least one real partial
             if (localEpoch > 0) {
                 synchronized (serviceLock) {
+                    long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
                     processEncryptedSnapshot(service.getEncryptedDummyPartial());
+                    if (t0 != 0) getProfiler().recordEcall("getEncryptedDummyPartial", System.nanoTime() - t0);
+                }
+                if (ProfilerConfig.ENABLED) {
+                    getProfiler().incrementEcallTotal("getEncryptedDummyPartial");
+                    getProfiler().incrementCounter("dummy_emissions");
                 }
                 LOG.debug("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
                         getTaskId(), localEpoch, targetEpoch);
@@ -241,12 +266,22 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     private void handlePlaintextTick(DataPerturbationService service, int targetEpoch) throws EnclaveServiceException {
         if (targetEpoch > localEpoch) {
             synchronized (serviceLock) {
+                long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
                 DataPerturbationSnapshot snapshot = service.getSnapshot();
+                if (t0 != 0) {
+                    getProfiler().recordEcall("getSnapshot", System.nanoTime() - t0);
+                    getProfiler().incrementEcallTotal("getSnapshot");
+                }
                 if (snapshot != null) {
                     processSnapshot(snapshot.histogramSnapshot());
                 }
             }
             localEpoch++;
+            if (ProfilerConfig.ENABLED) {
+                getProfiler().incrementCounter("real_emissions");
+                getProfiler().recordGauge("contributions_this_epoch", contributionsThisEpoch);
+                contributionsThisEpoch = 0;
+            }
             coordinator.registerCompletion(localEpoch);
             coordinator.tryAdvanceEpoch(targetEpoch);
         }
@@ -264,9 +299,19 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
 
         snapshotThread = new Thread(() -> {
             try {
+                long lockWaitStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
+                long ecallStart;
                 EncryptedDataPerturbationSnapshot result;
                 synchronized (serviceLock) {
+                    ecallStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
                     result = service.getEncryptedSnapshot();
+                    if (ecallStart != 0) {
+                        getProfiler().recordEcall("getEncryptedSnapshot", System.nanoTime() - ecallStart);
+                        getProfiler().incrementEcallTotal("getEncryptedSnapshot");
+                    }
+                }
+                if (lockWaitStart != 0) {
+                    getProfiler().recordEcall("snapshot_lock_wait", ecallStart - lockWaitStart);
                 }
                 completedSnapshot.set(result);
                 LOG.debug("[DataPerturbation] Background snapshot computation complete");

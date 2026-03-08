@@ -6,6 +6,7 @@ import ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributio
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.ConfidentialBolt;
+import ch.usi.inf.confidentialstorm.host.profiling.ProfilerConfig;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.tuple.Tuple;
 import org.apache.storm.tuple.Values;
@@ -70,7 +71,15 @@ public abstract class AbstractContributionBoundingBolt
 
         // Check contribution limit
         UserContributionBoundingRequest req = new UserContributionBoundingRequest(word, count, userId);
+
+        long t0 = ProfilerConfig.ENABLED && getProfiler().shouldSample() ? System.nanoTime() : 0;
         UserContributionBoundingResponse resp = service.checkAndClamp(req);
+        if (t0 != 0) getProfiler().recordEcall("checkAndClamp", System.nanoTime() - t0);
+        if (ProfilerConfig.ENABLED) {
+            getProfiler().incrementEcallTotal("checkAndClamp");
+            getProfiler().incrementCounter(resp.isDropped() ? "dropped" : "forwarded");
+            getProfiler().onTupleProcessed();
+        }
 
         // check if authorized
         if (!resp.isDropped()) {

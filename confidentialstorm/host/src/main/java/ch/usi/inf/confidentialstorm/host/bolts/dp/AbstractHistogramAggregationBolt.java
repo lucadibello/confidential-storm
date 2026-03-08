@@ -6,6 +6,7 @@ import ch.usi.inf.confidentialstorm.common.api.dp.aggregation.model.HistogramAgg
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.ConfidentialBolt;
+import ch.usi.inf.confidentialstorm.host.profiling.ProfilerConfig;
 import org.apache.storm.Config;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.tuple.Tuple;
@@ -40,6 +41,9 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
 
     /** Whether a new histogram has been buffered since the last release. */
     private boolean hasNewHistogram = false;
+
+    private transient int ticksSinceLastCompletion;
+    private transient int mergesThisEpoch;
 
     public AbstractHistogramAggregationBolt() {
         super(HistogramAggregationService.class);
@@ -89,15 +93,22 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
     }
 
     private void handleTick() throws EnclaveServiceException {
+        if (ProfilerConfig.ENABLED) {
+            ticksSinceLastCompletion++;
+            getProfiler().onTick();
+        }
+
         if (hasNewHistogram && lastCompleteHistogram != null) {
             LOG.info("[HistogramAggregation] Releasing histogram for epoch {} ({} keys)",
                     lastCompletedEpoch, lastCompleteHistogram.size());
             processCompleteHistogram(lastCompleteHistogram);
             hasNewHistogram = false;
+            if (ProfilerConfig.ENABLED) getProfiler().incrementCounter("histograms_released");
         } else if (lastCompleteHistogram != null) {
             LOG.info("[HistogramAggregation] No new histogram at release tick (last was epoch {})",
                     lastCompletedEpoch);
             processStaleHistogram(lastCompleteHistogram);
+            if (ProfilerConfig.ENABLED) getProfiler().incrementCounter("stale_releases");
         } else {
             LOG.info("[HistogramAggregation] No histogram available yet at release tick");
         }
@@ -105,21 +116,36 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
 
     private void handlePartialHistogram(Tuple input, HistogramAggregationService service) throws EnclaveServiceException {
         EncryptedValue partial = getEncryptedPartialHistogram(input);
+
+        long t0 = ProfilerConfig.ENABLED && getProfiler().shouldSample() ? System.nanoTime() : 0;
         HistogramAggregationResponse response = service.mergePartial(new HistogramAggregationRequest(partial));
+        if (t0 != 0) getProfiler().recordEcall("mergePartial", System.nanoTime() - t0);
+        if (ProfilerConfig.ENABLED) getProfiler().incrementEcallTotal("mergePartial");
 
         if (response.isDummy()) {
             LOG.info("[HistogramAggregation] Dummy partial discarded (epoch {})",
                     response.completedEpoch());
+            if (ProfilerConfig.ENABLED) getProfiler().incrementCounter("dummies_received");
         } else if (response.complete()) {
+            if (ProfilerConfig.ENABLED) getProfiler().incrementCounter("real_partials_received");
             lastCompleteHistogram = response.mergedHistogram();
             lastCompletedEpoch = response.completedEpoch();
             hasNewHistogram = true;
             LOG.info("[HistogramAggregation] Epoch {} complete ({} keys), buffered for next release tick",
                     lastCompletedEpoch, lastCompleteHistogram.size());
+            if (ProfilerConfig.ENABLED) {
+                getProfiler().recordGauge("ticks_to_completion", ticksSinceLastCompletion);
+                getProfiler().recordGauge("merges_this_epoch", mergesThisEpoch);
+                ticksSinceLastCompletion = 0;
+                mergesThisEpoch = 0;
+            }
         } else {
             LOG.info("[HistogramAggregation] Partial received ({}/{})",
                     response.receivedCount(), response.expectedCount());
+            if (ProfilerConfig.ENABLED) getProfiler().incrementCounter("real_partials_received");
         }
+
+        if (ProfilerConfig.ENABLED) mergesThisEpoch++;
 
         getCollector().ack(input);
     }
