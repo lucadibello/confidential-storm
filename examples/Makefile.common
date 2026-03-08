@@ -7,10 +7,13 @@ NIMBUS_HOST    ?= nimbus
 .PHONY: install-framework cluster-up cluster-down cluster-status cluster-logs cluster-logs-local \
        cluster-submit cluster-kill
 
-# This target ensures the base library is installed in the local maven repo
+# Pass EXTRA_FRAMEWORK_FLAGS to forward additional Maven flags (e.g. profiling).
+EXTRA_FRAMEWORK_FLAGS ?=
+
+# This target ensures the base library is installed in the local maven repo.
 install-framework:
 	@echo "[INFO] Ensuring Confidential Storm framework is installed..."
-	$(MAKE) -C $(FRAMEWORK_ROOT) build MAVEN_FLAGS="-DskipTests -q"
+	$(MAKE) -C $(FRAMEWORK_ROOT) build MAVEN_FLAGS="-DskipTests -q $(EXTRA_FRAMEWORK_FLAGS)"
 	@echo "[INFO] Framework ready."
 
 # ---------------------------------------------------------------------------
