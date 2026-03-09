@@ -243,19 +243,24 @@ def plot_counters_over_time(df: pd.DataFrame, output_dir, fmt, show):
         if not counter_names:
             continue
 
-        fig, ax = plt.subplots(figsize=(12, 5))
+        tasks = sorted(comp_data["taskId"].unique())
+        n_counters = len(counter_names)
+        fig, axes = plt.subplots(n_counters, 1, figsize=(12, 3.5 * n_counters), sharex=True,
+                                 squeeze=False)
         for i, cn in enumerate(counter_names):
+            ax = axes[i, 0]
             cd = comp_data[comp_data["name"] == cn]
-            # Sum across tasks per window
-            grouped = cd.groupby("elapsed_s")["total"].sum().sort_index()
-            ax.plot(grouped.index, grouped.values, label=cn, color=_color_for(i),
-                    linewidth=1.5, marker=".", markersize=3)
+            for j, task in enumerate(tasks):
+                td = cd[cd["taskId"] == task].sort_values("elapsed_s")
+                lbl = f"task {task}" if len(tasks) > 1 else cn
+                ax.plot(td["elapsed_s"], td["total"], label=lbl,
+                        color=_color_for(j), linewidth=1.5, marker=".", markersize=3)
+            ax.set_ylabel(cn)
+            ax.legend(fontsize=7, ncol=min(len(tasks), 4))
+            ax.grid(True, alpha=0.3)
 
-        ax.set_ylabel("Counter value (cumulative)")
-        ax.set_title(f"{comp} — Counters over time")
-        _format_elapsed_axis(ax)
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.3)
+        axes[0, 0].set_title(f"{comp} — Counters over time")
+        _format_elapsed_axis(axes[-1, 0])
         save_or_show(fig, output_dir, f"counters-{comp}", fmt, show)
 
 
