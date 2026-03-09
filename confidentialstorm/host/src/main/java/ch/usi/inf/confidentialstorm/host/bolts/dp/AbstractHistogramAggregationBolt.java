@@ -43,7 +43,8 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
     private boolean hasNewHistogram = false;
 
     private transient int ticksSinceLastCompletion;
-    private transient int mergesThisEpoch;
+    private transient int dummyMergesThisEpoch;
+    private transient int realMergesThisEpoch;
 
     public AbstractHistogramAggregationBolt() {
         super(HistogramAggregationService.class);
@@ -125,27 +126,41 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
         if (response.isDummy()) {
             LOG.info("[HistogramAggregation] Dummy partial discarded (epoch {})",
                     response.completedEpoch());
-            if (ProfilerConfig.ENABLED) getProfiler().incrementCounter("dummies_received");
+            if (ProfilerConfig.ENABLED) {
+                getProfiler().incrementCounter("dummies_received");
+                dummyMergesThisEpoch++;
+            }
         } else if (response.complete()) {
-            if (ProfilerConfig.ENABLED) getProfiler().incrementCounter("real_partials_received");
+            if (ProfilerConfig.ENABLED) {
+                getProfiler().incrementCounter("real_partials_received");
+                realMergesThisEpoch++; // the latest partial completed the histogram
+            }
             lastCompleteHistogram = response.mergedHistogram();
             lastCompletedEpoch = response.completedEpoch();
             hasNewHistogram = true;
             LOG.info("[HistogramAggregation] Epoch {} complete ({} keys), buffered for next release tick",
                     lastCompletedEpoch, lastCompleteHistogram.size());
+
             if (ProfilerConfig.ENABLED) {
                 getProfiler().recordGauge("ticks_to_completion", ticksSinceLastCompletion);
-                getProfiler().recordGauge("merges_this_epoch", mergesThisEpoch);
+                getProfiler().recordGauge("dummy_merges_this_epoch", dummyMergesThisEpoch);
+                getProfiler().recordGauge("real_merges_this_epoch", realMergesThisEpoch);
+                // for easier visualization - combined gauge of total merges this epoch (real + dummy)
+                getProfiler().recordGauge("total_merges_this_epoch", dummyMergesThisEpoch + realMergesThisEpoch);
+
+                // reset epoch gauges
                 ticksSinceLastCompletion = 0;
-                mergesThisEpoch = 0;
+                realMergesThisEpoch = 0;
+                dummyMergesThisEpoch = 0;
             }
         } else {
             LOG.info("[HistogramAggregation] Partial received ({}/{})",
                     response.receivedCount(), response.expectedCount());
-            if (ProfilerConfig.ENABLED) getProfiler().incrementCounter("real_partials_received");
+            if (ProfilerConfig.ENABLED) {
+                getProfiler().incrementCounter("real_partials_received");
+                realMergesThisEpoch++;
+            }
         }
-
-        if (ProfilerConfig.ENABLED) mergesThisEpoch++;
 
         getCollector().ack(input);
     }
