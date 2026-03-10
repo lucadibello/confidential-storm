@@ -39,7 +39,7 @@ cluster-down:
 
 cluster-submit: build
 	@echo "[INFO] Submitting $(TOPOLOGY_NAME) to Docker Storm cluster (nimbus=$(NIMBUS_HOST))..."
-	storm jar $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS)
+	storm jar $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) $(TOPOLOGY_ARGS)
 	@echo "[INFO] Topology submitted. Check status with: make cluster-status"
 
 cluster-kill:

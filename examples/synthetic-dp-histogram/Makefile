@@ -11,6 +11,9 @@ TOPOLOGY_JAR   := host/target/synthetic-dp-histogram-host-1.0-SNAPSHOT.jar
 TOPOLOGY_CLASS := ch.usi.inf.examples.synthetic_dp.host.SyntheticTopology
 TOPOLOGY_NAME  := SyntheticDP1
 
+# Topology arguments passed to the topology main class (e.g. --num-users 100000 --parallelism 2)
+TOPOLOGY_ARGS ?=
+
 .PHONY: all build help clean common enclave host \
         run-local run-test build-profiled run-profiled cluster-submit-profiled
 
@@ -29,17 +32,20 @@ help:
 	@echo "  make run-profiled     - Build with profiling + run locally (test mode)"
 	@echo ""
 	@echo "  Docker cluster (requires 'make cluster-up'):"
-	@echo "    make cluster-submit    - Build and submit topology to the Docker Storm cluster"
-	@echo "    make cluster-kill      - Kill the running topology on the cluster"
-	@echo "    make cluster-up        - Start the Storm Docker cluster"
-	@echo "    make cluster-down      - Stop the Storm Docker cluster"
-	@echo "    make cluster-status    - Show cluster and topology status"
-	@echo "    make cluster-logs-local - Tail worker logs from host filesystem"
+	@echo "    make cluster-submit              - Build and submit topology to the cluster"
+	@echo "    make cluster-submit-profiled     - Build with profiling and submit to the cluster"
+	@echo "    make cluster-kill                - Kill the running topology on the cluster"
+	@echo "    make cluster-up                  - Start the Storm Docker cluster"
+	@echo "    make cluster-down                - Stop the Storm Docker cluster"
+	@echo "    make cluster-status              - Show cluster and topology status"
+	@echo "    make cluster-logs-local          - Tail worker logs from host filesystem"
 	@echo ""
 	@echo "Variables:"
 	@echo "  MVN=<path>                Override Maven binary (default: mvn)"
 	@echo "  MAVEN_FLAGS='<flags>'     Extra flags (default: $(MAVEN_FLAGS))"
 	@echo "  ENCLAVE_PROFILE='<flags>' Profile(s) to pass while building enclave"
+	@echo "  TOPOLOGY_ARGS='<args>'    Arguments forwarded to topology main class"
+	@echo "                            e.g. TOPOLOGY_ARGS='--num-users 100000 --parallelism 2'"
 	@echo ""
 	@echo "Profiling variables (build-time, baked into JAR via maven-templating-plugin):"
 	@echo "  PROFILER_SAMPLE_RATE=0.05   Fraction of fast ECALLs to time (default: 0.01)"
@@ -100,5 +106,5 @@ run-profiled: build-profiled
 
 cluster-submit-profiled: build-profiled
 	@echo "Submitting $(TOPOLOGY_NAME) to cluster with profiling enabled..."
-	storm jar $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS)
+	storm jar $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) $(TOPOLOGY_ARGS)
 	@echo "Topology submitted with profiling. CSV reports will be at $(PROFILER_OUTPUT_DIR)/profiler-*.csv"
