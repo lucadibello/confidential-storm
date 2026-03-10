@@ -1,0 +1,4 @@
+# requirements files for data science
+pandas
+matplotlib
+numpy
