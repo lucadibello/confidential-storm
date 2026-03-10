@@ -82,6 +82,12 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
      */
     private volatile boolean advancedThisTick = false;
 
+    /**
+     * Set to true when the bolt has reached {@link #getMaxEpochs()} and should stop processing.
+     * Once finished, incoming tuples are acked immediately and ticks are ignored.
+     */
+    private volatile boolean finished = false;
+
     private transient EpochBarrierCoordinator coordinator;
     private transient long contributionsThisEpoch;
 
@@ -109,7 +115,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
         // start the next background computation immediately (from the Curator event thread).
         DataPerturbationService service = state.getEnclaveManager().getService();
         coordinator.setOnEpochAdvanced(() -> {
-            if (!advancedThisTick
+            if (!finished && !advancedThisTick
                     && coordinator.getTargetEpoch() > localEpoch
                     && (snapshotThread == null || !snapshotThread.isAlive())) {
                 LOG.info("[DataPerturbation] Task {} starting bg snapshot from watch (localEpoch={}, targetEpoch={})",
@@ -155,6 +161,17 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     }
 
     /**
+     * Returns the maximum number of epochs to process before deactivating.
+     * After this many epochs, the bolt stops processing tuples and flushes the profiler.
+     * Subclasses may override to set a finite limit (e.g., from DP configuration).
+     *
+     * @return the max epoch count, or {@code -1} (default) to run indefinitely.
+     */
+    protected int getMaxEpochs() {
+        return -1;
+    }
+
+    /**
      * Template method to process an encrypted histogram snapshot from the data perturbation service.
      * Only called when {@link #useEncryptedSnapshots()} returns true.
      */
@@ -164,6 +181,13 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
 
     @Override
     protected void processTuple(Tuple input, DataPerturbationService service) throws EnclaveServiceException {
+        // check finished first to avoid unnecessary processing and background snapshot starts after reaching max epochs
+        if (finished) {
+            if (!isTickTuple(input)) getCollector().ack(input);
+            return;
+        }
+
+        // Tick tuples trigger the epoch synchronization and snapshot emission logic, regular tuples add contributions.
         if (isTickTuple(input)) {
             handleEpochTick(service);
         } else {
@@ -236,6 +260,15 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 contributionsThisEpoch = 0;
             }
             LOG.info("[DataPerturbation] Task {} emitted real partial for epoch {}", getTaskId(), localEpoch);
+
+            // Check if we've reached the max epoch limit after processing this tick
+            if (getMaxEpochs() > 0 && localEpoch >= getMaxEpochs()) {
+                finished = true;
+                LOG.info("[DataPerturbation] Task {} reached max epochs ({}), deactivating",
+                        getTaskId(), getMaxEpochs());
+                if (ProfilerConfig.ENABLED) getProfiler().writeReport();
+                return;
+            }
         } else if (targetEpoch > localEpoch) {
             // 2. No result ready -- start bg snapshot if not already running (fallback)
             if (snapshotThread == null || !snapshotThread.isAlive()) {
@@ -284,6 +317,13 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
             }
             coordinator.registerCompletion(localEpoch);
             coordinator.tryAdvanceEpoch(targetEpoch);
+
+            if (getMaxEpochs() > 0 && localEpoch >= getMaxEpochs()) {
+                finished = true;
+                LOG.info("[DataPerturbation] Task {} reached max epochs ({}), deactivating",
+                        getTaskId(), getMaxEpochs());
+                if (ProfilerConfig.ENABLED) getProfiler().writeReport();
+            }
         }
     }
 

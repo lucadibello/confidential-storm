@@ -3,6 +3,7 @@ package ch.usi.inf.examples.synthetic_dp.host.bolts;
 import ch.usi.inf.confidentialstorm.common.api.dp.aggregation.HistogramAggregationService;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.dp.AbstractHistogramAggregationBolt;
+import ch.usi.inf.examples.synthetic_dp.common.config.DPConfig;
 import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
 import ch.usi.inf.examples.synthetic_dp.host.GroundTruthCollector;
 import org.apache.storm.task.TopologyContext;
@@ -29,6 +30,11 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
 
     public SyntheticHistogramAggregationBolt() {
         this.outputFile = String.format("%s/synthetic-report-run%d.txt", OUTPUT_DIR, RUN_ID);
+    }
+
+    @Override
+    protected int getMaxEpochs() {
+        return DPConfig.maxTimeSteps();
     }
 
     @Override

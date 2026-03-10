@@ -42,6 +42,9 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
     /** Whether a new histogram has been buffered since the last release. */
     private boolean hasNewHistogram = false;
 
+    /** Set to true when the bolt has reached {@link #getMaxEpochs()} and should stop processing. */
+    private boolean finished = false;
+
     private transient int ticksSinceLastCompletion;
     private transient int dummyMergesThisEpoch;
     private transient int realMergesThisEpoch;
@@ -52,6 +55,17 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
 
     protected int getTickIntervalSecs() {
         return DEFAULT_TICK_INTERVAL_SECS;
+    }
+
+    /**
+     * Returns the maximum number of epochs to process before deactivating.
+     * After this many epochs, the bolt stops processing and flushes the profiler.
+     * Subclasses may override to set a finite limit (e.g., from DP configuration).
+     *
+     * @return the max epoch count, or {@code -1} (default) to run indefinitely.
+     */
+    protected int getMaxEpochs() {
+        return -1;
     }
 
     @Override
@@ -86,6 +100,13 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
 
     @Override
     protected void processTuple(Tuple input, HistogramAggregationService service) throws EnclaveServiceException {
+        // check if user has configured a max epoch limit and we've already reached it
+        if (finished) {
+            if (!isTickTuple(input)) getCollector().ack(input);
+            return;
+        }
+
+        // distinguish between tick tuples (for releasing histograms) and regular tuples (partial histograms to merge)
         if (isTickTuple(input)) {
             handleTick();
         } else {
@@ -145,13 +166,18 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
                 getProfiler().recordGauge("ticks_to_completion", ticksSinceLastCompletion);
                 getProfiler().recordGauge("dummy_merges_this_epoch", dummyMergesThisEpoch);
                 getProfiler().recordGauge("real_merges_this_epoch", realMergesThisEpoch);
-                // for easier visualization - combined gauge of total merges this epoch (real + dummy)
                 getProfiler().recordGauge("total_merges_this_epoch", dummyMergesThisEpoch + realMergesThisEpoch);
 
-                // reset epoch gauges
                 ticksSinceLastCompletion = 0;
                 realMergesThisEpoch = 0;
                 dummyMergesThisEpoch = 0;
+            }
+
+            // if the user has configured a max epoch limit, check if we've reached it and deactivate the bolt if so
+            if (getMaxEpochs() > 0 && lastCompletedEpoch >= getMaxEpochs()) {
+                finished = true;
+                LOG.info("[HistogramAggregation] Reached max epochs ({}), deactivating", getMaxEpochs());
+                if (ProfilerConfig.ENABLED) getProfiler().writeReport();
             }
         } else {
             LOG.info("[HistogramAggregation] Partial received ({}/{})",
