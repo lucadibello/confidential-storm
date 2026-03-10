@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
 #
-# run-medium-scale.sh — Medium-scale validation run (15 minutes).
+# run-medium-scale.sh - Medium-scale validation run.
 #
-# Purpose: Validate correctness at a meaningful scale before committing
-# to full paper-scale runs. Uses full parallelism.
-#
-# Scale: 1M users, 1M keys, parallelism=8, 100 micro-batches
+# Scale: 1M users, 1M keys, parallelism=4, 100 time-steps
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "=== Medium Scale (15 min, 1M users/keys) ==="
+echo "=== Medium Scale (1M users/keys) ==="
 echo ""
 
 NUM_USERS=1000000 \
 NUM_KEYS=1000000 \
-RUNTIME_SECONDS=900 \
+RUNTIME_SECONDS=1800 \
 PARALLELISM=4 \
 GROUND_TRUTH=false \
 "$SCRIPT_DIR/run-experiment.sh" 100 1

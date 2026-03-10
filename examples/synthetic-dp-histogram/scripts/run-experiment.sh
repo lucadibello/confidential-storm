@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 #
-# run-experiment.sh — Generic experiment runner for the Synthetic DP Histogram benchmark.
+# run-experiment.sh - Generic experiment runner for the Synthetic DP Histogram benchmark.
+#
+# Execution modes:
+#   MODE=local   (default) - Runs via 'storm local' with sudo
+#   MODE=cluster           - Submits via 'storm jar' to a running Storm cluster
 #
 # Usage:
 #   ./scripts/run-experiment.sh <max_time_steps> <run_id> [options]
 #
 # Required arguments:
-#   max_time_steps   Number of micro-batches (e.g. 100 or 1000)
+#   max_time_steps   Number of time-steps (e.g. 100 or 1000)
 #   run_id           Identifier for this run (used in output filename)
 #
 # Options (override defaults via environment variables):
+#   MODE              Execution mode: "local" or "cluster" (default: local)
 #   NUM_USERS         Number of unique users          (default: 10000000)
 #   NUM_KEYS          Number of distinct keys          (default: 1000000)
 #   RUNTIME_SECONDS   Total topology runtime           (default: 120)
@@ -32,12 +37,20 @@ if [ $# -lt 2 ]; then
     echo ""
     echo "Example: $0 100 1"
     echo "Example: NUM_USERS=100000 PARALLELISM=1 $0 100 1"
+    echo "Example: MODE=cluster $0 100 1"
     exit 1
 fi
 
 MAX_TIME_STEPS="$1"
 RUN_ID="$2"
 shift 2
+
+# --- Execution mode ---
+MODE="${MODE:-local}"
+if [ "$MODE" != "local" ] && [ "$MODE" != "cluster" ]; then
+    echo "ERROR: MODE must be 'local' or 'cluster' (got: '$MODE')"
+    exit 1
+fi
 
 # --- Configurable parameters (with defaults) ---
 NUM_USERS="${NUM_USERS:-10000000}"
@@ -56,13 +69,11 @@ if [ ! -f "$JAR" ]; then
     exit 1
 fi
 
-# --- Compute local-ttl (runtime + 30s buffer for startup/shutdown) ---
-LOCAL_TTL=$(( RUNTIME_SECONDS + 30 ))
-
 # --- Print configuration ---
 echo "=============================================="
 echo " Synthetic DP Histogram — Run $RUN_ID"
 echo "=============================================="
+echo " Mode:            $MODE"
 echo " Users:           $NUM_USERS"
 echo " Keys:            $NUM_KEYS"
 echo " Micro-batches:   $MAX_TIME_STEPS"
@@ -77,24 +88,40 @@ fi
 echo "=============================================="
 echo ""
 
+# --- Build topology arguments ---
+TOPO_ARGS=(
+    --num-users "$NUM_USERS"
+    --num-keys "$NUM_KEYS"
+    --runtime-seconds "$RUNTIME_SECONDS"
+    --run-id "$RUN_ID"
+    --seed "$SEED"
+    --mu "$MU"
+    --max-time-steps "$MAX_TIME_STEPS"
+    --parallelism "$PARALLELISM"
+    --ground-truth "$GROUND_TRUTH"
+)
+
 # --- Run ---
 cd "$PROJECT_DIR"
 
-sudo storm local \
-    --local-ttl "$LOCAL_TTL" \
-    "$JAR" \
-    "$TOPOLOGY_CLASS" \
-    -- \
-    --num-users "$NUM_USERS" \
-    --num-keys "$NUM_KEYS" \
-    --runtime-seconds "$RUNTIME_SECONDS" \
-    --run-id "$RUN_ID" \
-    --seed "$SEED" \
-    --mu "$MU" \
-    --max-time-steps "$MAX_TIME_STEPS" \
-    --parallelism "$PARALLELISM" \
-    --ground-truth "$GROUND_TRUTH" \
-    $EXTRA_FLAGS
+if [ "$MODE" = "local" ]; then
+    LOCAL_TTL=$(( RUNTIME_SECONDS + 30 ))
+    sudo storm local \
+        --local-ttl "$LOCAL_TTL" \
+        "$JAR" \
+        "$TOPOLOGY_CLASS" \
+        -- \
+        "${TOPO_ARGS[@]}" \
+        $EXTRA_FLAGS
+else
+    storm jar "$JAR" "$TOPOLOGY_CLASS" \
+        "${TOPO_ARGS[@]}" \
+        $EXTRA_FLAGS
+fi
 
 echo ""
-echo "Run $RUN_ID complete. Results: data/synthetic-report-run${RUN_ID}.txt"
+if [ "$MODE" = "local" ]; then
+    echo "Run $RUN_ID complete. Results: data/synthetic-report-run${RUN_ID}.txt"
+else
+    echo "Run $RUN_ID submitted to cluster. Monitor with: make cluster-status"
+fi
