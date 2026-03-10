@@ -23,9 +23,6 @@ public final class ProfilerConfig {
     /** Fraction of fast ECALLs to time (e.g. 0.01 = 1%). */
     public static final double SAMPLE_RATE = ${profiler.sample.rate};
 
-    /** Ring buffer size for percentile computation. */
-    public static final int RESERVOIR_SIZE = ${profiler.reservoir.size};
-
     /** Ticks between periodic log dumps (for tick-based bolts). */
     public static final int REPORT_INTERVAL_TICKS = ${profiler.report.interval.ticks};
 

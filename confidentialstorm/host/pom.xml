@@ -19,7 +19,6 @@
     <properties>
         <profiler.enabled>false</profiler.enabled>
         <profiler.sample.rate>0.01</profiler.sample.rate>
-        <profiler.reservoir.size>1000</profiler.reservoir.size>
         <profiler.report.interval.ticks>10</profiler.report.interval.ticks>
         <profiler.report.interval.tuples>10000</profiler.report.interval.tuples>
         <profiler.output.dir>/logs/storm</profiler.output.dir>

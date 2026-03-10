@@ -74,9 +74,6 @@ public final class ProfilerReport {
             sb.append("\"total\":").append(stats.getTotalCount()).append(',');
             sb.append("\"sampled\":").append(stats.getSampledCount()).append(',');
             sb.append("\"avgMs\":").append(String.format("%.3f", stats.getAvgNanos() / 1_000_000.0)).append(',');
-            sb.append("\"p50Ms\":").append(String.format("%.3f", stats.getPercentile(0.50) / 1_000_000.0)).append(',');
-            sb.append("\"p95Ms\":").append(String.format("%.3f", stats.getPercentile(0.95) / 1_000_000.0)).append(',');
-            sb.append("\"p99Ms\":").append(String.format("%.3f", stats.getPercentile(0.99) / 1_000_000.0)).append(',');
             sb.append("\"minMs\":").append(String.format("%.3f", stats.getMinNanos() / 1_000_000.0)).append(',');
             sb.append("\"maxMs\":").append(String.format("%.3f", stats.getMaxNanos() / 1_000_000.0));
             sb.append('}');
@@ -111,7 +108,7 @@ public final class ProfilerReport {
      * Writes the CSV header row.
      */
     public static void writeCsvHeader(PrintWriter writer) {
-        writer.println("timestamp,component,taskId,type,name,total,sampled,avgMs,minMs,maxMs,p50Ms,p95Ms,p99Ms");
+        writer.println("timestamp,component,taskId,type,name,total,sampled,avgMs,minMs,maxMs");
     }
 
     /**
@@ -126,26 +123,23 @@ public final class ProfilerReport {
 
         // ECALL stats
         for (EcallStats stats : ecallStats.values()) {
-            writer.printf("%s,%s,%d,ecall,%s,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f%n",
+            writer.printf("%s,%s,%d,ecall,%s,%d,%d,%.3f,%.3f,%.3f%n",
                     ts, componentId, taskId, stats.getName(),
                     stats.getTotalCount(), stats.getSampledCount(),
                     stats.getAvgNanos() / 1_000_000.0,
                     stats.getMinNanos() / 1_000_000.0,
-                    stats.getMaxNanos() / 1_000_000.0,
-                    stats.getPercentile(0.50) / 1_000_000.0,
-                    stats.getPercentile(0.95) / 1_000_000.0,
-                    stats.getPercentile(0.99) / 1_000_000.0);
+                    stats.getMaxNanos() / 1_000_000.0);
         }
 
         // Counters
         for (Map.Entry<String, LongAdder> e : counters.entrySet()) {
-            writer.printf("%s,%s,%d,counter,%s,%d,,,,,,%n",
+            writer.printf("%s,%s,%d,counter,%s,%d,,,,%n",
                     ts, componentId, taskId, e.getKey(), e.getValue().sum());
         }
 
         // Gauges
         for (Map.Entry<String, AtomicLong> e : gauges.entrySet()) {
-            writer.printf("%s,%s,%d,gauge,%s,%d,,,,,,%n",
+            writer.printf("%s,%s,%d,gauge,%s,%d,,,,%n",
                     ts, componentId, taskId, e.getKey(), e.getValue().get());
         }
     }

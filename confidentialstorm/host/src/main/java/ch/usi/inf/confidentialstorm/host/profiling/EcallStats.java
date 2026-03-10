@@ -1,18 +1,15 @@
 package ch.usi.inf.confidentialstorm.host.profiling;
 
-import java.util.Arrays;
 import java.util.concurrent.atomic.LongAdder;
 
 /**
- * Per-ECALL-type statistics accumulator with a fixed-size ring buffer for percentile computation.
+ * Per-ECALL-type statistics accumulator tracking total count, avg, min, and max latency.
  * Thread-safe: {@link #record(long)} is synchronized (only called on sampled invocations).
  */
 public final class EcallStats {
 
     private final String name;
     private final LongAdder totalCount = new LongAdder();
-    private final long[] reservoir;
-    private int reservoirIndex = 0;
     private int sampledCount = 0;
     private long sumNanos = 0;
     private long minNanos = Long.MAX_VALUE;
@@ -20,7 +17,6 @@ public final class EcallStats {
 
     public EcallStats(String name) {
         this.name = name;
-        this.reservoir = new long[ProfilerConfig.RESERVOIR_SIZE];
     }
 
     public String getName() {
@@ -43,8 +39,6 @@ public final class EcallStats {
      * Records a sampled timing measurement.
      */
     public synchronized void record(long durationNanos) {
-        reservoir[reservoirIndex % reservoir.length] = durationNanos;
-        reservoirIndex++;
         sampledCount++;
         sumNanos += durationNanos;
         if (durationNanos < minNanos) minNanos = durationNanos;
@@ -68,23 +62,10 @@ public final class EcallStats {
     }
 
     /**
-     * Returns the requested percentile (0.0–1.0) from the reservoir.
-     */
-    public synchronized long getPercentile(double p) {
-        int count = Math.min(sampledCount, reservoir.length);
-        if (count == 0) return 0;
-        long[] sorted = Arrays.copyOf(reservoir, count);
-        Arrays.sort(sorted);
-        int idx = Math.min((int) (p * count), count - 1);
-        return sorted[idx];
-    }
-
-    /**
      * Resets all statistics for a new reporting window.
      * Total count is NOT reset (cumulative count).
      */
     public synchronized void reset() {
-        reservoirIndex = 0;
         sampledCount = 0;
         sumNanos = 0;
         minNanos = Long.MAX_VALUE;
@@ -96,12 +77,9 @@ public final class EcallStats {
      */
     public synchronized String toSummaryLine() {
         return String.format(
-                "%s: total=%d sampled=%d avg=%.2fms p50=%.2fms p95=%.2fms p99=%.2fms min=%.2fms max=%.2fms",
+                "%s: total=%d sampled=%d avg=%.2fms min=%.2fms max=%.2fms",
                 name, totalCount.sum(), sampledCount,
                 nanosToMs(getAvgNanos()),
-                nanosToMs(getPercentile(0.50)),
-                nanosToMs(getPercentile(0.95)),
-                nanosToMs(getPercentile(0.99)),
                 nanosToMs(getMinNanos()),
                 nanosToMs(getMaxNanos()));
     }
