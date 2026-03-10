@@ -4,7 +4,7 @@ visualize-profiler.py - Visualize Confidential Storm bolt profiler CSV reports.
 
 Reads all profiler-*.csv files from a directory and produces:
 
-  1. ECALL latency over time (avg, p50, p95, p99) per component
+  1. ECALL latency over time (avg, min, max) per component
   2. ECALL latency distribution (box plots) per component
   3. Throughput over time (total invocations per window)
   4. Counter evolution over time (dropped, forwarded, dummy_emissions, etc.)
@@ -139,20 +139,16 @@ def plot_ecall_latency_over_time(df: pd.DataFrame, output_dir, fmt, show):
             ax_overview.legend(fontsize=8, ncol=min(n_tasks, 6))
             ax_overview.grid(True, alpha=0.3)
 
-            # --- Rows 1..N: per-task detail with percentile bands ---
+            # --- Rows 1..N: per-task detail ---
             for i, task in enumerate(tasks):
                 ax = axes[1 + i]
                 td = ed[ed["taskId"] == task].sort_values("elapsed_s")
                 c = _color_for(i)
                 ax.plot(td["elapsed_s"], td["avgMs"], label="avg",
                         color=c, linewidth=1.5)
-                ax.fill_between(td["elapsed_s"], td["p50Ms"], td["p95Ms"],
-                                alpha=0.20, color=c, label="p50–p95")
-                ax.fill_between(td["elapsed_s"], td["p95Ms"], td["p99Ms"],
-                                alpha=0.10, color=c, label="p95–p99")
                 ax.set_ylabel("Latency (ms)")
                 ax.set_title(f"Task {task}", fontsize=10)
-                ax.legend(fontsize=7, ncol=3)
+                ax.legend(fontsize=7)
                 ax.grid(True, alpha=0.3)
 
             _format_elapsed_axis(axes[-1])
@@ -423,9 +419,7 @@ def plot_summary_dashboard(df: pd.DataFrame, output_dir, fmt, show):
                 "Component": comp,
                 "ECALL": en,
                 "Avg (ms)": f"{ed['avgMs'].mean():.2f}",
-                "p50 (ms)": f"{ed['p50Ms'].mean():.2f}",
-                "p95 (ms)": f"{ed['p95Ms'].mean():.2f}",
-                "p99 (ms)": f"{ed['p99Ms'].mean():.2f}",
+                "Min (ms)": f"{ed['minMs'].min():.2f}",
                 "Max (ms)": f"{ed['maxMs'].max():.2f}",
                 "Total calls": f"{int(ed['total'].max()):,}",
                 "Tasks": len(ed["taskId"].unique()),
