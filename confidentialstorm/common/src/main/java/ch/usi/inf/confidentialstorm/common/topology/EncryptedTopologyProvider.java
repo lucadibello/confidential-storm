@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
  * enclave from loading a forged topology.
  * <p>
  * At construction time this class builds both a <em>forward</em> index
- * (source → downstream neighbours) and a <em>reverse</em> index (destination → upstream
+ * (source -> downstream neighbours) and a <em>reverse</em> index (destination → upstream
  * neighbours) so that both {@link #getDownstream} and {@link #getUpstream} can be served
  * in O(1).
  * <p>
