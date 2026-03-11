@@ -144,6 +144,41 @@ public final class ProfilerReport {
         }
     }
 
+    /**
+     * Writes a single lifecycle event row to the CSV (type=lifecycle).
+     */
+    public static void writeLifecycleCsvRow(PrintWriter writer, String componentId, int taskId, String eventName) {
+        writer.printf("%s,%s,%d,lifecycle,%s,,,,,%n",
+                Instant.now().toString(), componentId, taskId, eventName);
+        writer.flush();
+    }
+
+    /**
+     * Writes a lifecycle event row with an associated epoch number.
+     * The epoch is stored in the {@code total} column for CSV compatibility.
+     */
+    public static void writeLifecycleCsvRow(PrintWriter writer, String componentId, int taskId, String eventName, int epoch) {
+        writer.printf("%s,%s,%d,lifecycle,%s,%d,,,,%n",
+                Instant.now().toString(), componentId, taskId, eventName, epoch);
+        writer.flush();
+    }
+
+    /**
+     * Returns a {@code [PROFILER-LIFECYCLE]} log line for a lifecycle event.
+     */
+    public static String toLifecycleLogLine(String componentId, int taskId, String eventName) {
+        return String.format("[PROFILER-LIFECYCLE] {\"component\":\"%s\",\"taskId\":%d,\"event\":\"%s\",\"timestamp\":\"%s\"}",
+                escapeJson(componentId), taskId, escapeJson(eventName), Instant.now());
+    }
+
+    /**
+     * Returns a {@code [PROFILER-LIFECYCLE]} log line with an epoch number.
+     */
+    public static String toLifecycleLogLine(String componentId, int taskId, String eventName, int epoch) {
+        return String.format("[PROFILER-LIFECYCLE] {\"component\":\"%s\",\"taskId\":%d,\"event\":\"%s\",\"epoch\":%d,\"timestamp\":\"%s\"}",
+                escapeJson(componentId), taskId, escapeJson(eventName), epoch, Instant.now());
+    }
+
     private static String escapeJson(String s) {
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }

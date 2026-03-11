@@ -81,6 +81,10 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
             }
             // execute hook for subclasses
             afterPrepare(topoConf, context);
+            // record lifecycle event after all initialization is complete
+            if (ProfilerConfig.ENABLED && profiler != null) {
+                profiler.recordLifecycleEvent("COMPONENT_STARTED");
+            }
         } catch (Throwable e) {
             LOG.error("Failed to prepare bolt {} (task {})",
                     state.getComponentId(), state.getTaskId(), e);
@@ -109,6 +113,11 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
 
     @Override
     public void cleanup() {
+        // record lifecycle event before any cleanup
+        if (ProfilerConfig.ENABLED && profiler != null) {
+            profiler.recordLifecycleEvent("COMPONENT_STOPPING");
+        }
+
         // run hook for subclasses
         beforeCleanup();
 

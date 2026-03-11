@@ -2,6 +2,8 @@ package ch.usi.inf.confidentialstorm.host.spouts;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.host.base.ConfidentialComponentState;
+import ch.usi.inf.confidentialstorm.host.profiling.ProfilerConfig;
+import ch.usi.inf.confidentialstorm.host.profiling.ProfilerReport;
 import ch.usi.inf.confidentialstorm.host.util.EnclaveErrorUtils;
 import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
@@ -11,6 +13,10 @@ import org.apache.teaclave.javasdk.host.exception.EnclaveDestroyingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.Map;
 
 /**
@@ -29,6 +35,9 @@ public abstract class ConfidentialSpout<S> extends BaseRichSpout {
     protected transient ConfidentialComponentState<SpoutOutputCollector, S> state;
     private final Class<S> serviceClass;
     private final EnclaveType enclaveType;
+
+    /** Lifecycle CSV writer for profiler startup/shutdown events. */
+    private transient PrintWriter lifecycleCsvWriter;
 
     /**
      * Constructs a new ConfidentialSpout with default enclave type (TEE_SDK).
@@ -67,6 +76,8 @@ public abstract class ConfidentialSpout<S> extends BaseRichSpout {
             LOG.debug("Successfully initialized enclave for spout {} (task {})", state.getComponentId(), state.getTaskId());
             // execute hook for subclasses
             afterOpen(topoConf, context, spoutOutputCollector);
+            // record lifecycle event after all initialization is complete
+            writeLifecycleEvent("COMPONENT_STARTED");
         } catch (Throwable e) {
             LOG.error("Failed to prepare spout {} (task {})",
                     state.getComponentId(), state.getTaskId(), e);
@@ -87,6 +98,9 @@ public abstract class ConfidentialSpout<S> extends BaseRichSpout {
 
     @Override
     public void close() {
+        // record lifecycle event before any cleanup
+        writeLifecycleEvent("COMPONENT_STOPPING");
+
         // run hook for subclasses
         beforeClose();
 
@@ -99,6 +113,12 @@ public abstract class ConfidentialSpout<S> extends BaseRichSpout {
             LOG.error("Failed to destroy enclave for spout {} (task {})",
                     this.state.getComponentId(), this.state.getTaskId(), e);
         }
+
+        // close lifecycle CSV writer
+        if (lifecycleCsvWriter != null) {
+            lifecycleCsvWriter.close();
+            lifecycleCsvWriter = null;
+        }
     }
 
     /**
@@ -106,6 +126,40 @@ public abstract class ConfidentialSpout<S> extends BaseRichSpout {
      */
     protected void beforeClose() {
         // hook for subclass
+    }
+
+    /**
+     * Writes a lifecycle event to the profiler CSV and log.
+     * No-op when profiling is disabled (compile-time constant).
+     */
+    private void writeLifecycleEvent(String eventName) {
+        if (!ProfilerConfig.ENABLED || state == null) return;
+
+        String componentId = state.getComponentId();
+        int taskId = state.getTaskId();
+
+        LOG.info(ProfilerReport.toLifecycleLogLine(componentId, taskId, eventName));
+
+        if (lifecycleCsvWriter == null) {
+            File dir = new File(ProfilerConfig.OUTPUT_DIR);
+            if (!dir.exists() && !dir.mkdirs()) {
+                LOG.warn("[PROFILER] Failed to create output directory: {}", dir.getAbsolutePath());
+                return;
+            }
+            File file = new File(dir, String.format("profiler-%s-task%d.csv", componentId, taskId));
+            try {
+                boolean needsHeader = !file.exists() || file.length() == 0;
+                lifecycleCsvWriter = new PrintWriter(new FileWriter(file, true));
+                if (needsHeader) {
+                    ProfilerReport.writeCsvHeader(lifecycleCsvWriter);
+                    lifecycleCsvWriter.flush();
+                }
+            } catch (IOException e) {
+                LOG.warn("[PROFILER] Failed to open lifecycle CSV: {}", file.getAbsolutePath(), e);
+                return;
+            }
+        }
+        ProfilerReport.writeLifecycleCsvRow(lifecycleCsvWriter, componentId, taskId, eventName);
     }
 
     /**

@@ -36,7 +36,6 @@ public final class BoltProfiler {
 
     /** Lazily opened CSV writer — appends one snapshot per reporting interval. */
     private PrintWriter csvWriter;
-    private boolean csvHeaderWritten = false;
 
     public BoltProfiler(String componentId, int taskId) {
         this.componentId = componentId;
@@ -109,6 +108,34 @@ public final class BoltProfiler {
     }
 
     /**
+     * Records a lifecycle event (e.g., COMPONENT_STARTED, COMPONENT_STOPPING).
+     * Written immediately to both log and CSV (not buffered like regular metrics).
+     */
+    public void recordLifecycleEvent(String eventName) {
+        LOG.info(ProfilerReport.toLifecycleLogLine(componentId, taskId, eventName));
+        synchronized (this) {
+            PrintWriter writer = getCsvWriter();
+            if (writer != null) {
+                ProfilerReport.writeLifecycleCsvRow(writer, componentId, taskId, eventName);
+            }
+        }
+    }
+
+    /**
+     * Records a lifecycle event with an associated epoch number (e.g., EPOCH_ADVANCED).
+     * The epoch is stored in the CSV {@code total} column for analysis.
+     */
+    public void recordLifecycleEvent(String eventName, int epoch) {
+        LOG.info(ProfilerReport.toLifecycleLogLine(componentId, taskId, eventName, epoch));
+        synchronized (this) {
+            PrintWriter writer = getCsvWriter();
+            if (writer != null) {
+                ProfilerReport.writeLifecycleCsvRow(writer, componentId, taskId, eventName, epoch);
+            }
+        }
+    }
+
+    /**
      * Flushes the final CSV snapshot, closes the writer, and logs a final summary.
      * Called from {@code cleanup()}.
      */
@@ -128,18 +155,19 @@ public final class BoltProfiler {
      * Appends the current window's stats as CSV rows to the report file.
      * The file is opened lazily on first call and kept open for the bolt's lifetime.
      */
-    private void appendCsvSnapshot() {
+    private synchronized void appendCsvSnapshot() {
         PrintWriter writer = getCsvWriter();
         if (writer == null) return;
 
-        if (!csvHeaderWritten) {
-            ProfilerReport.writeCsvHeader(writer);
-            csvHeaderWritten = true;
-        }
         ProfilerReport.writeCsvRows(writer, componentId, taskId, ecallStats, counters, gauges);
         writer.flush();
     }
 
+    /**
+     * Opens the CSV writer lazily. The header is written immediately upon file creation
+     * so that it always precedes any data rows — even when called from concurrent threads
+     * (e.g., the background snapshot thread).
+     */
     private PrintWriter getCsvWriter() {
         if (csvWriter != null) return csvWriter;
 
@@ -151,7 +179,12 @@ public final class BoltProfiler {
 
         File file = new File(dir, String.format("profiler-%s-task%d.csv", componentId, taskId));
         try {
+            boolean needsHeader = !file.exists() || file.length() == 0;
             csvWriter = new PrintWriter(new FileWriter(file, true));
+            if (needsHeader) {
+                ProfilerReport.writeCsvHeader(csvWriter);
+                csvWriter.flush();
+            }
             LOG.info("[PROFILER] CSV report file opened: {}", file.getAbsolutePath());
         } catch (IOException e) {
             LOG.warn("[PROFILER] Failed to open report file: {}", file.getAbsolutePath(), e);
