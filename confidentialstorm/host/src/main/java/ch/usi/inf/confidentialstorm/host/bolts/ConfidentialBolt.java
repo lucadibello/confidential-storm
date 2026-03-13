@@ -73,7 +73,15 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
                 state.getComponentId(), state.getTaskId(), state.getEnclaveManager().getActiveEnclaveType());
         try {
             LOG.debug("Attempting to initialize enclave for bolt {} (task {})", state.getComponentId(), state.getTaskId());
+
+            // log lifecycle event before/after initialization in order to capture enclave initialization time in profiler
+            if (ProfilerConfig.ENABLED && profiler != null) {
+                profiler.recordLifecycleEvent(ConfidentialBoltLifecycleEvent.COMPONENT_INITIALIZING_ENCLAVE);
+            }
             state.getEnclaveManager().initializeEnclave(topoConf);
+            if (ProfilerConfig.ENABLED && profiler != null) {
+                profiler.recordLifecycleEvent(ConfidentialBoltLifecycleEvent.COMPONENT_ENCLAVE_INITIALIZED);
+            }
             LOG.debug("Successfully initialized enclave for bolt {} (task {})", state.getComponentId(), state.getTaskId());
             // initialize profiler if enabled
             if (ProfilerConfig.ENABLED) {
@@ -83,7 +91,7 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
             afterPrepare(topoConf, context);
             // record lifecycle event after all initialization is complete
             if (ProfilerConfig.ENABLED && profiler != null) {
-                profiler.recordLifecycleEvent("COMPONENT_STARTED");
+                profiler.recordLifecycleEvent(ConfidentialBoltLifecycleEvent.COMPONENT_STARTED);
             }
         } catch (Throwable e) {
             LOG.error("Failed to prepare bolt {} (task {})",
@@ -115,7 +123,7 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
     public void cleanup() {
         // record lifecycle event before any cleanup
         if (ProfilerConfig.ENABLED && profiler != null) {
-            profiler.recordLifecycleEvent("COMPONENT_STOPPING");
+            profiler.recordLifecycleEvent(ConfidentialBoltLifecycleEvent.COMPONENT_STOPPING);
         }
 
         // run hook for subclasses

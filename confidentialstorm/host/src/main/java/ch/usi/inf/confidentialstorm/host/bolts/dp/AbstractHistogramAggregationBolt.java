@@ -167,7 +167,7 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
                 getProfiler().recordGauge("dummy_merges_this_epoch", dummyMergesThisEpoch);
                 getProfiler().recordGauge("real_merges_this_epoch", realMergesThisEpoch);
                 getProfiler().recordGauge("total_merges_this_epoch", dummyMergesThisEpoch + realMergesThisEpoch);
-                getProfiler().recordLifecycleEvent("EPOCH_ADVANCED", lastCompletedEpoch);
+                getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.EPOCH_ADVANCED, lastCompletedEpoch);
 
                 ticksSinceLastCompletion = 0;
                 realMergesThisEpoch = 0;
@@ -179,7 +179,7 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
                 finished = true;
                 LOG.info("[HistogramAggregation] Reached max epochs ({}), deactivating", getMaxEpochs());
                 if (ProfilerConfig.ENABLED) {
-                    getProfiler().recordLifecycleEvent("MAX_EPOCH_REACHED", lastCompletedEpoch);
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCH_REACHED, lastCompletedEpoch);
                     getProfiler().writeReport();
                 }
             }

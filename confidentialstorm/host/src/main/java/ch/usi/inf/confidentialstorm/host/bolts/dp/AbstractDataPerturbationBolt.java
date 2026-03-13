@@ -257,7 +257,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
             if (ProfilerConfig.ENABLED) {
                 getProfiler().incrementCounter("real_emissions");
                 getProfiler().recordGauge("contributions_this_epoch", contributionsThisEpoch);
-                getProfiler().recordLifecycleEvent("EPOCH_ADVANCED", localEpoch);
+                getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.EPOCH_ADVANCED, localEpoch);
                 contributionsThisEpoch = 0;
             }
             LOG.info("[DataPerturbation] Task {} emitted real partial for epoch {}", getTaskId(), localEpoch);
@@ -268,7 +268,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 LOG.info("[DataPerturbation] Task {} reached max epochs ({}), deactivating",
                         getTaskId(), getMaxEpochs());
                 if (ProfilerConfig.ENABLED) {
-                    getProfiler().recordLifecycleEvent("MAX_EPOCH_REACHED", localEpoch);
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCH_REACHED, localEpoch);
                     getProfiler().writeReport();
                 }
                 return;
@@ -317,7 +317,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
             if (ProfilerConfig.ENABLED) {
                 getProfiler().incrementCounter("real_emissions");
                 getProfiler().recordGauge("contributions_this_epoch", contributionsThisEpoch);
-                getProfiler().recordLifecycleEvent("EPOCH_ADVANCED", localEpoch);
+                getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.EPOCH_ADVANCED, localEpoch);
                 contributionsThisEpoch = 0;
             }
             coordinator.registerCompletion(localEpoch);
@@ -328,7 +328,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 LOG.info("[DataPerturbation] Task {} reached max epochs ({}), deactivating",
                         getTaskId(), getMaxEpochs());
                 if (ProfilerConfig.ENABLED) {
-                    getProfiler().recordLifecycleEvent("MAX_EPOCH_REACHED", localEpoch);
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCH_REACHED, localEpoch);
                     getProfiler().writeReport();
                 }
             }
@@ -348,7 +348,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
         snapshotThread = new Thread(() -> {
             try {
                 if (ProfilerConfig.ENABLED) {
-                    getProfiler().recordLifecycleEvent("SNAPSHOT_STARTED", localEpoch + 1);
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_STARTED, localEpoch + 1);
                 }
                 long lockWaitStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
                 long ecallStart;
@@ -366,7 +366,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 }
                 completedSnapshot.set(result);
                 if (ProfilerConfig.ENABLED) {
-                    getProfiler().recordLifecycleEvent("SNAPSHOT_COMPLETED", localEpoch + 1);
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_COMPLETED, localEpoch + 1);
                 }
                 LOG.debug("[DataPerturbation] Background snapshot computation complete");
             } catch (EnclaveServiceException e) {

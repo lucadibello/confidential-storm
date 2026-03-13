@@ -1,5 +1,6 @@
 package ch.usi.inf.confidentialstorm.host.profiling;
 
+import ch.usi.inf.confidentialstorm.host.bolts.LifecycleEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,7 +112,8 @@ public final class BoltProfiler {
      * Records a lifecycle event (e.g., COMPONENT_STARTED, COMPONENT_STOPPING).
      * Written immediately to both log and CSV (not buffered like regular metrics).
      */
-    public void recordLifecycleEvent(String eventName) {
+    public void recordLifecycleEvent(LifecycleEvent event) {
+        String eventName = event.name();
         LOG.info(ProfilerReport.toLifecycleLogLine(componentId, taskId, eventName));
         synchronized (this) {
             PrintWriter writer = getCsvWriter();
@@ -125,7 +127,8 @@ public final class BoltProfiler {
      * Records a lifecycle event with an associated epoch number (e.g., EPOCH_ADVANCED).
      * The epoch is stored in the CSV {@code total} column for analysis.
      */
-    public void recordLifecycleEvent(String eventName, int epoch) {
+    public void recordLifecycleEvent(LifecycleEvent event, int epoch) {
+        String eventName = event.name();
         LOG.info(ProfilerReport.toLifecycleLogLine(componentId, taskId, eventName, epoch));
         synchronized (this) {
             PrintWriter writer = getCsvWriter();
