@@ -81,15 +81,16 @@ RUN GROUP_NAME="${REMOTE_GROUP}" \
     fi \
     && usermod -aG sudo "${REMOTE_USER}" \
     && echo "${REMOTE_USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-"${REMOTE_USER}" \
-    && chmod 0440 /etc/sudoers.d/90-"${REMOTE_USER}"
+    && chmod 0440 /etc/sudoers.d/90-"${REMOTE_USER}" \
+    && echo "${REMOTE_USER}:root" | chpasswd
 
 # SSH server configuration
 RUN mkdir -p /var/run/sshd \
     && ssh-keygen -A \
-    && sed -i 's/^#\?Port .*/Port 2222/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?Port .*/Port 1234/' /etc/ssh/sshd_config \
     && sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
     && sed -i 's/^#\?PubkeyAuthentication .*/PubkeyAuthentication no/' /etc/ssh/sshd_config \
-    && sed -i 's/^#\?PermitRootLogin .*/PermitRootLogin no/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?PermitRootLogin .*/PermitRootLogin yes/' /etc/ssh/sshd_config \
     && sed -i 's/^#\?UsePAM .*/UsePAM yes/' /etc/ssh/sshd_config \
     && grep -qxF 'AllowTcpForwarding yes' /etc/ssh/sshd_config || echo 'AllowTcpForwarding yes' >> /etc/ssh/sshd_config \
     && grep -qxF 'X11Forwarding yes' /etc/ssh/sshd_config || echo 'X11Forwarding yes' >> /etc/ssh/sshd_config
@@ -124,7 +125,7 @@ RUN mkdir -p /home/${REMOTE_USER}/.storm
 COPY .devcontainer/devcontainer-entrypoint.sh /usr/local/bin/devcontainer-entrypoint
 RUN chmod +x /usr/local/bin/devcontainer-entrypoint
 
-EXPOSE 2222
+EXPOSE 1234
 
 ENTRYPOINT ["/usr/local/bin/devcontainer-entrypoint"]
 CMD ["/usr/sbin/sshd", "-D", "-e"]
