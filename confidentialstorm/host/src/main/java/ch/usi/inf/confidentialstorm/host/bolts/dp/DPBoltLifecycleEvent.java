@@ -6,5 +6,7 @@ public enum DPBoltLifecycleEvent implements LifecycleEvent {
     EPOCH_ADVANCED,
     MAX_EPOCH_REACHED,
     SNAPSHOT_STARTED,
-    SNAPSHOT_COMPLETED
+    SNAPSHOT_COMPLETED,
+    TICK_INTERVAL_SECS,
+    MAX_EPOCHS_CONFIGURED
 }

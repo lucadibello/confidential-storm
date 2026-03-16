@@ -126,6 +126,11 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
 
         coordinator.awaitStartup(() ->
                 LOG.info("[DataPerturbation] Task {} ready -- starting epoch processing", getTaskId()));
+
+        if (ProfilerConfig.ENABLED) {
+            getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.TICK_INTERVAL_SECS, getTickIntervalSecs());
+            getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCHS_CONFIGURED, getMaxEpochs());
+        }
     }
 
     @Override

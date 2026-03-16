@@ -9,13 +9,13 @@ ENCLAVE_PROFILE ?= -Pnative
 
 TOPOLOGY_JAR   := host/target/synthetic-dp-histogram-host-1.0-SNAPSHOT.jar
 TOPOLOGY_CLASS := ch.usi.inf.examples.synthetic_dp.host.SyntheticTopology
-TOPOLOGY_NAME  := SyntheticDP1
+TOPOLOGY_NAME  ?= SyntheticDP1
 
 # Topology arguments passed to the topology main class (e.g. --num-users 100000 --parallelism 2)
 TOPOLOGY_ARGS ?=
 
 .PHONY: all build help clean common enclave host \
-        run-local run-test build-profiled run-profiled cluster-submit-profiled
+        run-local run-test build-profiled run-profiled cluster-submit-profiled grid-search
 
 all: build
 
@@ -108,3 +108,7 @@ cluster-submit-profiled: build-profiled
 	@echo "Submitting $(TOPOLOGY_NAME) to cluster with profiling enabled..."
 	storm jar $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) $(TOPOLOGY_ARGS)
 	@echo "Topology submitted with profiling. CSV reports will be at $(PROFILER_OUTPUT_DIR)/profiler-*.csv"
+
+grid-search:
+	@echo "Starting automated grid search benchmark..."
+	@python3 ../scripts/run-grid-search.py --mode enclave

@@ -82,6 +82,11 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
 
         expectedUpstreamTasks = getExpectedUpstreamTaskCount(context);
         LOG.info("[HistogramAggregation] Expecting {} upstream producers", expectedUpstreamTasks);
+
+        if (ProfilerConfig.ENABLED) {
+            getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.TICK_INTERVAL_SECS, getTickIntervalSecs());
+            getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCHS_CONFIGURED, getMaxEpochs());
+        }
     }
 
     protected abstract int getExpectedUpstreamTaskCount(TopologyContext context);
