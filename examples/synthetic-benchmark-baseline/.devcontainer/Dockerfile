@@ -13,7 +13,7 @@ ARG GIT_EMAIL=lucadibello@proton.me
 ARG GIT_NAME="Luca Di Bello"
 
 ARG OPENJDK_VERSION=17
-ARG MAVEN_VERSION=3.9.12
+ARG MAVEN_VERSION=3.9.14
 ARG STORM_VERSION=2.8.3
 ARG APACHE_MIRROR=https://dlcdn.apache.org/storm
 
@@ -34,7 +34,7 @@ RUN apt-get update \
     git \
     \
     # Networking & crypto
-    ca-certificates curl \
+    ca-certificates curl openssh-client openssh-server \
     \
     # Archiving
     tar unzip \
@@ -83,6 +83,17 @@ RUN GROUP_NAME="${REMOTE_GROUP}" \
     && echo "${REMOTE_USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-"${REMOTE_USER}" \
     && chmod 0440 /etc/sudoers.d/90-"${REMOTE_USER}"
 
+# SSH server configuration
+RUN mkdir -p /var/run/sshd \
+    && ssh-keygen -A \
+    && sed -i 's/^#\?Port .*/Port 2222/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?PubkeyAuthentication .*/PubkeyAuthentication no/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?PermitRootLogin .*/PermitRootLogin no/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?UsePAM .*/UsePAM yes/' /etc/ssh/sshd_config \
+    && grep -qxF 'AllowTcpForwarding yes' /etc/ssh/sshd_config || echo 'AllowTcpForwarding yes' >> /etc/ssh/sshd_config \
+    && grep -qxF 'X11Forwarding yes' /etc/ssh/sshd_config || echo 'X11Forwarding yes' >> /etc/ssh/sshd_config
+
 # Install Maven
 RUN set -eux; \
     curl -fsSL "https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
@@ -103,17 +114,17 @@ RUN set -eux; \
     echo "Storm ${STORM_VERSION} installed."
 
 # Set JAVA_HOME to the installed OpenJDK
-RUN JAVA_PATH="$(update-java-alternatives -l 2>/dev/null | awk '{print $3}' | head -1)" \
-    && echo "JAVA_HOME=${JAVA_PATH}" >> /etc/environment \
-    && echo "export JAVA_HOME=${JAVA_PATH}" >> /etc/profile.d/java.sh
+#RUN JAVA_PATH="$(update-java-alternatives -l 2>/dev/null | awk '{print $3}' | head -1)" \
+#    && echo "JAVA_HOME=${JAVA_PATH}" >> /etc/environment \
+#    && echo "export JAVA_HOME=${JAVA_PATH}" >> /etc/profile.d/java.sh
 
 # Create Storm client config directory
 RUN mkdir -p /home/${REMOTE_USER}/.storm
 
-COPY examples/synthetic-benchmark-baseline/.devcontainer/devcontainer-entrypoint.sh /usr/local/bin/devcontainer-entrypoint
+COPY .devcontainer/devcontainer-entrypoint.sh /usr/local/bin/devcontainer-entrypoint
 RUN chmod +x /usr/local/bin/devcontainer-entrypoint
 
 EXPOSE 2222
 
 ENTRYPOINT ["/usr/local/bin/devcontainer-entrypoint"]
-CMD ["bash"]
+CMD ["/usr/sbin/sshd", "-D", "-e"]

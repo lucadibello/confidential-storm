@@ -1,5 +1,5 @@
 # Requires: devcontainer CLI (npm i -g @devcontainers/cli) and Docker.
-WORKSPACE       ?= ../../..
+WORKSPACE       ?= ..
 CONTAINER_NAME  ?= baseline-benchmark-devcontainer
 SESSION         ?= dev
 

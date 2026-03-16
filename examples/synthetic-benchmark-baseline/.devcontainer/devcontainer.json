@@ -2,13 +2,13 @@
   "name": "Baseline Synthetic Benchmark (No SGX)",
   "build": {
     "dockerfile": "Dockerfile",
-    "context": "../../..",
+    "context": "..",
     "args": {
       "REMOTE_USER": "dev",
       "REMOTE_UID": "1010",
       "REMOTE_GID": "1010",
-      "STORM_VERSION": "2.8.3",
-      "MAVEN_VERSION": "3.9.12",
+      "STORM_VERSION": "2.8.4",
+      "MAVEN_VERSION": "3.9.14",
       "GIT_EMAIL": "lucadibello@proton.me",
       "GIT_NAME": "Luca Di Bello"
     }
@@ -19,9 +19,9 @@
     "--network", "storm-net"
   ],
   "overrideCommand": false,
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "workspaceFolder": "/workspaces/confidential-storm/examples/synthetic-benchmark-baseline",
   "mounts": [
-    "source=${localWorkspaceFolder}/conf/storm.yaml,target=/home/dev/.storm/storm.yaml,type=bind,readonly"
+    "source=${localWorkspaceFolder}/.devcontainer/conf/storm.yaml,target=/home/dev/.storm/storm.yaml,type=bind,readonly"
   ],
   "postCreateCommand": "sudo passwd dev"
 }
