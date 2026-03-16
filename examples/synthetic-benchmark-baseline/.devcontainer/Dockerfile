@@ -40,7 +40,7 @@ RUN apt-get update \
     tar unzip \
     \
     # Shell & terminal
-    sudo zsh \
+    sudo zsh tmux \
     \
     # Java
     openjdk-${OPENJDK_VERSION}-jdk \
