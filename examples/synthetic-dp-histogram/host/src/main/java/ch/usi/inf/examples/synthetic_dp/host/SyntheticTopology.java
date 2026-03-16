@@ -113,6 +113,9 @@ public class SyntheticTopology {
         if (cliArgs.containsKey("parallelism")) {
             System.setProperty("synthetic.parallelism", cliArgs.get("parallelism"));
         }
+        if (cliArgs.containsKey("tick-interval")) {
+            System.setProperty("dp.tick.interval.secs", cliArgs.get("tick-interval"));
+        }
 
         // Apply test mode: force parallelism=1 unless already overridden by --parallelism
         if (testMode && !cliArgs.containsKey("parallelism")) {
@@ -123,9 +126,6 @@ public class SyntheticTopology {
         int numKeys = cliArgs.containsKey("num-keys") ? Integer.parseInt(cliArgs.get("num-keys")) : Integer.getInteger("synthetic.num.keys", 1_000_000);
         long seed = cliArgs.containsKey("seed") ? Long.parseLong(cliArgs.get("seed")) : Long.getLong("synthetic.seed", 42L);
         int runId = cliArgs.containsKey("run-id") ? Integer.parseInt(cliArgs.get("run-id")) : Integer.getInteger("synthetic.run.id", 1);
-        int runtimeSeconds = cliArgs.containsKey("runtime-seconds")
-                ? Integer.parseInt(cliArgs.get("runtime-seconds"))
-                : Integer.getInteger("synthetic.runtime.seconds", 120);
         boolean groundTruth = cliArgs.containsKey("ground-truth")
                 ? Boolean.parseBoolean(cliArgs.get("ground-truth"))
                 : Boolean.getBoolean("synthetic.ground-truth.enabled");
@@ -133,8 +133,8 @@ public class SyntheticTopology {
         LOG.info("=== Synthetic DP Histogram Topology ===");
         LOG.info("Mode: {}", testMode ? "TEST (parallelism=1)" : "BENCHMARK");
         LOG.info("Run ID: {}", runId);
-        LOG.info("Runtime: {} seconds ({} minutes)", runtimeSeconds, runtimeSeconds / 60.0);
         LOG.info("DP Config: {}", DPConfig.describe());
+        LOG.info("Tick interval: {}s", Integer.getInteger("dp.tick.interval.secs", 5));
         LOG.info("Profiler: enabled={}, sampleRate={}, reportTicks={}, outputDir={}",
                 ProfilerConfig.ENABLED, ProfilerConfig.SAMPLE_RATE,
                 ProfilerConfig.REPORT_INTERVAL_TICKS, ProfilerConfig.OUTPUT_DIR);
@@ -154,7 +154,6 @@ public class SyntheticTopology {
         conf.put("synthetic.num.users", numUsers);
         conf.put("synthetic.num.keys", numKeys);
         conf.put("synthetic.seed", seed);
-        conf.put("synthetic.runtime.seconds", runtimeSeconds);
         conf.put("synthetic.run.id", runId);
         conf.put("synthetic.ground-truth.enabled", String.valueOf(groundTruth));
 

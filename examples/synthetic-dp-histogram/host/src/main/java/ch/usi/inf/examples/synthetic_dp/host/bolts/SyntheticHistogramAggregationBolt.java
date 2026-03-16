@@ -38,6 +38,11 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
     }
 
     @Override
+    protected int getTickIntervalSecs() {
+        return Integer.getInteger("dp.tick.interval.secs", 5);
+    }
+
+    @Override
     protected int getExpectedUpstreamTaskCount(TopologyContext context) {
         return context.getComponentTasks(
                 ComponentConstants.BOLT_DATA_PERTURBATION.toString()

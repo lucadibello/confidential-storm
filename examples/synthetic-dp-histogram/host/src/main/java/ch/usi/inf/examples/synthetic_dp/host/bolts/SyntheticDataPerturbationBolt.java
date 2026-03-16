@@ -31,6 +31,11 @@ public class SyntheticDataPerturbationBolt extends AbstractDataPerturbationBolt 
     }
 
     @Override
+    protected int getTickIntervalSecs() {
+        return Integer.getInteger("dp.tick.interval.secs", 5);
+    }
+
+    @Override
     protected boolean useEncryptedSnapshots() {
         return true;
     }
