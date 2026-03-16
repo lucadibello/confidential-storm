@@ -1,6 +1,9 @@
 package ch.usi.inf.examples.synthetic_baseline.spouts;
 
 import ch.usi.inf.examples.synthetic_baseline.config.DPConfig;
+import ch.usi.inf.examples.synthetic_baseline.profiling.BaselineBoltLifecycleEvent;
+import ch.usi.inf.examples.synthetic_baseline.profiling.BoltProfiler;
+import ch.usi.inf.examples.synthetic_baseline.profiling.ProfilerConfig;
 import ch.usi.inf.examples.synthetic_baseline.util.GroundTruthCollector;
 import ch.usi.inf.examples.synthetic_baseline.util.ZipfMandelbrotDistribution;
 import org.apache.storm.spout.SpoutOutputCollector;
@@ -29,6 +32,8 @@ public class BaselineSpout extends BaseRichSpout {
     private int numKeys;
     private boolean groundTruthEnabled;
 
+    private transient BoltProfiler profiler;
+
     private ZipfMandelbrotDistribution keyDistribution;
     private Random rng;
     private final AtomicLong totalRecordsEmitted = new AtomicLong(0);
@@ -55,6 +60,19 @@ public class BaselineSpout extends BaseRichSpout {
 
         if (groundTruthEnabled) {
             this.userContributionCounts = new ConcurrentHashMap<>();
+        }
+
+        if (ProfilerConfig.ENABLED) {
+            this.profiler = new BoltProfiler(context.getThisComponentId(), context.getThisTaskId());
+            profiler.recordLifecycleEvent(BaselineBoltLifecycleEvent.COMPONENT_STARTED);
+        }
+    }
+
+    @Override
+    public void close() {
+        if (ProfilerConfig.ENABLED && profiler != null) {
+            profiler.recordLifecycleEvent(BaselineBoltLifecycleEvent.COMPONENT_STOPPING);
+            profiler.writeReport();
         }
     }
 

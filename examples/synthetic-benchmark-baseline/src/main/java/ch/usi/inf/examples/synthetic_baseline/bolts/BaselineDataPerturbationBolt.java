@@ -40,6 +40,8 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
     private int taskId;
     private StreamingDPMechanism mechanism;
 
+    private int maxTimeSteps;
+    private int tickIntervalSecs;
     private int localEpoch = 0;
     private transient AtomicReference<Map<String, Long>> completedSnapshot;
     private transient Thread snapshotThread;
@@ -59,9 +61,10 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
         this.snapshotThread = null;
         this.serviceLock = new Object();
 
-        // Initialize the DP mechanism with the same sigma calibration as the enclave version
-        int maxTimeSteps = DPConfig.maxTimeSteps();
-        long mu = DPConfig.mu();
+        // Read runtime config from topology conf (set by the submitter via Storm Config),
+        this.maxTimeSteps = ((Number) topoConf.getOrDefault("dp.max.time.steps", DPConfig.maxTimeSteps())).intValue();
+        this.tickIntervalSecs = ((Number) topoConf.getOrDefault("dp.tick.interval.secs", 5)).intValue();
+        long mu = ((Number) topoConf.getOrDefault("dp.mu", DPConfig.mu())).longValue();
 
         // Budget split (from SyntheticDataPerturbationServiceProvider):
         //   epsilon: 50/50 split
@@ -74,7 +77,7 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
         double sigmaHist = DPUtil.calculateSigma(rhoH, maxTimeSteps, l1Sens);
 
         this.mechanism = new StreamingDPMechanism(
-                sigmaKey, sigmaHist, maxTimeSteps, mu, DPConfig.MAX_CONTRIBUTIONS_PER_USER);
+                sigmaKey, sigmaHist, this.maxTimeSteps, mu, DPConfig.MAX_CONTRIBUTIONS_PER_USER);
 
         LOG.info("[BaselineDataPerturbation {}] DP mechanism initialized: sigmaKey={}, sigmaHist={}, maxTimeSteps={}, mu={}",
                 taskId, sigmaKey, sigmaHist, maxTimeSteps, mu);
@@ -107,21 +110,17 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
         if (ProfilerConfig.ENABLED) {
             this.profiler = new BoltProfiler(context.getThisComponentId(), taskId);
             profiler.recordLifecycleEvent(BaselineBoltLifecycleEvent.COMPONENT_STARTED);
-            profiler.recordLifecycleEvent(DPBoltLifecycleEvent.TICK_INTERVAL_SECS, getTickIntervalSecs());
-            profiler.recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCHS_CONFIGURED, DPConfig.maxTimeSteps());
+            profiler.recordLifecycleEvent(DPBoltLifecycleEvent.TICK_INTERVAL_SECS, tickIntervalSecs);
+            profiler.recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCHS_CONFIGURED, maxTimeSteps);
         }
 
         LOG.info("[BaselineDataPerturbation {}] Prepared with {} replicas", taskId, totalReplicas);
     }
 
-    private int getTickIntervalSecs() {
-        return Integer.getInteger("dp.tick.interval.secs", 5);
-    }
-
     @Override
     public Map<String, Object> getComponentConfiguration() {
         Map<String, Object> config = new HashMap<>();
-        config.put(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, getTickIntervalSecs());
+        config.put(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, Integer.getInteger("dp.tick.interval.secs", 5));
         return config;
     }
 
@@ -188,10 +187,10 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
             }
             LOG.info("[BaselineDataPerturbation] Task {} emitted real partial for epoch {}", taskId, localEpoch);
 
-            if (DPConfig.maxTimeSteps() > 0 && localEpoch >= DPConfig.maxTimeSteps()) {
+            if (maxTimeSteps > 0 && localEpoch >= maxTimeSteps) {
                 finished = true;
                 LOG.info("[BaselineDataPerturbation] Task {} reached max epochs ({}), deactivating",
-                        taskId, DPConfig.maxTimeSteps());
+                        taskId, maxTimeSteps);
                 if (ProfilerConfig.ENABLED) {
                     profiler.recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCH_REACHED, localEpoch);
                     profiler.writeReport();

@@ -40,6 +40,8 @@ public class BaselineHistogramAggregationBolt extends BaseRichBolt {
 
     private OutputCollector collector;
     private int expectedUpstreamTasks = -1;
+    private int maxTimeSteps;
+    private int tickIntervalSecs;
     private boolean finished = false;
 
     // Tick-based release state
@@ -67,21 +69,19 @@ public class BaselineHistogramAggregationBolt extends BaseRichBolt {
         this.outputFile = String.format("%s/synthetic-report-run%d.txt", OUTPUT_DIR, RUN_ID);
     }
 
-    private int getTickIntervalSecs() {
-        return Integer.getInteger("dp.tick.interval.secs", 5);
-    }
-
     @Override
     public void prepare(Map<String, Object> topoConf, TopologyContext context, OutputCollector collector) {
         this.collector = collector;
         this.expectedUpstreamTasks = context.getComponentTasks(
                 ComponentConstants.BOLT_DATA_PERTURBATION).size();
+        this.maxTimeSteps = ((Number) topoConf.getOrDefault("dp.max.time.steps", DPConfig.maxTimeSteps())).intValue();
+        this.tickIntervalSecs = ((Number) topoConf.getOrDefault("dp.tick.interval.secs", 5)).intValue();
 
         if (ProfilerConfig.ENABLED) {
             this.profiler = new BoltProfiler(context.getThisComponentId(), context.getThisTaskId());
             profiler.recordLifecycleEvent(BaselineBoltLifecycleEvent.COMPONENT_STARTED);
-            profiler.recordLifecycleEvent(DPBoltLifecycleEvent.TICK_INTERVAL_SECS, getTickIntervalSecs());
-            profiler.recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCHS_CONFIGURED, DPConfig.maxTimeSteps());
+            profiler.recordLifecycleEvent(DPBoltLifecycleEvent.TICK_INTERVAL_SECS, tickIntervalSecs);
+            profiler.recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCHS_CONFIGURED, maxTimeSteps);
         }
 
         LOG.info("[BaselineHistogramAggregation] Expecting {} upstream producers, output: {}",
@@ -91,7 +91,7 @@ public class BaselineHistogramAggregationBolt extends BaseRichBolt {
     @Override
     public Map<String, Object> getComponentConfiguration() {
         Map<String, Object> config = new HashMap<>();
-        config.put(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, getTickIntervalSecs());
+        config.put(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, Integer.getInteger("dp.tick.interval.secs", 5));
         return config;
     }
 
@@ -217,10 +217,10 @@ public class BaselineHistogramAggregationBolt extends BaseRichBolt {
             }
 
             // Check max epoch limit
-            if (DPConfig.maxTimeSteps() > 0 && lastCompletedEpoch >= DPConfig.maxTimeSteps()) {
+            if (maxTimeSteps > 0 && lastCompletedEpoch >= maxTimeSteps) {
                 finished = true;
                 LOG.info("[BaselineHistogramAggregation] Reached max epochs ({}), deactivating",
-                        DPConfig.maxTimeSteps());
+                        maxTimeSteps);
                 if (ProfilerConfig.ENABLED) {
                     profiler.recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCH_REACHED, lastCompletedEpoch);
                     profiler.writeReport();
