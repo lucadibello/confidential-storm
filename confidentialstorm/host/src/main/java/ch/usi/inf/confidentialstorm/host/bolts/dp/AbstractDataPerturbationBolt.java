@@ -38,8 +38,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * <b>Tick lifecycle</b>:
  * <ol>
  *   <li>Tick arrives -> read targetEpoch (locally cached by Curator's {@code SharedCount})</li>
- *   <li>Fallback: if behind target and no bg thread running (listener missed), start bg thread</li>
  *   <li>If bg thread finished: emit real partial, advance localEpoch, register completion</li>
+ *   <li>Fallback: if behind target and no bg thread running (listener missed), start bg thread</li>
  *   <li>If bg thread still running or just started: emit dummy (except on the very first tick)</li>
  *   <li>Try to advance global epoch via versioned CAS</li>
  * </ol>
@@ -75,12 +75,6 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
      */
     private transient Object serviceLock;
 
-    /**
-     * Guards against epoch chaining: set to true when a real partial is emitted
-     * during a tick, reset at the start of each tick. Prevents the SharedCountListener
-     * from starting a new background snapshot if we already advanced this tick.
-     */
-    private volatile boolean advancedThisTick = false;
 
     /**
      * Set to true when the bolt has reached {@link #getMaxEpochs()} and should stop processing.
@@ -115,7 +109,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
         // start the next background computation immediately (from the Curator event thread).
         DataPerturbationService service = state.getEnclaveManager().getService();
         coordinator.setOnEpochAdvanced(() -> {
-            if (!finished && !advancedThisTick
+            if (!finished
                     && coordinator.getTargetEpoch() > localEpoch
                     && (snapshotThread == null || !snapshotThread.isAlive())) {
                 LOG.info("[DataPerturbation] Task {} starting bg snapshot from watch (localEpoch={}, targetEpoch={})",
@@ -245,8 +239,6 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     }
 
     private void handleEncryptedTick(DataPerturbationService service, int targetEpoch) throws EnclaveServiceException {
-        advancedThisTick = false;
-
         // 1. Check if a previously started bg computation finished.
         //    IMPORTANT: must check BEFORE the fallback to avoid starting a redundant
         //    snapshot when the listener-started one already completed (which would
@@ -258,7 +250,6 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
             processEncryptedSnapshot(result);
             localEpoch++;
             coordinator.registerCompletion(localEpoch);
-            advancedThisTick = true;
             if (ProfilerConfig.ENABLED) {
                 getProfiler().incrementCounter("real_emissions");
                 getProfiler().recordGauge("contributions_this_epoch", contributionsThisEpoch);

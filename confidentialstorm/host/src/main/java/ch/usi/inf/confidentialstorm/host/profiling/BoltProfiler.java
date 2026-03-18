@@ -110,7 +110,6 @@ public final class BoltProfiler {
 
     /**
      * Records a lifecycle event (e.g., COMPONENT_STARTED, COMPONENT_STOPPING).
-     * Written immediately to both log and CSV (not buffered like regular metrics).
      */
     public void recordLifecycleEvent(LifecycleEvent event) {
         String eventName = event.name();
@@ -125,7 +124,6 @@ public final class BoltProfiler {
 
     /**
      * Records a lifecycle event with an associated epoch number (e.g., EPOCH_ADVANCED).
-     * The epoch is stored in the CSV {@code total} column for analysis.
      */
     public void recordLifecycleEvent(LifecycleEvent event, int epoch) {
         String eventName = event.name();
@@ -140,7 +138,6 @@ public final class BoltProfiler {
 
     /**
      * Flushes the final CSV snapshot, closes the writer, and logs a final summary.
-     * Called from {@code cleanup()}.
      */
     public void writeReport() {
         dumpToLog();
@@ -156,7 +153,6 @@ public final class BoltProfiler {
 
     /**
      * Appends the current window's stats as CSV rows to the report file.
-     * The file is opened lazily on first call and kept open for the bolt's lifetime.
      */
     private synchronized void appendCsvSnapshot() {
         PrintWriter writer = getCsvWriter();
@@ -167,9 +163,7 @@ public final class BoltProfiler {
     }
 
     /**
-     * Opens the CSV writer lazily. The header is written immediately upon file creation
-     * so that it always precedes any data rows — even when called from concurrent threads
-     * (e.g., the background snapshot thread).
+     * Opens the CSV writer lazily. If the file doesn't exist, creates it and writes the header.
      */
     private PrintWriter getCsvWriter() {
         if (csvWriter != null) return csvWriter;
