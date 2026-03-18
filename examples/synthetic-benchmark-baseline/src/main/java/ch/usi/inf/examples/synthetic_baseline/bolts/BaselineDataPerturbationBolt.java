@@ -46,7 +46,7 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
     private transient AtomicReference<Map<String, Long>> completedSnapshot;
     private transient Thread snapshotThread;
     private transient Object serviceLock;
-    private volatile boolean advancedThisTick = false;
+
     private volatile boolean finished = false;
 
     private transient EpochBarrierCoordinator coordinator;
@@ -94,7 +94,7 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
 
         // Register listener: when epoch advances, start bg snapshot
         coordinator.setOnEpochAdvanced(() -> {
-            if (!finished && !advancedThisTick
+            if (!finished
                     && coordinator.getTargetEpoch() > localEpoch
                     && (snapshotThread == null || !snapshotThread.isAlive())) {
                 LOG.info("[BaselineDataPerturbation] Task {} starting bg snapshot from watch (localEpoch={}, targetEpoch={})",
@@ -163,8 +163,6 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
         }
 
         int targetEpoch = coordinator.getTargetEpoch();
-        advancedThisTick = false;
-
         if (ProfilerConfig.ENABLED) {
             profiler.recordGauge("epoch_lag", targetEpoch - localEpoch);
         }
@@ -177,7 +175,6 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
             emitHistogram(result, false);
             localEpoch++;
             coordinator.registerCompletion(localEpoch);
-            advancedThisTick = true;
 
             if (ProfilerConfig.ENABLED) {
                 profiler.incrementCounter("real_emissions");
