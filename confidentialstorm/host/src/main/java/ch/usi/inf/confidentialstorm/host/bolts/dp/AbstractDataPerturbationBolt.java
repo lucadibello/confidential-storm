@@ -118,8 +118,12 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
             }
         });
 
-        coordinator.awaitStartup(() ->
-                LOG.info("[DataPerturbation] Task {} ready -- starting epoch processing", getTaskId()));
+        coordinator.awaitStartup(() -> {
+                LOG.info("[DataPerturbation] Task {} ready -- starting epoch processing", getTaskId());
+                if (ProfilerConfig.ENABLED) {
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.BARRIER_RELEASED);
+                }
+        });
 
         if (ProfilerConfig.ENABLED) {
             getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.TICK_INTERVAL_SECS, getTickIntervalSecs());

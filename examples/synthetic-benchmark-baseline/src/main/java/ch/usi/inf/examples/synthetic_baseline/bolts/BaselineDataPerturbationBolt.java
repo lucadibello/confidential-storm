@@ -103,8 +103,12 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
             }
         });
 
-        coordinator.awaitStartup(() ->
-                LOG.info("[BaselineDataPerturbation] Task {} ready -- starting epoch processing", taskId));
+        coordinator.awaitStartup(() -> {
+                LOG.info("[BaselineDataPerturbation] Task {} ready -- starting epoch processing", taskId);
+                if (ProfilerConfig.ENABLED && profiler != null) {
+                    profiler.recordLifecycleEvent(DPBoltLifecycleEvent.BARRIER_RELEASED);
+                }
+        });
 
         // Initialize profiler
         if (ProfilerConfig.ENABLED) {

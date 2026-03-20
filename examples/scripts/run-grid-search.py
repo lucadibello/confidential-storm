@@ -144,6 +144,23 @@ def latest_epoch(component):
     return best
 
 
+def sum_counter(component, counter_name):
+    """Sum a profiler counter across all tasks and CSV snapshots for a component.
+
+    Counter rows have the format: timestamp,component,taskId,counter,<name>,<total>,...
+    The 'total' field is cumulative per task, so we take the *latest* (highest)
+    value per taskId and sum across tasks.
+    """
+    per_task = {}  # type: dict[str, int]
+    for cols in _iter_profiler_csvs():
+        if len(cols) >= 6 and cols[1] == component and cols[3] == "counter" and cols[4] == counter_name:
+            try:
+                per_task[cols[2]] = max(per_task.get(cols[2], 0), int(cols[5]))
+            except ValueError:
+                pass
+    return sum(per_task.values())
+
+
 # ---------------------------------------------------------------------------
 # Worker log scanning
 # ---------------------------------------------------------------------------
@@ -254,7 +271,7 @@ def run_storm(*args):
 
 
 def wait_for_startup(p):
-    """Wait for all components to emit COMPONENT_STARTED via profiler CSVs."""
+    """Wait for all components to emit COMPONENT_STARTED and DP bolts to pass BARRIER_RELEASED."""
     expected_started = 2 * p.parallelism + 2  # dp + agg + bounding + spout
     startup_elapsed = 0
     all_started = False
@@ -269,13 +286,18 @@ def wait_for_startup(p):
         spout_started = count_lifecycle_event(SPOUT_COMPONENT, "COMPONENT_STARTED")
         total_started = dp_started + agg_started + bounding_started + spout_started
 
-        print("[run {}] startup {}s: started {}/{} (dp={}/{}, agg={}/1, bounding={}/{}, spout={}/1)".format(
+        dp_barrier = count_lifecycle_event(DP_COMPONENT, "BARRIER_RELEASED")
+
+        print("[run {}] startup {}s: started {}/{} (dp={}/{}, agg={}/1, bounding={}/{}, spout={}/1)"
+              " barrier={}/{}".format(
             p.run_id, startup_elapsed, total_started, expected_started,
             dp_started, p.parallelism, agg_started,
-            bounding_started, p.parallelism, spout_started))
+            bounding_started, p.parallelism, spout_started,
+            dp_barrier, p.parallelism))
 
-        if total_started >= expected_started:
-            print("[run {}] All components started after {}s.".format(p.run_id, startup_elapsed))
+        if total_started >= expected_started and dp_barrier >= p.parallelism:
+            print("[run {}] All components started and DP barrier released after {}s.".format(
+                p.run_id, startup_elapsed))
             all_started = True
             break
 
@@ -301,10 +323,15 @@ def poll_completion(p, topo_name, max_wait):
         dp_epoch = latest_epoch(DP_COMPONENT)
         agg_epoch = latest_epoch(AGG_COMPONENT)
 
-        print("[run {}] {}s: dp={}/{} (epoch {}/{}), agg={}/{} (epoch {}/{})".format(
+        agg_dummies = sum_counter(AGG_COMPONENT, "dummies_received")
+        agg_reals = sum_counter(AGG_COMPONENT, "real_partials_received")
+
+        print("[run {}] {}s: dp={}/{} (epoch {}/{}), agg={}/{} (epoch {}/{})"
+              " | agg partials: real={} dummy={}".format(
             p.run_id, elapsed,
             dp_done, expected_dp, dp_epoch, p.max_time_steps,
-            agg_done, expected_agg, agg_epoch, p.max_time_steps))
+            agg_done, expected_agg, agg_epoch, p.max_time_steps,
+            agg_reals, agg_dummies))
 
         if dp_done >= expected_dp and agg_done >= expected_agg:
             print("[run {}] All {} tasks reached max epoch after {}s.".format(
@@ -485,6 +512,8 @@ def execute_run(p):
         "worker_oom_detected={}".format(str(errors.oom).lower()),
         "worker_fatal_detected={}".format(str(errors.fatal).lower()),
         "worker_error_count={}".format(worker_crash_count),
+        "agg_dummies_received={}".format(sum_counter(AGG_COMPONENT, "dummies_received")),
+        "agg_real_partials_received={}".format(sum_counter(AGG_COMPONENT, "real_partials_received")),
     ]
 
     with open(str(run_dir / "params.txt"), "w") as f:
