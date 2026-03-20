@@ -1142,16 +1142,12 @@ def emission_timeline(
     # ---- Top panel: cumulative emissions (summed across tasks) ----
     _draw_grid(ax_top)
     # Collect all unique timestamps, aggregate across tasks
-    all_real = pd.concat(
-        [ts["real_emissions"][["elapsed_s", "total"]] for ts in task_series.values()
-         if "real_emissions" in ts],
-        ignore_index=True,
-    )
-    all_dummy = pd.concat(
-        [ts["dummy_emissions"][["elapsed_s", "total"]] for ts in task_series.values()
-         if "dummy_emissions" in ts],
-        ignore_index=True,
-    )
+    _real_parts = [ts["real_emissions"][["elapsed_s", "total"]] for ts in task_series.values()
+                   if "real_emissions" in ts]
+    all_real = pd.concat(_real_parts, ignore_index=True) if _real_parts else pd.DataFrame()
+    _dummy_parts = [ts["dummy_emissions"][["elapsed_s", "total"]] for ts in task_series.values()
+                    if "dummy_emissions" in ts]
+    all_dummy = pd.concat(_dummy_parts, ignore_index=True) if _dummy_parts else pd.DataFrame()
     if not all_real.empty:
         cum_real = all_real.groupby("elapsed_s")["total"].sum().sort_index()
         ax_top.step(cum_real.index, cum_real.values, where="post",
@@ -1160,50 +1156,40 @@ def emission_timeline(
         cum_dummy = all_dummy.groupby("elapsed_s")["total"].sum().sort_index()
         ax_top.step(cum_dummy.index, cum_dummy.values, where="post",
                     color="#E74C3C", linewidth=1.5, label="Dummy (cumulative)")
+    elif not all_real.empty:
+        # No dummy data — show a zero line so the absence is explicit
+        ax_top.step(cum_real.index, np.zeros(len(cum_real)), where="post",
+                    color="#E74C3C", linewidth=1.5, label="Dummy (cumulative)")
     ax_top.set_ylabel("Cumulative emissions\n(all tasks)")
     ax_top.set_title(title)
     ax_top.legend(fontsize=8, loc="upper left")
     ax_top.grid(True, axis="y", alpha=0.2)
 
-    # ---- Bottom panel: per-task per-interval bars ----
+    # ---- Bottom panel: per-task cumulative counters (one real + one dummy line per task) ----
     _draw_grid(ax_bot)
-    bar_scale = 0.4  # half-height of a task row
-    for yi, task_id in enumerate(tasks):
-        for name, color, direction in [
-            ("real_emissions", "#27AE60", 1),
-            ("dummy_emissions", "#E74C3C", -1),
-        ]:
-            s = task_series[task_id].get(name)
-            if s is None or s.empty:
-                continue
-            xs = s["elapsed_s"].values
-            deltas = s["delta"].values
-            norm_h = deltas / global_max_delta * bar_scale
+    cmap = plt.get_cmap("tab10")
+    for i, task_id in enumerate(tasks):
+        color = cmap(i % 10)
+        # Real emissions
+        s_real = task_series[task_id].get("real_emissions")
+        if s_real is not None and not s_real.empty:
+            ax_bot.step(s_real["elapsed_s"].values, s_real["total"].values, where="post",
+                        color=color, linewidth=1.3, label=f"Task {task_id} real")
+        # Dummy emissions — plot zeros along real timeline if no dummy data
+        s_dummy = task_series[task_id].get("dummy_emissions")
+        if s_dummy is not None and not s_dummy.empty:
+            ax_bot.step(s_dummy["elapsed_s"].values, s_dummy["total"].values, where="post",
+                        color=color, linewidth=1.0, linestyle="--", alpha=0.6,
+                        label=f"Task {task_id} dummy")
+        elif s_real is not None and not s_real.empty:
+            ax_bot.step(s_real["elapsed_s"].values, np.zeros(len(s_real)), where="post",
+                        color=color, linewidth=1.0, linestyle="--", alpha=0.6,
+                        label=f"Task {task_id} dummy")
 
-            # Compute bar widths from inter-report intervals
-            widths = np.diff(xs, prepend=xs[0] - (xs[1] - xs[0] if len(xs) > 1 else tick_s))
-
-            ax_bot.bar(
-                xs, direction * norm_h, width=widths * 0.9,
-                bottom=yi, align="center",
-                color=color, alpha=0.7, edgecolor="none",
-            )
-
-    ax_bot.set_yticks(range(n_tasks))
-    ax_bot.set_yticklabels([f"DP task {t}" for t in tasks], fontsize=8)
-    ax_bot.invert_yaxis()
     ax_bot.set_xlabel("Elapsed time (s)")
-    ax_bot.set_ylabel("Per-interval emissions")
-    ax_bot.grid(True, axis="y", alpha=0.1)
-
-    # Shared legend for bottom panel
-    legend_handles = [
-        mpatches.Patch(color="#27AE60", alpha=0.7, label="Real emissions"),
-        mpatches.Patch(color="#E74C3C", alpha=0.7, label="Dummy emissions"),
-        plt.Line2D([], [], color="#CCCCCC", linestyle=":", linewidth=0.8, label="Ideal tick"),
-        plt.Line2D([], [], color="#888888", linestyle="-", linewidth=0.8, label="Epoch advance"),
-    ]
-    ax_bot.legend(handles=legend_handles, fontsize=7, ncol=4, loc="upper right")
+    ax_bot.set_ylabel("Cumulative emissions\n(per task)")
+    ax_bot.grid(True, axis="y", alpha=0.2)
+    ax_bot.legend(fontsize=7, ncol=min(n_tasks * 2, 4), loc="upper left")
 
     save_or_show(fig, output_dir, plot_name, fmt, show)
     return fig
