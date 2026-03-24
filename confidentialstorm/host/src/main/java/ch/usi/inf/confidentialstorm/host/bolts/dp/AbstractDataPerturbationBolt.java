@@ -57,11 +57,17 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     private int localEpoch = 0;
 
     /**
-     * Holds the result of the background snapshot computation.
+     * Holds the result of the background encrypted snapshot computation.
      * Set by the background thread, consumed by the main bolt thread on the next tick.
      * null means the computation is still in progress (or hasn't started).
      */
     private transient AtomicReference<EncryptedDataPerturbationSnapshot> completedSnapshot;
+
+    /**
+     * Holds the result of the background plaintext snapshot computation.
+     * Used only when {@link #useEncryptedSnapshots()} returns false.
+     */
+    private transient AtomicReference<DataPerturbationSnapshot> completedPlaintextSnapshot;
 
     /**
      * The background thread running the snapshot computation.
@@ -93,6 +99,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     protected void afterPrepare(Map<String, Object> topoConf, TopologyContext context) {
         super.afterPrepare(topoConf, context);
         this.completedSnapshot = new AtomicReference<>(null);
+        this.completedPlaintextSnapshot = new AtomicReference<>(null);
         this.snapshotThread = null;
         this.serviceLock = new Object();
 
@@ -114,7 +121,13 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                     && (snapshotThread == null || !snapshotThread.isAlive())) {
                 LOG.info("[DataPerturbation] Task {} starting bg snapshot from watch (localEpoch={}, targetEpoch={})",
                         getTaskId(), localEpoch, coordinator.getTargetEpoch());
-                startBackgroundSnapshot(service);
+                
+                // trigger correct snapshot method based on whether we're using encrypted snapshots or not
+                if (useEncryptedSnapshots()) {
+                    startBackgroundSnapshot(service);
+                } else {
+                    startBackgroundPlaintextSnapshot(service);
+                }
             }
         });
 
@@ -301,28 +314,23 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     }
 
     private void handlePlaintextTick(DataPerturbationService service, int targetEpoch) throws EnclaveServiceException {
-        if (targetEpoch > localEpoch) {
-            synchronized (serviceLock) {
-                long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                DataPerturbationSnapshot snapshot = service.getSnapshot();
-                if (t0 != 0) {
-                    getProfiler().recordEcall("getSnapshot", System.nanoTime() - t0);
-                    getProfiler().incrementEcallTotal("getSnapshot");
-                }
-                if (snapshot != null) {
-                    processSnapshot(snapshot.histogramSnapshot());
-                }
-            }
+        // 1. Check if a previously started bg computation finished.
+        DataPerturbationSnapshot result = completedPlaintextSnapshot.getAndSet(null);
+
+        if (result != null) {
+            // Background thread finished -- emit real partial
+            processSnapshot(result.histogramSnapshot());
             localEpoch++;
+            coordinator.registerCompletion(localEpoch);
             if (ProfilerConfig.ENABLED) {
                 getProfiler().incrementCounter("real_emissions");
                 getProfiler().recordGauge("contributions_this_epoch", contributionsThisEpoch);
                 getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.EPOCH_ADVANCED, localEpoch);
                 contributionsThisEpoch = 0;
             }
-            coordinator.registerCompletion(localEpoch);
-            coordinator.tryAdvanceEpoch(targetEpoch);
+            LOG.info("[DataPerturbation] Task {} emitted real partial for epoch {}", getTaskId(), localEpoch);
 
+            // Check if we've reached the max epoch limit
             if (getMaxEpochs() > 0 && localEpoch >= getMaxEpochs()) {
                 finished = true;
                 LOG.info("[DataPerturbation] Task {} reached max epochs ({}), deactivating",
@@ -331,8 +339,34 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                     getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCH_REACHED, localEpoch);
                     getProfiler().writeReport();
                 }
+                return;
+            }
+        } else if (targetEpoch > localEpoch) {
+            // 2. No result ready -- start bg snapshot if not already running (fallback)
+            if (snapshotThread == null || !snapshotThread.isAlive()) {
+                LOG.info("[DataPerturbation] Task {} starting bg snapshot from tick fallback (localEpoch={}, targetEpoch={})",
+                        getTaskId(), localEpoch, targetEpoch);
+                startBackgroundPlaintextSnapshot(service);
+            }
+            // 3. Emit dummy if we've already produced at least one real partial
+            if (localEpoch > 0) {
+                synchronized (serviceLock) {
+                    long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
+                    DataPerturbationSnapshot dummy = service.getDummyPartial();
+                    if (t0 != 0) getProfiler().recordEcall("getDummyPartial", System.nanoTime() - t0);
+                    processSnapshot(dummy.histogramSnapshot());
+                }
+                if (ProfilerConfig.ENABLED) {
+                    getProfiler().incrementEcallTotal("getDummyPartial");
+                    getProfiler().incrementCounter("dummy_emissions");
+                }
+                LOG.debug("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
+                        getTaskId(), localEpoch, targetEpoch);
             }
         }
+
+        // Try to advance the global epoch (every replica will try to trigger this)
+        coordinator.tryAdvanceEpoch(targetEpoch);
     }
 
     /**
@@ -371,6 +405,49 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 LOG.debug("[DataPerturbation] Background snapshot computation complete");
             } catch (EnclaveServiceException e) {
                 LOG.error("[DataPerturbation] Background snapshot computation failed", e);
+            }
+        }, "dp-snapshot-" + getTaskId());
+        snapshotThread.setDaemon(true);
+        snapshotThread.start();
+    }
+
+    /**
+     * Starts the plaintext snapshot computation on a background thread.
+     * Same concurrency pattern as {@link #startBackgroundSnapshot}, but stores
+     * the result in {@link #completedPlaintextSnapshot}.
+     */
+    private synchronized void startBackgroundPlaintextSnapshot(DataPerturbationService service) {
+        if (snapshotThread != null && snapshotThread.isAlive()) {
+            LOG.debug("[DataPerturbation] Previous snapshot still computing -- skipping");
+            return;
+        }
+
+        snapshotThread = new Thread(() -> {
+            try {
+                if (ProfilerConfig.ENABLED) {
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_STARTED, localEpoch + 1);
+                }
+                long lockWaitStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
+                long snapshotStart;
+                DataPerturbationSnapshot result;
+                synchronized (serviceLock) {
+                    snapshotStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
+                    result = service.getSnapshot();
+                    if (snapshotStart != 0) {
+                        getProfiler().recordEcall("getSnapshot", System.nanoTime() - snapshotStart);
+                        getProfiler().incrementEcallTotal("getSnapshot");
+                    }
+                }
+                if (lockWaitStart != 0) {
+                    getProfiler().recordEcall("snapshot_lock_wait", snapshotStart - lockWaitStart);
+                }
+                completedPlaintextSnapshot.set(result);
+                if (ProfilerConfig.ENABLED) {
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_COMPLETED, localEpoch + 1);
+                }
+                LOG.debug("[DataPerturbation] Background plaintext snapshot computation complete");
+            } catch (EnclaveServiceException e) {
+                LOG.error("[DataPerturbation] Background plaintext snapshot computation failed", e);
             }
         }, "dp-snapshot-" + getTaskId());
         snapshotThread.setDaemon(true);

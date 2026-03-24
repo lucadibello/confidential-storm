@@ -191,6 +191,20 @@ public abstract class AbstractDataPerturbationServiceProvider
     }
 
     @Override
+    public DataPerturbationSnapshot getDummyPartial() throws EnclaveServiceException {
+        try {
+            // Does NOT call mechanism.snapshot(), does NOT increment epoch.
+            // Returns a plaintext snapshot with only the dummy marker key.
+            Map<String, Long> dummy = new LinkedHashMap<>();
+            dummy.put(DUMMY_MARKER_KEY, 0L);
+            return new DataPerturbationSnapshot(dummy);
+        } catch (Throwable t) {
+            this.exceptionCtx.handleException(t);
+            return null;
+        }
+    }
+
+    @Override
     public EncryptedDataPerturbationSnapshot getEncryptedDummyPartial() throws EnclaveServiceException {
         try {
             // Does NOT call mechanism.snapshot(), does NOT increment epoch.
