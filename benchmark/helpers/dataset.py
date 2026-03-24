@@ -193,6 +193,19 @@ def detect_varying_params(catalog: pd.DataFrame) -> list[str]:
     return varying
 
 
+def compact_number(val) -> str:
+    """Format a number compactly: 1000000 -> '1M', 500000 -> '500k', 42 -> '42'."""
+    if not isinstance(val, (int, float)) or pd.isna(val):
+        return str(val)
+    if abs(val) >= 1_000_000:
+        return f"{val / 1_000_000:g}M"
+    if abs(val) >= 1_000:
+        return f"{val / 1_000:g}k"
+    if isinstance(val, float) and val == int(val):
+        return str(int(val))
+    return str(val)
+
+
 def short_label(row: pd.Series, vary_cols: list[str]) -> str:
     """Build a compact label from the columns that vary across runs."""
     parts = []
@@ -200,16 +213,7 @@ def short_label(row: pd.Series, vary_cols: list[str]) -> str:
         abbrev = _LABEL_ABBREV.get(col, col)
         val = row.get(col)
         if val is not None and not (isinstance(val, float) and pd.isna(val)):
-            # Shorten large numbers: 500000 -> 500k, 1000000 -> 1M
-            if isinstance(val, (int, float)) and val >= 1_000_000:
-                parts.append(f"{abbrev}{val / 1_000_000:.0f}M")
-            elif isinstance(val, (int, float)) and val >= 1_000:
-                parts.append(f"{abbrev}{val / 1_000:.0f}k")
-            else:
-                # Display integers without decimal point (e.g. 5 not 5.0)
-                if isinstance(val, float) and val == int(val):
-                    val = int(val)
-                parts.append(f"{abbrev}{val}")
+            parts.append(f"{abbrev}{compact_number(val)}")
     return " ".join(parts) if parts else f"run{row.get('run_id', '?')}"
 
 
