@@ -407,8 +407,8 @@ def duration_breakdown_stacked(
 ) -> plt.Figure:
     """Stacked horizontal bars showing time breakdown for each matched pair.
 
-    Segments (in order): Startup, Snapshot, addContribution, mergePartial,
-    checkAndClamp, dummyPartial, snapshot_lock_wait, Idle/other.
+    Segments (in order): Startup, Barrier wait, Snapshot, addContribution, mergePartial,
+    checkAndClamp, dummyPartial, snapshot_lock_wait, Other, Idle (post-max).
     """
     labels = matched_df["label"].tolist()
     n = len(labels)
@@ -427,13 +427,15 @@ def duration_breakdown_stacked(
     # Colour palette: (baseline, confidential) per segment
     colors_map = {
         "Startup":          ("#A9CCE3", "#F5CBA7"),  # light blue / light orange
+        "Barrier wait":     ("#D4E6F1", "#FDEBD0"),  # very light blue / very light orange
         "Snapshot":         ("#2E86C1", "#E67E22"),  # dark blue / dark orange
         "addContribution":  ("#27AE60", "#82E0AA"),  # green
         "mergePartial":     ("#8E44AD", "#D2B4DE"),  # purple
         "checkAndClamp":    ("#E74C3C", "#F1948A"),  # red
         "dummyPartial":     ("#F39C12", "#F9E79F"),  # yellow
         "Lock wait":        ("#95A5A6", "#D5DBDB"),  # grey
-        "Idle/other":       ("#85C1E9", "#F0B27A"),  # medium blue / medium orange
+        "Other":            ("#85C1E9", "#F0B27A"),  # medium blue / medium orange
+        "Idle (post-max)":  ("#BDC3C7", "#E5E7E9"),  # light grey
     }
 
     y_positions = []
@@ -446,12 +448,15 @@ def duration_breakdown_stacked(
 
         for y_pos, suffix, ci in [(y_base, "_base", 0), (y_conf, "_conf", 1)]:
             startup = row.get(f"startup_elapsed_secs{suffix}", 0) or 0
+            barrier_wait = row.get(f"barrier_wait_s{suffix}", 0) or 0
             snap_total = row.get(f"total_snapshot_time_s{suffix}", 0) or 0
             active = row.get(f"active_duration_s{suffix}", 0) or 0
+            idle_post_max = row.get(f"idle_duration_s{suffix}", 0) or 0
 
             # Collect ecall time segments
             segments: list[tuple[str, float]] = [
                 ("Startup", startup),
+                ("Barrier wait", barrier_wait),
                 ("Snapshot", snap_total),
             ]
             accounted = snap_total
@@ -460,9 +465,12 @@ def duration_breakdown_stacked(
                 segments.append((display, t))
                 accounted += t
 
-            # Residual idle/other time
-            idle = max(0, active - accounted)
-            segments.append(("Idle/other", idle))
+            # Residual idle/other time within active processing
+            idle_other = max(0, active - accounted)
+            segments.append(("Other", idle_other))
+
+            # Post-max-epoch idle time (waiting for topology kill)
+            segments.append(("Idle (post-max)", idle_post_max))
 
             left = 0
             for seg_name, val in segments:
@@ -483,7 +491,7 @@ def duration_breakdown_stacked(
     ax.grid(True, axis="x", alpha=0.3)
 
     # Legend — only include segments that appear in at least one row
-    all_seg_names = ["Startup", "Snapshot"] + [d for _, d in _ECALL_SEGMENTS] + ["Idle/other"]
+    all_seg_names = ["Startup", "Barrier wait", "Snapshot"] + [d for _, d in _ECALL_SEGMENTS] + ["Other", "Idle (post-max)"]
     legend_patches = []
     for seg_name in all_seg_names:
         legend_patches.append(mpatches.Patch(color=colors_map[seg_name][0], label=f"{seg_name} (baseline)"))
@@ -992,15 +1000,19 @@ def run_timeline_gantt(
 
     phase_colors = {
         "startup": "#A9CCE3",
+        "barrier_wait": "#D4E6F1",
         "active": "#2ECC71",
         "snapshot": "#E74C3C",
+        "idle_post_max": "#BDC3C7",
         "shutdown": "#95A5A6",
     }
 
     task_to_y = {t: i for i, t in enumerate(tasks)}
 
     started = lifecycle[lifecycle["event"] == "COMPONENT_STARTED"]
+    barrier = lifecycle[lifecycle["event"] == "BARRIER_RELEASED"]
     stopping = lifecycle[lifecycle["event"] == "COMPONENT_STOPPING"]
+    max_epoch = lifecycle[lifecycle["event"] == "MAX_EPOCH_REACHED"]
     snap_start = lifecycle[lifecycle["event"] == "SNAPSHOT_STARTED"]
     snap_end = lifecycle[lifecycle["event"] == "SNAPSHOT_COMPLETED"]
 
@@ -1013,23 +1025,40 @@ def run_timeline_gantt(
         comp = parts[0] if parts else task_label
         task_id_str = parts[1].rstrip(")") if len(parts) > 1 else ""
 
-        task_started = started[(started["component"] == comp) & (started["taskId"].astype(str) == task_id_str)]
-        task_stopping = stopping[(stopping["component"] == comp) & (stopping["taskId"].astype(str) == task_id_str)]
+        def _task_event(ev_df: pd.DataFrame) -> pd.DataFrame:
+            return ev_df[(ev_df["component"] == comp) & (ev_df["taskId"].astype(str) == task_id_str)]
+
+        task_started = _task_event(started)
+        task_barrier = _task_event(barrier)
+        task_stopping = _task_event(stopping)
+        task_max_epoch = _task_event(max_epoch)
 
         start_t = task_started["elapsed_s"].min() if not task_started.empty else t_min
+        # Processing starts at barrier release if available, else at component started
+        processing_t = task_barrier["elapsed_s"].min() if not task_barrier.empty else start_t
+        max_epoch_t = task_max_epoch["elapsed_s"].max() if not task_max_epoch.empty else None
         stop_t = task_stopping["elapsed_s"].min() if not task_stopping.empty else t_max
 
-        # Startup phase
+        # Startup phase: from t_min to COMPONENT_STARTED
         ax.barh(y, start_t - t_min, left=t_min, height=0.6, color=phase_colors["startup"], edgecolor="white")
-        # Active phase
-        ax.barh(y, stop_t - start_t, left=start_t, height=0.6, color=phase_colors["active"],
-                edgecolor="white", alpha=0.5)
-        # Shutdown phase
+        # Barrier wait phase: from COMPONENT_STARTED to BARRIER_RELEASED (if applicable)
+        if processing_t > start_t:
+            ax.barh(y, processing_t - start_t, left=start_t, height=0.6,
+                    color=phase_colors["barrier_wait"], edgecolor="white")
+        # Active phase: from processing_t to MAX_EPOCH_REACHED (or stop_t)
+        active_end = max_epoch_t if max_epoch_t is not None else stop_t
+        ax.barh(y, active_end - processing_t, left=processing_t, height=0.6,
+                color=phase_colors["active"], edgecolor="white", alpha=0.5)
+        # Idle (post-max) phase: from MAX_EPOCH_REACHED to COMPONENT_STOPPING
+        if max_epoch_t is not None and max_epoch_t < stop_t:
+            ax.barh(y, stop_t - max_epoch_t, left=max_epoch_t, height=0.6,
+                    color=phase_colors["idle_post_max"], edgecolor="white")
+        # Shutdown phase: from COMPONENT_STOPPING to t_max
         ax.barh(y, t_max - stop_t, left=stop_t, height=0.6, color=phase_colors["shutdown"], edgecolor="white")
 
         # Overlay snapshot blocks
-        task_snaps = snap_start[(snap_start["component"] == comp) & (snap_start["taskId"].astype(str) == task_id_str)]
-        task_snap_ends = snap_end[(snap_end["component"] == comp) & (snap_end["taskId"].astype(str) == task_id_str)]
+        task_snaps = _task_event(snap_start)
+        task_snap_ends = _task_event(snap_end)
         if not task_snaps.empty and not task_snap_ends.empty:
             merged = task_snaps.merge(task_snap_ends, on=["component", "taskId", "epoch"],
                                       suffixes=("_s", "_e"))
@@ -1045,7 +1074,15 @@ def run_timeline_gantt(
     ax.set_title(title)
     ax.grid(True, axis="x", alpha=0.3)
 
-    legend_patches = [mpatches.Patch(color=c, label=n.capitalize()) for n, c in phase_colors.items()]
+    phase_labels = {
+        "startup": "Startup",
+        "barrier_wait": "Barrier wait",
+        "active": "Active",
+        "snapshot": "Snapshot",
+        "idle_post_max": "Idle (post-max)",
+        "shutdown": "Shutdown",
+    }
+    legend_patches = [mpatches.Patch(color=c, label=phase_labels[n]) for n, c in phase_colors.items()]
     ax.legend(handles=legend_patches, fontsize=8, loc="upper right")
 
     save_or_show(fig, output_dir, plot_name, fmt, show)

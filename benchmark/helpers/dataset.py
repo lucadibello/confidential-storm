@@ -296,22 +296,48 @@ def compute_run_summary(
     else:
         summary["max_epoch_completed"] = 0
 
-    # --- Active duration ---
+    # --- Active duration, barrier wait, and idle duration ---
     started = lifecycle[lifecycle["event"] == "COMPONENT_STARTED"]
+    barrier = lifecycle[lifecycle["event"] == "BARRIER_RELEASED"]
     stopping = lifecycle[lifecycle["event"] == "COMPONENT_STOPPING"]
     max_epoch_ev = lifecycle[lifecycle["event"] == "MAX_EPOCH_REACHED"]
-    if not started.empty:
-        topology_ready = started["elapsed_s"].max()
-        if not max_epoch_ev.empty:
-            end_s = max_epoch_ev["elapsed_s"].max()
-        elif not stopping.empty:
-            end_s = stopping["elapsed_s"].min()
-        else:
-            end_s = profiler_df["elapsed_s"].max()
-        summary["active_duration_s"] = float(end_s - topology_ready)
+
+    # Determine the "processing start" point: BARRIER_RELEASED if available, else COMPONENT_STARTED
+    if not barrier.empty:
+        processing_start = barrier["elapsed_s"].max()
+    elif not started.empty:
+        processing_start = started["elapsed_s"].max()
     else:
-        # Baseline may lack COMPONENT_STARTED; fall back to full span
+        processing_start = float("nan")
+
+    # Barrier wait: time from last COMPONENT_STARTED to last BARRIER_RELEASED
+    if not started.empty and not barrier.empty:
+        topology_ready = started["elapsed_s"].max()
+        summary["barrier_wait_s"] = float(max(0, processing_start - topology_ready))
+    else:
+        summary["barrier_wait_s"] = float("nan")
+
+    # Active duration: from processing_start to MAX_EPOCH_REACHED (or fallback)
+    if not pd.isna(processing_start):
+        if not max_epoch_ev.empty:
+            active_end_s = max_epoch_ev["elapsed_s"].max()
+        elif not stopping.empty:
+            active_end_s = stopping["elapsed_s"].min()
+        else:
+            active_end_s = profiler_df["elapsed_s"].max()
+        summary["active_duration_s"] = float(active_end_s - processing_start)
+    else:
+        # Baseline may lack COMPONENT_STARTED / BARRIER_RELEASED; fall back to full span
         summary["active_duration_s"] = float(profiler_df["elapsed_s"].max() - profiler_df["elapsed_s"].min())
+        active_end_s = profiler_df["elapsed_s"].max()
+
+    # Idle duration: from MAX_EPOCH_REACHED to COMPONENT_STOPPING
+    if not max_epoch_ev.empty and not stopping.empty:
+        idle_start = max_epoch_ev["elapsed_s"].max()
+        idle_end = stopping["elapsed_s"].min()
+        summary["idle_duration_s"] = float(max(0, idle_end - idle_start))
+    else:
+        summary["idle_duration_s"] = float("nan")
 
     # --- Per-ECALL avg latency and total invocations ---
     ecalls = profiler_df[profiler_df["type"] == "ecall"]
@@ -452,6 +478,7 @@ def build_matched_pairs(
     metric_cols = [
         "duration_secs", "startup_elapsed_secs", "avg_epoch_duration_s",
         "avg_snapshot_duration_s", "active_duration_s", "total_snapshot_time_s",
+        "barrier_wait_s", "idle_duration_s",
         "max_epoch_completed",
     ]
     # Also include any ecall_avg_*, ecall_time_*, counter_*, gauge_avg_* columns
@@ -483,7 +510,8 @@ def build_matched_pairs(
 
     # Compute overhead ratios
     for col in ["duration_secs", "startup_elapsed_secs", "avg_epoch_duration_s",
-                "avg_snapshot_duration_s", "active_duration_s"]:
+                "avg_snapshot_duration_s", "active_duration_s",
+                "barrier_wait_s", "idle_duration_s"]:
         bc = f"{col}_base"
         cc = f"{col}_conf"
         if bc in matched.columns and cc in matched.columns:
