@@ -1232,6 +1232,376 @@ def emission_timeline(
     return fig
 
 
+def enriched_timeline(
+    profiler_df: pd.DataFrame,
+    lifecycle: pd.DataFrame,
+    *,
+    title: str = "Enriched Timeline",
+    output_dir: Path | None = None,
+    plot_name: str = "enriched-timeline",
+    fmt: str = "png",
+    show: bool = True,
+) -> plt.Figure | None:
+    """Per-task swim-lane timeline showing key DP lifecycle events.
+
+    For each data-perturbation task, draws:
+    - Snapshot blocks (red bars from SNAPSHOT_STARTED to SNAPSHOT_COMPLETED)
+    - TICK_RECEIVED markers (grey triangles)
+    - EPOCH_ADVANCED markers (green diamonds — real partial emitted)
+    - DUMMY_RELEASED markers (orange circles — dummy partial emitted)
+
+    The x-axis is elapsed time. Ideal tick-interval grid lines are overlaid.
+    """
+    COMP = "bolt-data-perturbation"
+
+    dp_lc = lifecycle[lifecycle["component"] == COMP].copy()
+    if dp_lc.empty:
+        print("Skipped enriched timeline: no data-perturbation lifecycle events")
+        return None
+
+    tasks = sorted(dp_lc["taskId"].unique())
+    n_tasks = len(tasks)
+
+    # Tick interval
+    tick_ev = dp_lc[dp_lc["event"] == "TICK_INTERVAL_SECS"]
+    tick_s = float(tick_ev["epoch"].iloc[0]) if not tick_ev.empty else None
+
+    # Time range: from barrier release (or component start) to max epoch reached
+    barrier = dp_lc[dp_lc["event"] == "BARRIER_RELEASED"]
+    t_start = float(barrier["elapsed_s"].min()) if not barrier.empty else 0.0
+    max_ep = dp_lc[dp_lc["event"] == "MAX_EPOCH_REACHED"]
+    t_end = float(max_ep["elapsed_s"].max()) if not max_ep.empty else float(dp_lc["elapsed_s"].max())
+    # add a small margin
+    t_end = t_end + (t_end - t_start) * 0.02
+
+    fig, ax = plt.subplots(figsize=(16, max(3, n_tasks * 1.2)))
+
+    task_to_y = {t: i for i, t in enumerate(tasks)}
+
+    # Snapshot blocks
+    snap_s = dp_lc[dp_lc["event"] == "SNAPSHOT_STARTED"]
+    snap_e = dp_lc[dp_lc["event"] == "SNAPSHOT_COMPLETED"]
+    if not snap_s.empty and not snap_e.empty:
+        merged = snap_s.merge(
+            snap_e, on=["component", "taskId", "epoch"], suffixes=("_s", "_e"),
+        )
+        for _, row in merged.iterrows():
+            y = task_to_y.get(row["taskId"])
+            if y is None:
+                continue
+            dur = row["elapsed_s_e"] - row["elapsed_s_s"]
+            ax.barh(y, dur, left=row["elapsed_s_s"], height=0.5,
+                    color="#E74C3C", alpha=0.35, edgecolor="none")
+
+    # Marker styles per event
+    _event_style = {
+        "TICK_RECEIVED":   dict(marker="v", color="#555555", s=40, zorder=3, alpha=0.85),
+        "EPOCH_ADVANCED":  dict(marker="D", color="#27AE60", s=40, zorder=5, alpha=0.9),
+        "DUMMY_RELEASED":  dict(marker="o", color="#E67E22", s=30, zorder=4, alpha=0.8),
+    }
+
+    for event_name, style in _event_style.items():
+        ev = dp_lc[dp_lc["event"] == event_name]
+        if ev.empty:
+            continue
+        for task_id in tasks:
+            task_ev = ev[ev["taskId"] == task_id]
+            if task_ev.empty:
+                continue
+            y = task_to_y[task_id]
+            ax.scatter(
+                task_ev["elapsed_s"].values,
+                [y] * len(task_ev),
+                **style,
+                label=event_name if task_id == tasks[0] else None,
+            )
+
+    # Tick grid
+    if tick_s and tick_s > 0:
+        t = t_start + tick_s
+        while t <= t_end:
+            ax.axvline(t, color="#CCCCCC", linestyle=":", linewidth=0.5, label="Ideal tick boundary")
+            t += tick_s
+
+    ax.set_yticks(range(n_tasks))
+    ax.set_yticklabels([f"Task {t}" for t in tasks], fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlim(t_start - 2, t_end)
+    ax.set_xlabel("Elapsed time (s)")
+    ax.set_title(title)
+    # ax.grid(True, axis="x", alpha=0.15)
+    ax.grid(False)
+
+    # De-duplicate legend entries
+    handles, labels = ax.get_legend_handles_labels()
+    seen: dict[str, int] = {}
+    unique_h, unique_l = [], []
+    for h, l in zip(handles, labels):
+        if l not in seen:
+            seen[l] = 1
+            unique_h.append(h)
+            unique_l.append(l)
+    # Add snapshot patch
+    unique_h.append(mpatches.Patch(color="#E74C3C", alpha=0.35, label="Snapshot"))
+    unique_l.append("Snapshot")
+
+    ax.legend(unique_h, unique_l, fontsize=8, loc="upper right")
+
+    save_or_show(fig, output_dir, plot_name, fmt, show)
+    return fig
+
+
+def tick_tuple_validation(
+    profiler_df: pd.DataFrame,
+    lifecycle: pd.DataFrame,
+    *,
+    title: str = "Tick Tuple Validation",
+    output_dir: Path | None = None,
+    plot_name: str = "tick-tuple-validation",
+    fmt: str = "png",
+    show: bool = True,
+) -> plt.Figure | None:
+    """Analyze inter-tick-tuple timing irregularities per task over time.
+
+    Top panel: scatter of per-task inter-tick deltas over elapsed time, with
+    the expected tick interval shown as a horizontal band (±20%).
+    Bottom panel: rolling standard deviation of deltas (window=5) to show
+    whether irregularities diminish over time.
+    """
+    COMP = "bolt-data-perturbation"
+
+    dp_lc = lifecycle[lifecycle["component"] == COMP].copy()
+    ticks = dp_lc[dp_lc["event"] == "TICK_RECEIVED"].copy()
+    if ticks.empty:
+        print("Skipped tick tuple validation: no TICK_RECEIVED events found")
+        return None
+
+    # Expected tick interval
+    tick_ev = dp_lc[dp_lc["event"] == "TICK_INTERVAL_SECS"]
+    tick_s = float(tick_ev["epoch"].iloc[0]) if not tick_ev.empty else None
+    if tick_s is None or tick_s <= 0:
+        print("Skipped tick tuple validation: could not determine tick interval")
+        return None
+
+    tasks = sorted(ticks["taskId"].unique())
+    n_tasks = len(tasks)
+    colors = plt.cm.tab10(np.linspace(0, 1, max(n_tasks, 1)))
+
+    fig, (ax_delta, ax_roll) = plt.subplots(
+        2, 1, figsize=(14, 7), sharex=True,
+        gridspec_kw={"height_ratios": [3, 2], "hspace": 0.08},
+        layout="constrained",
+    )
+
+    # Tolerance band
+    tol = 0.20
+    lo, hi = tick_s * (1 - tol), tick_s * (1 + tol)
+
+    all_violations = 0
+    all_deltas = 0
+
+    for idx, task_id in enumerate(tasks):
+        t = ticks[ticks["taskId"] == task_id].sort_values("elapsed_s")
+        if len(t) < 2:
+            continue
+        elapsed = t["elapsed_s"].values
+        deltas = np.diff(elapsed)
+        midpoints = elapsed[1:]  # x-position = time of the receiving tick
+
+        c = colors[idx]
+        label = f"Task {task_id}"
+
+        # --- Top: delta scatter ---
+        ax_delta.scatter(midpoints, deltas, s=28, color=c, alpha=0.8,
+                         edgecolors="none", label=label, zorder=3)
+        ax_delta.plot(midpoints, deltas, color=c, alpha=0.3, linewidth=0.8, zorder=2)
+
+        # --- Bottom: rolling std ---
+        win = min(5, len(deltas))
+        if win >= 2:
+            roll_std = pd.Series(deltas).rolling(win, min_periods=2).std().values
+            ax_roll.plot(midpoints, roll_std, color=c, alpha=0.8, linewidth=1.2, label=label)
+            ax_roll.scatter(midpoints, roll_std, s=16, color=c, alpha=0.6, edgecolors="none")
+
+        violations = int(np.sum((deltas < lo) | (deltas > hi)))
+        all_violations += violations
+        all_deltas += len(deltas)
+
+    # Top panel formatting
+    ax_delta.axhspan(lo, hi, color="#27AE60", alpha=0.10, zorder=0,
+                     label=f"Expected ±{int(tol*100)}%")
+    ax_delta.axhline(tick_s, color="#27AE60", linestyle="--", linewidth=1, alpha=0.6)
+    ax_delta.set_ylabel("Inter-tick delta (s)")
+    ax_delta.set_title(title)
+    ax_delta.legend(fontsize=8, loc="upper right", ncol=min(n_tasks + 1, 4))
+    ax_delta.grid(True, alpha=0.15)
+
+    # Bottom panel formatting
+    ax_roll.axhline(0, color="#999999", linewidth=0.5)
+    ax_roll.set_ylabel("Rolling σ of delta (s)")
+    ax_roll.set_xlabel("Elapsed time (s)")
+    ax_roll.legend(fontsize=8, loc="upper right", ncol=min(n_tasks, 4))
+    ax_roll.grid(True, alpha=0.15)
+
+    # Summary text
+    pct = (all_violations / all_deltas * 100) if all_deltas else 0
+    ax_delta.text(
+        0.01, 0.97,
+        f"Violations: {all_violations}/{all_deltas} ({pct:.0f}%) — expected Δ = {tick_s:.0f}s",
+        transform=ax_delta.transAxes, fontsize=9, va="top",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
+    )
+
+    save_or_show(fig, output_dir, plot_name, fmt, show)
+    return fig
+
+
+def traffic_pattern_analysis(
+    profiler_df: pd.DataFrame,
+    lifecycle: pd.DataFrame,
+    *,
+    title: str = "Traffic Pattern Analysis",
+    output_dir: Path | None = None,
+    plot_name: str = "traffic-pattern",
+    fmt: str = "png",
+    show: bool = True,
+) -> plt.Figure | None:
+    """Validate that each DP task emits exactly one message per tick interval.
+
+    For each data-perturbation task, computes the time delta between consecutive
+    emissions (EPOCH_ADVANCED or DUMMY_RELEASED). Plots per-task deltas as a
+    scatter chart with the expected tick interval shown as a horizontal band.
+    Prints a summary table of violations where the gap exceeds the tolerance.
+
+    Returns the figure, or None if insufficient data.
+    """
+    COMP = "bolt-data-perturbation"
+
+    dp_lc = lifecycle[lifecycle["component"] == COMP].copy()
+    if dp_lc.empty:
+        print("Skipped traffic pattern analysis: no data-perturbation lifecycle events")
+        return None
+
+    # Tick interval
+    tick_ev = dp_lc[dp_lc["event"] == "TICK_INTERVAL_SECS"]
+    if tick_ev.empty:
+        print("Skipped traffic pattern analysis: no TICK_INTERVAL_SECS event")
+        return None
+    tick_s = float(tick_ev["epoch"].iloc[0])
+
+    # Emission events: EPOCH_ADVANCED (real) and DUMMY_RELEASED (dummy)
+    emission_events = dp_lc[dp_lc["event"].isin(["EPOCH_ADVANCED", "DUMMY_RELEASED"])].copy()
+    if emission_events.empty:
+        print("Skipped traffic pattern analysis: no emission events (EPOCH_ADVANCED / DUMMY_RELEASED)")
+        return None
+
+    tasks = sorted(emission_events["taskId"].unique())
+    n_tasks = len(tasks)
+
+    # Tolerance: allow ±20% of tick interval
+    tolerance = tick_s * 0.20
+    lo, hi = tick_s - tolerance, tick_s + tolerance
+
+    # Build per-task delta series
+    task_deltas: dict[int, pd.DataFrame] = {}
+    for task_id in tasks:
+        task_em = emission_events[emission_events["taskId"] == task_id].sort_values("elapsed_s")
+        if len(task_em) < 2:
+            continue
+        rows = []
+        prev_row = None
+        for _, row in task_em.iterrows():
+            if prev_row is not None:
+                delta = row["elapsed_s"] - prev_row["elapsed_s"]
+                rows.append({
+                    "elapsed_s": row["elapsed_s"],
+                    "delta_s": delta,
+                    "event": row["event"],
+                    "epoch": row["epoch"],
+                    "prev_event": prev_row["event"],
+                })
+            prev_row = row
+        task_deltas[task_id] = pd.DataFrame(rows)
+
+    if not task_deltas:
+        print("Skipped traffic pattern analysis: insufficient emission data")
+        return None
+
+    # --- Figure: scatter plot of inter-emission deltas per task ---
+    fig, axes = plt.subplots(
+        n_tasks, 1, figsize=(14, max(4, n_tasks * 2.0)),
+        sharex=True, constrained_layout=True,
+    )
+    if n_tasks == 1:
+        axes = [axes]
+
+    total_violations = 0
+    total_emissions = 0
+
+    for ax, task_id in zip(axes, tasks):
+        td = task_deltas.get(task_id)
+        if td is None or td.empty:
+            ax.set_ylabel(f"Task {task_id}")
+            continue
+
+        total_emissions += len(td)
+
+        # Classify each delta
+        ok = td[(td["delta_s"] >= lo) & (td["delta_s"] <= hi)]
+        too_short = td[td["delta_s"] < lo]
+        too_long = td[td["delta_s"] > hi]
+        n_violations = len(too_short) + len(too_long)
+        total_violations += n_violations
+
+        # Expected band
+        ax.axhspan(lo, hi, color="#27AE60", alpha=0.10, label=f"Expected ({lo:.0f}–{hi:.0f}s)")
+        ax.axhline(tick_s, color="#27AE60", linewidth=1, linestyle="--", alpha=0.5)
+
+        # OK points
+        if not ok.empty:
+            ax.scatter(ok["elapsed_s"], ok["delta_s"], c="#27AE60", s=25, alpha=0.7,
+                       edgecolors="none", label=f"OK ({len(ok)})")
+        # Too short
+        if not too_short.empty:
+            ax.scatter(too_short["elapsed_s"], too_short["delta_s"], c="#E74C3C", s=35,
+                       marker="v", alpha=0.8, edgecolors="none",
+                       label=f"Too short ({len(too_short)})")
+        # Too long
+        if not too_long.empty:
+            ax.scatter(too_long["elapsed_s"], too_long["delta_s"], c="#E67E22", s=35,
+                       marker="^", alpha=0.8, edgecolors="none",
+                       label=f"Too long ({len(too_long)})")
+
+        ax.set_ylabel(f"Task {task_id}\n\u0394t (s)", fontsize=9)
+        ax.legend(fontsize=7, loc="upper right", ncol=3)
+        ax.grid(True, alpha=0.2)
+
+    axes[-1].set_xlabel("Elapsed time (s)")
+    fig.suptitle(f"{title}  (tick={tick_s:.0f}s, violations={total_violations}/{total_emissions})",
+                 fontsize=11)
+
+    # --- Print summary ---
+    print(f"Traffic pattern validation: tick_interval={tick_s:.0f}s, "
+          f"tolerance=±{tolerance:.1f}s ({lo:.1f}–{hi:.1f}s)")
+    print(f"  Total emissions: {total_emissions}, Violations: {total_violations}")
+    for task_id in tasks:
+        td = task_deltas.get(task_id)
+        if td is None:
+            continue
+        violations = td[(td["delta_s"] < lo) | (td["delta_s"] > hi)]
+        if violations.empty:
+            print(f"  Task {task_id}: ALL OK ✓ ({len(td)} intervals)")
+        else:
+            print(f"  Task {task_id}: {len(violations)} violation(s) out of {len(td)} intervals:")
+            for _, v in violations.iterrows():
+                direction = "short" if v["delta_s"] < lo else "long"
+                print(f"    t={v['elapsed_s']:.1f}s  Δ={v['delta_s']:.1f}s ({direction})  "
+                      f"{v['prev_event']}→{v['event']}  epoch={int(v['epoch'])}")
+
+    save_or_show(fig, output_dir, plot_name, fmt, show)
+    return fig
+
+
 # ---------------------------------------------------------------------------
 # Counter / Gauge comparison plots (Section A6+)
 # ---------------------------------------------------------------------------

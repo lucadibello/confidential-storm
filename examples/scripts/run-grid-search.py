@@ -144,6 +144,58 @@ def latest_epoch(component):
     return best
 
 
+def read_lifecycle_config(component, event_name):
+    """Return the set of distinct values reported for a lifecycle config event across all tasks.
+
+    Used to verify that components started with the expected configuration
+    (e.g., MAX_EPOCHS_CONFIGURED, TICK_INTERVAL_SECS).
+    CSV columns: timestamp, component, taskId, type, name, total, ...
+    """
+    values = set()
+    for cols in _iter_profiler_csvs():
+        if len(cols) >= 6 and cols[1] == component and cols[3] == "lifecycle" and cols[4] == event_name:
+            try:
+                values.add(int(cols[5]))
+            except ValueError:
+                pass
+    return values
+
+
+def verify_topology_config(p):
+    """Check that DP and agg bolts reported the expected MAX_EPOCHS_CONFIGURED and TICK_INTERVAL_SECS.
+
+    Returns True if all reported values match expectations, False otherwise.
+    Mismatches are printed as warnings so the run can be aborted early.
+    """
+    ok = True
+    for component, label in [(DP_COMPONENT, "dp"), (AGG_COMPONENT, "agg")]:
+        reported_epochs = read_lifecycle_config(component, "MAX_EPOCHS_CONFIGURED")
+        reported_ticks  = read_lifecycle_config(component, "TICK_INTERVAL_SECS")
+
+        if not reported_epochs:
+            print("[run {}] WARNING: {} did not report MAX_EPOCHS_CONFIGURED".format(
+                p.run_id, label))
+            ok = False
+        elif reported_epochs != {p.max_time_steps}:
+            print("[run {}] CONFIG MISMATCH: {} MAX_EPOCHS_CONFIGURED={} expected={}".format(
+                p.run_id, label, sorted(reported_epochs), p.max_time_steps))
+            ok = False
+
+        if not reported_ticks:
+            print("[run {}] WARNING: {} did not report TICK_INTERVAL_SECS".format(
+                p.run_id, label))
+            ok = False
+        elif reported_ticks != {p.tick_interval}:
+            print("[run {}] CONFIG MISMATCH: {} TICK_INTERVAL_SECS={} expected={}".format(
+                p.run_id, label, sorted(reported_ticks), p.tick_interval))
+            ok = False
+
+    if ok:
+        print("[run {}] Config verified: max_epochs={} tick_interval={}s".format(
+            p.run_id, p.max_time_steps, p.tick_interval))
+    return ok
+
+
 def sum_counter(component, counter_name):
     """Sum a profiler counter across all tasks and CSV snapshots for a component.
 
@@ -171,8 +223,33 @@ class FatalErrors(object):
         self.fatal = fatal
 
 
-def check_worker_fatal_errors(topo_name, run_id):
-    """Scan worker logs for OOM and SGX/native fatal errors."""
+def snapshot_worker_log_sizes(topo_name):
+    """Record the current byte size of every worker.log for a topology.
+
+    Call this immediately before sending the kill signal.  The returned dict
+    maps each log path to its size at that moment, so subsequent scans can
+    ignore bytes written during/after shutdown.
+    """
+    sizes = {}  # type: dict[Path, int]
+    for worker_dir in sorted(WORKERS_HOST_DIR.glob("{}-*/".format(topo_name))):
+        if not worker_dir.is_dir():
+            continue
+        for log_file in sorted(worker_dir.glob("*/worker.log")):
+            if log_file.is_file():
+                try:
+                    sizes[log_file] = log_file.stat().st_size
+                except OSError:
+                    sizes[log_file] = 0
+    return sizes
+
+
+def check_worker_fatal_errors(topo_name, run_id, log_sizes=None):
+    """Scan worker logs for OOM and SGX/native fatal errors.
+
+    If log_sizes is provided (from snapshot_worker_log_sizes), only the bytes
+    present before the kill signal are scanned, so shutdown-induced OOM errors
+    are not counted as real problems.
+    """
     result = FatalErrors()
     for worker_dir in sorted(WORKERS_HOST_DIR.glob("{}-*/".format(topo_name))):
         if not worker_dir.is_dir():
@@ -182,13 +259,11 @@ def check_worker_fatal_errors(topo_name, run_id):
                 continue
             short_path = "{}/{}/worker.log".format(worker_dir.name, log_file.parent.name)
             try:
-                content = _read_file_lossy(log_file)
+                limit = log_sizes.get(log_file) if log_sizes is not None else None
+                with open(str(log_file), encoding="utf-8", errors="replace") as f:
+                    content = f.read(limit) if limit is not None else f.read()
             except OSError:
                 continue
-
-            # if "OutOfMemoryError" in content:
-            #     result.oom = True
-            #     print("[run {}] WARNING: OutOfMemoryError detected in {}".format(run_id, short_path))
 
             for line in content.splitlines():
                 if "STDERR" in line and "[INFO] Fatal error:" in line:
@@ -407,17 +482,33 @@ def execute_run(p):
         p.run_id, p.startup_timeout))
     all_started, startup_elapsed = wait_for_startup(p)
 
-    # ---- 4. Poll for completion (MAX_EPOCH_REACHED lifecycle events) ----
-    completed, elapsed, errors = poll_completion(p, topo_name, max_wait)
+    # ---- 4. Verify topology started with correct configuration ----
+    config_ok = False
+    if all_started:
+        config_ok = verify_topology_config(p)
+        if not config_ok:
+            print("[run {}] ABORTING: topology misconfigured, killing and skipping.".format(p.run_id))
+            run_storm("kill", topo_name, "-w", "5")
+            time.sleep(10)
+            for f in PROFILER_HOST_DIR.glob("*.csv"):
+                _safe_unlink(f)
+            run_dir.mkdir(parents=True, exist_ok=True)
+            with open(str(run_dir / "params.txt"), "w") as fh:
+                fh.write("run_id={}\ncompleted=false\nrun_error=true\nrun_error_message=config_mismatch\n".format(
+                    p.run_id))
+            return
 
-    # Final fatal error check before kill (avoids false positives from shutdown noise)
-    if not (errors.oom or errors.fatal):
-        errors = check_worker_fatal_errors(topo_name, p.run_id)
+    # ---- 5. Poll for completion (MAX_EPOCH_REACHED lifecycle events) ----
+    completed, elapsed, errors = poll_completion(p, topo_name, max_wait)
 
     # Brief pause to let in-flight CSV writes flush
     time.sleep(3)
 
-    # ---- 5. Kill topology ----
+    # ---- 6. Kill topology ----
+    # Snapshot log sizes before kill -- bytes written after this point are shutdown noise.
+    log_sizes = snapshot_worker_log_sizes(topo_name)
+    errors = check_worker_fatal_errors(topo_name, p.run_id, log_sizes)
+
     print("[run {}] Killing topology {}...".format(p.run_id, topo_name))
     rc = run_storm("kill", topo_name, "-w", "5")
     if rc != 0:
@@ -426,7 +517,7 @@ def execute_run(p):
     print("[run {}] Waiting 10s for Storm/ZooKeeper cleanup...".format(p.run_id))
     time.sleep(10)
 
-    # ---- 6. Archive profiler CSVs + clean profiler dir ----
+    # ---- 7. Archive profiler CSVs + clean profiler dir ----
     csv_files = list(PROFILER_HOST_DIR.glob("*.csv"))
     csv_count = len(csv_files)
     if csv_files:
@@ -437,7 +528,7 @@ def execute_run(p):
     else:
         print("[run {}] WARNING: No profiler CSVs found.".format(p.run_id))
 
-    # ---- 7. Archive topology report ----
+    # ---- 8. Archive topology report ----
     report_file = tt.project_dir / "data" / "synthetic-report-run{}.txt".format(p.run_id)
     if report_file.is_file():
         shutil.copy2(str(report_file), str(run_dir))
@@ -445,7 +536,7 @@ def execute_run(p):
     else:
         print("[run {}] WARNING: Topology report not found: {}".format(p.run_id, report_file))
 
-    # ---- 8. Archive worker logs + detect crashes ----
+    # ---- 9. Archive worker logs + detect crashes ----
     worker_logs_dir = run_dir / "worker-logs"
     worker_logs_dir.mkdir(exist_ok=True)
     worker_log_count = 0
@@ -464,11 +555,14 @@ def execute_run(p):
             worker_log_count += 1
 
             try:
-                lines = _read_file_lossy(log_file).splitlines()
+                limit = log_sizes.get(log_file)
+                with open(str(log_file), encoding="utf-8", errors="replace") as f:
+                    content = f.read(limit) if limit is not None else f.read()
+                lines = content.splitlines()
             except OSError:
                 continue
 
-            if any("OutOfMemoryError" in line for line in lines):
+            if any("java.lang.OutOfMemoryError" in line for line in lines):
                 errors.oom = True
                 print("[run {}] WARNING: OutOfMemoryError detected in {}".format(p.run_id, dest_name))
 
@@ -482,7 +576,7 @@ def execute_run(p):
     print("[run {}] Archived {} worker log(s) (OOM: {}, fatal: {}, ERROR: {}).".format(
         p.run_id, worker_log_count, errors.oom, errors.fatal, worker_crash_count))
 
-    # ---- 9. Write run metadata ----
+    # ---- 10. Write run metadata ----
     end_time = int(time.time())
     duration = end_time - submit_time
 
@@ -514,6 +608,7 @@ def execute_run(p):
         "worker_error_count={}".format(worker_crash_count),
         "agg_dummies_received={}".format(sum_counter(AGG_COMPONENT, "dummies_received")),
         "agg_real_partials_received={}".format(sum_counter(AGG_COMPONENT, "real_partials_received")),
+        "config_verified={}".format(str(config_ok).lower()),
     ]
 
     with open(str(run_dir / "params.txt"), "w") as f:
