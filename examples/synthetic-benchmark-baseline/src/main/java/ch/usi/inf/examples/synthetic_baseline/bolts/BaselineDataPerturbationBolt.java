@@ -92,7 +92,8 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
                 topoConf, context.getStormId(), taskId,
                 totalReplicas, DEFAULT_EPOCH_TIMEOUT_SECS, isLeader);
 
-        // Register listener: when epoch advances, start bg snapshot
+        // Register the SharedCountListener callback: when the global epoch advances,
+        // start the next background computation immediately (from the Curator event thread).
         coordinator.setOnEpochAdvanced(() -> {
             if (!finished
                     && coordinator.getTargetEpoch() > localEpoch
@@ -168,6 +169,7 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
 
         int targetEpoch = coordinator.getTargetEpoch();
         if (ProfilerConfig.ENABLED) {
+            profiler.recordLifecycleEvent(DPBoltLifecycleEvent.TICK_RECEIVED, targetEpoch);
             profiler.recordGauge("epoch_lag", targetEpoch - localEpoch);
         }
 
@@ -210,8 +212,9 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
                 emitHistogram(createDummyHistogram(), true); // No ECALL + no encryption
                 if (ProfilerConfig.ENABLED) {
                     profiler.incrementCounter("dummy_emissions");
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.DUMMY_RELEASED, localEpoch);
                 }
-                LOG.debug("[BaselineDataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
+                LOG.info("[BaselineDataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
                         taskId, localEpoch, targetEpoch);
             }
         }
