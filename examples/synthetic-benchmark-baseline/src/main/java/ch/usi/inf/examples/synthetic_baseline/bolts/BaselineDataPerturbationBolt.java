@@ -212,7 +212,7 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
                 emitHistogram(createDummyHistogram(), true); // No ECALL + no encryption
                 if (ProfilerConfig.ENABLED) {
                     profiler.incrementCounter("dummy_emissions");
-                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.DUMMY_RELEASED, localEpoch);
+                    profiler.recordLifecycleEvent(DPBoltLifecycleEvent.DUMMY_RELEASED, localEpoch);
                 }
                 LOG.info("[BaselineDataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
                         taskId, localEpoch, targetEpoch);
