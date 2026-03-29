@@ -156,6 +156,9 @@ public class SyntheticTopology {
         conf.put("synthetic.seed", seed);
         conf.put("synthetic.run.id", runId);
         conf.put("synthetic.ground-truth.enabled", String.valueOf(groundTruth));
+        conf.put("dp.max.time.steps", DPConfig.maxTimeSteps());
+        conf.put("dp.mu", DPConfig.mu());
+        conf.put("dp.tick.interval.secs", Integer.getInteger("dp.tick.interval.secs", 5));
 
         LOG.info("Topology Config: numUsers={}, numKeys={}, seed={}",
                 numUsers, numKeys, seed);

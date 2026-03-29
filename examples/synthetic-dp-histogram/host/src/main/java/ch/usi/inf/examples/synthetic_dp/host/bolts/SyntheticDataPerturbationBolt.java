@@ -19,20 +19,25 @@ public class SyntheticDataPerturbationBolt extends AbstractDataPerturbationBolt 
     // create logger for this class
     private static final Logger LOG = LoggerFactory.getLogger(SyntheticDataPerturbationBolt.class);
 
+    private int maxEpochs;
+    private int tickIntervalSecs;
+
     @Override
     protected void afterPrepare(Map<String, Object> topoConf, TopologyContext context) {
+        this.maxEpochs = ((Number) topoConf.getOrDefault("dp.max.time.steps", DPConfig.maxTimeSteps())).intValue();
+        this.tickIntervalSecs = ((Number) topoConf.getOrDefault("dp.tick.interval.secs", 5)).intValue();
         super.afterPrepare(topoConf, context);
         LOG.info("[CONFIG] {}", DPConfig.describe());
     }
 
     @Override
     protected int getMaxEpochs() {
-        return DPConfig.maxTimeSteps();
+        return maxEpochs;
     }
 
     @Override
     protected int getTickIntervalSecs() {
-        return Integer.getInteger("dp.tick.interval.secs", 5);
+        return tickIntervalSecs > 0 ? tickIntervalSecs : Integer.getInteger("dp.tick.interval.secs", super.getTickIntervalSecs());
     }
 
     @Override

@@ -30,18 +30,16 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>
  * <b>Tick-driven emission</b>: Every replica emits exactly once per tick tuple -- either the
  * real partial (if the background computation finished) or a dummy (if still computing).
- * <p>
- * <b>Listener-driven computation start</b>: A {@code SharedCountListener} on the epoch counter
- * notifies all replicas immediately when the epoch advances. The listener callback starts the
- * next background computation without waiting for the next tick, eliminating wasted ticks.
+ * This guarantees that epochs never complete faster than the configured tick interval.
  * <p>
  * <b>Tick lifecycle</b>:
  * <ol>
  *   <li>Tick arrives -> read targetEpoch (locally cached by Curator's {@code SharedCount})</li>
  *   <li>If bg thread finished: emit real partial, advance localEpoch, register completion</li>
- *   <li>Fallback: if behind target and no bg thread running (listener missed), start bg thread</li>
- *   <li>If bg thread still running or just started: emit dummy (except on the very first tick)</li>
+ *   <li>If behind target and no bg thread running: start bg thread</li>
+ *   <li>If no result ready: emit dummy (except on the very first tick when localEpoch==0)</li>
  *   <li>Try to advance global epoch via versioned CAS</li>
+ *   <li>If epoch just advanced: eagerly start next bg snapshot (result consumed on next tick)</li>
  * </ol>
  */
 public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<DataPerturbationService> {
@@ -121,7 +119,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                     && (snapshotThread == null || !snapshotThread.isAlive())) {
                 LOG.info("[DataPerturbation] Task {} starting bg snapshot from watch (localEpoch={}, targetEpoch={})",
                         getTaskId(), localEpoch, coordinator.getTargetEpoch());
-                
+
                 // trigger correct snapshot method based on whether we're using encrypted snapshots or not
                 if (useEncryptedSnapshots()) {
                     startBackgroundSnapshot(service);
@@ -227,22 +225,23 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     /**
      * Tick-driven epoch handler. Every tick, each replica either:
      * - Emits a real partial (bg thread finished), OR
-     * - Emits a dummy (bg thread still running or just started by listener), OR
-     * - Does nothing (very first tick, localEpoch==0 and no result yet).
-     *
+     * - Emits a dummy (no result ready, including when caught up waiting for other replicas), OR
+     * - Does nothing (only when localEpoch==0, i.e., before the first real partial).
+     * <p>
      * Background computation is started reactively by the {@code SharedCountListener}
      * callback when the epoch advances. The tick handler only starts a computation as
      * a fallback if the listener notification was missed.
      */
     private void handleEpochTick(DataPerturbationService service) throws EnclaveServiceException {
         if (!coordinator.isReady()) {
-            LOG.debug("[DataPerturbation] Task {} ignoring tick -- startup not complete", getTaskId());
+            LOG.debug("[DataPerturbation] Task {} ignoring tick - startup not complete", getTaskId());
             return;
         }
 
         int targetEpoch = coordinator.getTargetEpoch();
 
         if (ProfilerConfig.ENABLED) {
+            getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.TICK_RECEIVED, targetEpoch);
             getProfiler().recordGauge("epoch_lag", targetEpoch - localEpoch);
         }
 
@@ -286,14 +285,17 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 }
                 return;
             }
-        } else if (targetEpoch > localEpoch) {
-            // 2. No result ready -- start bg snapshot if not already running (fallback)
-            if (snapshotThread == null || !snapshotThread.isAlive()) {
-                LOG.info("[DataPerturbation] Task {} starting bg snapshot from tick fallback (localEpoch={}, targetEpoch={})",
+        } else {
+            // 2. No result ready - start bg snapshot if behind and not already running
+            if (targetEpoch > localEpoch && (snapshotThread == null || !snapshotThread.isAlive())) {
+                LOG.info("[DataPerturbation] Task {} starting bg snapshot (localEpoch={}, targetEpoch={})",
                         getTaskId(), localEpoch, targetEpoch);
                 startBackgroundSnapshot(service);
             }
-            // 3. Emit dummy if we've already produced at least one real partial
+            // 3. Emit dummy to maintain constant-rate communication pattern.
+            //    This covers the following cases:
+            //    (a) behind target with snapshot in progress
+            //    (b) caught up (targetEpoch == localEpoch) waiting for other replicas
             if (localEpoch > 0) {
                 synchronized (serviceLock) {
                     long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
@@ -303,8 +305,9 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 if (ProfilerConfig.ENABLED) {
                     getProfiler().incrementEcallTotal("getEncryptedDummyPartial");
                     getProfiler().incrementCounter("dummy_emissions");
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.DUMMY_RELEASED, localEpoch);
                 }
-                LOG.debug("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
+                LOG.info("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
                         getTaskId(), localEpoch, targetEpoch);
             }
         }
@@ -341,14 +344,16 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 }
                 return;
             }
-        } else if (targetEpoch > localEpoch) {
-            // 2. No result ready -- start bg snapshot if not already running (fallback)
-            if (snapshotThread == null || !snapshotThread.isAlive()) {
-                LOG.info("[DataPerturbation] Task {} starting bg snapshot from tick fallback (localEpoch={}, targetEpoch={})",
+        } else {
+            // 2. No result ready -- start bg snapshot if behind and not already running
+            if (targetEpoch > localEpoch && (snapshotThread == null || !snapshotThread.isAlive())) {
+                LOG.info("[DataPerturbation] Task {} starting bg snapshot (localEpoch={}, targetEpoch={})",
                         getTaskId(), localEpoch, targetEpoch);
                 startBackgroundPlaintextSnapshot(service);
             }
-            // 3. Emit dummy if we've already produced at least one real partial
+            // 3. Emit dummy to maintain constant-rate communication pattern.
+            //    This covers both cases: (a) behind target with snapshot in progress,
+            //    and (b) caught up (targetEpoch == localEpoch) waiting for other replicas.
             if (localEpoch > 0) {
                 synchronized (serviceLock) {
                     long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
@@ -359,8 +364,9 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 if (ProfilerConfig.ENABLED) {
                     getProfiler().incrementEcallTotal("getDummyPartial");
                     getProfiler().incrementCounter("dummy_emissions");
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.DUMMY_RELEASED, localEpoch);
                 }
-                LOG.debug("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
+                LOG.info("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
                         getTaskId(), localEpoch, targetEpoch);
             }
         }
@@ -371,7 +377,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
 
     /**
      * Starts the snapshot computation on a background thread.
-     * Safe to call from any thread (bolt executor or Curator {@code SharedCountListener} callback).
+     * Called from the bolt executor's tick handler or the SharedCountListener callback.
      */
     private synchronized void startBackgroundSnapshot(DataPerturbationService service) {
         if (snapshotThread != null && snapshotThread.isAlive()) {
