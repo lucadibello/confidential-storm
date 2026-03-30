@@ -759,8 +759,8 @@ def main():
 
     # Compute grid
     grid = list(product(
-        args.tick_intervals, args.max_time_steps, args.parallelisms,
-        args.mus, args.num_users, args.num_keys))
+        args.max_time_steps, args.parallelisms,
+        args.mus, args.num_users, args.num_keys, args.tick_intervals))
     total_combos = len(grid)
     total_runs = total_combos * len(types_to_run)
 
@@ -826,7 +826,7 @@ def main():
 
     # Run the grid
     run_id = args.start_run_id
-    for tick, epochs, par, mu, num_users, num_keys in grid:
+    for epochs, par, mu, num_users, num_keys, tick in grid:
         if args.mode == "comparison":
             combo_dir = runs_dir / "tick{}_epochs{}_p{}_mu{}_u{}_k{}".format(
                 tick, epochs, par, mu, num_users, num_keys)
