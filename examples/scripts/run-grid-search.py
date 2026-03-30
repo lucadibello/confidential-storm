@@ -704,6 +704,9 @@ def parse_args():
                    help="Skip the build step")
     p.add_argument("--start-run-id", type=int,
                    default=env_int("START_RUN_ID", 1))
+    p.add_argument("--resume-from-run", type=int,
+                   default=env_int("RESUME_FROM_RUN", 0),
+                   help="Skip runs with run_id < this value (resume a stopped grid search)")
     return p.parse_args()
 
 
@@ -771,6 +774,8 @@ def main():
     print(" Estimated runtime:   {:.2f} hrs (worst case)".format(estimated_hrs))
     print(" Archive dir:         {}".format(runs_dir))
     print(" Start run ID:        {}".format(args.start_run_id))
+    if args.resume_from_run > 0:
+        print(" Resume from run:     {} (skipping earlier runs)".format(args.resume_from_run))
     print("=" * 60)
     print()
 
@@ -800,6 +805,12 @@ def main():
                 tick, epochs, par, mu, num_users, num_keys)
         else:
             combo_dir = None
+
+        if args.resume_from_run > 0 and run_id < args.resume_from_run:
+            print("[grid-search] Skipping run {} (resuming from run {})".format(
+                run_id, args.resume_from_run))
+            run_id += 1
+            continue
 
         for tt in types_to_run:
             if combo_dir is not None:
