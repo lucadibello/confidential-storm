@@ -1768,29 +1768,47 @@ def traffic_violation_scatter(
     point_sizes = sizes * size_scale
     point_sizes = point_sizes.clip(lower=20)
 
-    has_types = "topology_type" in plot_df.columns and plot_df["topology_type"].nunique() > 1
+    # Color-code by max_time_steps (horizon length) if available
+    has_epochs = "max_time_steps" in plot_df.columns and plot_df["max_time_steps"].notna().any()
 
-    if has_types:
-        for ttype, colour, label in [
-            ("baseline", COLOR_BASELINE, "Baseline"),
-            ("enclave", COLOR_CONFIDENTIAL, "Confidential (SGX)"),
-        ]:
-            mask = plot_df["topology_type"] == ttype
+    if has_epochs:
+        epoch_vals = sorted(plot_df["max_time_steps"].dropna().unique())
+        cmap = plt.cm.get_cmap("tab10", max(len(epoch_vals), 1))
+        epoch_color = {v: cmap(i) for i, v in enumerate(epoch_vals)}
+        for epoch in epoch_vals:
+            mask = plot_df["max_time_steps"] == epoch
             if not mask.any():
                 continue
             ax.scatter(
                 plot_df.loc[mask, "norm_mean"],
                 plot_df.loc[mask, "norm_std"],
                 s=point_sizes[mask],
-                c=colour, alpha=0.7, edgecolors="white", linewidths=0.5,
-                label=label,
+                c=[epoch_color[epoch]], alpha=0.7, edgecolors="white", linewidths=0.5,
+                label=f"max epochs = {int(epoch)}",
             )
     else:
-        ax.scatter(
-            plot_df["norm_mean"], plot_df["norm_std"],
-            s=point_sizes, c=COLOR_BASELINE, alpha=0.7,
-            edgecolors="white", linewidths=0.5,
-        )
+        has_types = "topology_type" in plot_df.columns and plot_df["topology_type"].nunique() > 1
+        if has_types:
+            for ttype, colour, label in [
+                ("baseline", COLOR_BASELINE, "Baseline"),
+                ("enclave", COLOR_CONFIDENTIAL, "Confidential (SGX)"),
+            ]:
+                mask = plot_df["topology_type"] == ttype
+                if not mask.any():
+                    continue
+                ax.scatter(
+                    plot_df.loc[mask, "norm_mean"],
+                    plot_df.loc[mask, "norm_std"],
+                    s=point_sizes[mask],
+                    c=colour, alpha=0.7, edgecolors="white", linewidths=0.5,
+                    label=label,
+                )
+        else:
+            ax.scatter(
+                plot_df["norm_mean"], plot_df["norm_std"],
+                s=point_sizes, c=COLOR_BASELINE, alpha=0.7,
+                edgecolors="white", linewidths=0.5,
+            )
 
     # Reference crosshair at (1.0, 0.0) = perfect
     ax.axvline(1.0, color="#27AE60", linestyle="--", linewidth=1, alpha=0.5, label="Expected mean")
@@ -1806,8 +1824,10 @@ def traffic_violation_scatter(
         outliers = plot_df[plot_df["norm_std"] > plot_df["norm_std"].quantile(0.85)]
 
     for _, row in outliers.iterrows():
+        base_label = row.get("label", "")
+        run_label = f"{base_label} ({row.name})" if base_label else f"({row.name})"
         ax.annotate(
-            row.get("label", ""),
+            run_label,
             (row["norm_mean"], row["norm_std"]),
             fontsize=6, alpha=0.8,
             xytext=(5, 5), textcoords="offset points",
