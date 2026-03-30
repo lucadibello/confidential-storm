@@ -200,14 +200,16 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
                 }
                 return;
             }
-        } else if (targetEpoch > localEpoch) {
-            // 2. No result — start bg snapshot if not already running (fallback)
-            if (snapshotThread == null || !snapshotThread.isAlive()) {
+        } else {
+            // 2. No result ready -- start bg snapshot if behind and not already running (fallback)
+            if (targetEpoch > localEpoch && (snapshotThread == null || !snapshotThread.isAlive())) {
                 LOG.info("[BaselineDataPerturbation] Task {} starting bg snapshot from tick fallback (localEpoch={}, targetEpoch={})",
                         taskId, localEpoch, targetEpoch);
                 startBackgroundSnapshot();
             }
-            // 3. Emit dummy if we've already produced at least one real partial
+            // 3. Emit dummy to maintain constant-rate communication pattern.
+            //    This covers both cases: (a) behind target with snapshot in progress,
+            //    and (b) caught up (targetEpoch == localEpoch) waiting for other replicas.
             if (localEpoch > 0) {
                 emitHistogram(createDummyHistogram(), true); // No ECALL + no encryption
                 if (ProfilerConfig.ENABLED) {
