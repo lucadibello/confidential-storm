@@ -234,12 +234,13 @@ def snapshot_worker_log_sizes(topo_name):
     for worker_dir in sorted(WORKERS_HOST_DIR.glob("{}-*/".format(topo_name))):
         if not worker_dir.is_dir():
             continue
-        for log_file in sorted(worker_dir.glob("*/worker.log")):
-            if log_file.is_file():
-                try:
-                    sizes[log_file] = log_file.stat().st_size
-                except OSError:
-                    sizes[log_file] = 0
+        for log_name in ("worker.log", "worker.log.err"):
+            for log_file in sorted(worker_dir.glob("*/{}".format(log_name))):
+                if log_file.is_file():
+                    try:
+                        sizes[log_file] = log_file.stat().st_size
+                    except OSError:
+                        sizes[log_file] = 0
     return sizes
 
 
@@ -254,27 +255,32 @@ def check_worker_fatal_errors(topo_name, run_id, log_sizes=None):
     for worker_dir in sorted(WORKERS_HOST_DIR.glob("{}-*/".format(topo_name))):
         if not worker_dir.is_dir():
             continue
-        for log_file in sorted(worker_dir.glob("*/worker.log")):
-            if not log_file.is_file():
-                continue
-            short_path = "{}/{}/worker.log".format(worker_dir.name, log_file.parent.name)
-            try:
-                limit = log_sizes.get(log_file) if log_sizes is not None else None
-                with open(str(log_file), encoding="utf-8", errors="replace") as f:
-                    content = f.read(limit) if limit is not None else f.read()
-            except OSError:
-                continue
+        for log_name in ("worker.log", "worker.log.err"):
+            for log_file in sorted(worker_dir.glob("*/{}".format(log_name))):
+                if not log_file.is_file():
+                    continue
+                short_path = "{}/{}/{}".format(worker_dir.name, log_file.parent.name, log_name)
+                try:
+                    limit = log_sizes.get(log_file) if log_sizes is not None else None
+                    with open(str(log_file), encoding="utf-8", errors="replace") as f:
+                        content = f.read(limit) if limit is not None else f.read()
+                except OSError:
+                    continue
 
-            for line in content.splitlines():
-                if "STDERR" in line and "[INFO] Fatal error:" in line:
+                if "java.lang.OutOfMemoryError" in content:
+                    result.oom = True
+                    print("[run {}] WARNING: OutOfMemoryError detected in {}".format(run_id, short_path))
+
+                for line in content.splitlines():
+                    if "STDERR" in line and "[INFO] Fatal error:" in line:
+                        result.fatal = True
+                        print("[run {}] WARNING: SGX/native fatal error detected in {}".format(run_id, short_path))
+                        print("[run {}]   {}".format(run_id, line))
+                        break
+
+                if "Halting process: Worker died" in content:
                     result.fatal = True
-                    print("[run {}] WARNING: SGX/native fatal error detected in {}".format(run_id, short_path))
-                    print("[run {}]   {}".format(run_id, line))
-                    break
-
-            if "Halting process: Worker died" in content:
-                result.fatal = True
-                print("[run {}] WARNING: Worker died detected in {}".format(run_id, short_path))
+                    print("[run {}] WARNING: Worker died detected in {}".format(run_id, short_path))
     return result
 
 
@@ -546,35 +552,56 @@ def execute_run(p):
     for worker_dir in sorted(WORKERS_HOST_DIR.glob("{}-*/".format(topo_name))):
         if not worker_dir.is_dir():
             continue
-        for log_file in sorted(worker_dir.glob("*/worker.log")):
-            if not log_file.is_file():
+        for log_name in ("worker.log", "worker.log.err"):
+            for log_file in sorted(worker_dir.glob("*/{}".format(log_name))):
+                if not log_file.is_file():
+                    continue
+                port_dir = log_file.parent.name
+                dest_name = "{}_{}_{}".format(worker_dir.name, port_dir, log_name)
+                shutil.copy2(str(log_file), str(worker_logs_dir / dest_name))
+                worker_log_count += 1
+
+                try:
+                    limit = log_sizes.get(log_file)
+                    with open(str(log_file), encoding="utf-8", errors="replace") as f:
+                        content = f.read(limit) if limit is not None else f.read()
+                    lines = content.splitlines()
+                except OSError:
+                    continue
+
+                if any("java.lang.OutOfMemoryError" in line for line in lines):
+                    errors.oom = True
+                    print("[run {}] WARNING: OutOfMemoryError detected in {}".format(p.run_id, dest_name))
+
+                matched_errors = [l for l in lines if error_line_re.match(l)]
+                if matched_errors:
+                    worker_crash_count += 1
+                    print("[run {}] WARNING: ERROR log entries detected in {}".format(p.run_id, dest_name))
+                    for line in matched_errors[:3]:
+                        print("[run {}]   {}".format(p.run_id, line))
+
+    # Copy additional worker artifacts (heapdumps, gc logs, etc.)
+    worker_artifact_count = 0
+    worker_artifacts_dir = run_dir / "worker-artifacts"
+    for worker_dir in sorted(WORKERS_HOST_DIR.glob("{}-*/".format(topo_name))):
+        if not worker_dir.is_dir():
+            continue
+        for port_dir in sorted(worker_dir.iterdir()):
+            if not port_dir.is_dir():
                 continue
-            port_dir = log_file.parent.name
-            dest_name = "{}_{}_worker.log".format(worker_dir.name, port_dir)
-            shutil.copy2(str(log_file), str(worker_logs_dir / dest_name))
-            worker_log_count += 1
+            for artifact in sorted(port_dir.iterdir()):
+                if artifact.name in ("worker.log", "worker.log.err"):
+                    continue
+                if not artifact.is_file():
+                    continue
+                if not worker_artifacts_dir.exists():
+                    worker_artifacts_dir.mkdir()
+                dest_name = "{}_{}_{}".format(worker_dir.name, port_dir.name, artifact.name)
+                shutil.copy2(str(artifact), str(worker_artifacts_dir / dest_name))
+                worker_artifact_count += 1
 
-            try:
-                limit = log_sizes.get(log_file)
-                with open(str(log_file), encoding="utf-8", errors="replace") as f:
-                    content = f.read(limit) if limit is not None else f.read()
-                lines = content.splitlines()
-            except OSError:
-                continue
-
-            if any("java.lang.OutOfMemoryError" in line for line in lines):
-                errors.oom = True
-                print("[run {}] WARNING: OutOfMemoryError detected in {}".format(p.run_id, dest_name))
-
-            matched_errors = [l for l in lines if error_line_re.match(l)]
-            if matched_errors:
-                worker_crash_count += 1
-                print("[run {}] WARNING: ERROR log entries detected in {}".format(p.run_id, dest_name))
-                for line in matched_errors[:3]:
-                    print("[run {}]   {}".format(p.run_id, line))
-
-    print("[run {}] Archived {} worker log(s) (OOM: {}, fatal: {}, ERROR: {}).".format(
-        p.run_id, worker_log_count, errors.oom, errors.fatal, worker_crash_count))
+    print("[run {}] Archived {} worker log(s) (OOM: {}, fatal: {}, ERROR: {}), {} extra artifact(s).".format(
+        p.run_id, worker_log_count, errors.oom, errors.fatal, worker_crash_count, worker_artifact_count))
 
     # ---- 10. Write run metadata ----
     end_time = int(time.time())
