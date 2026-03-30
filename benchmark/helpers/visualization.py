@@ -1232,11 +1232,11 @@ def emission_timeline(
     return fig
 
 
-def enriched_timeline(
+def dp_release_timeline(
     profiler_df: pd.DataFrame,
     lifecycle: pd.DataFrame,
     *,
-    title: str = "Enriched Timeline",
+    title: str = "DataPerturbationBolts Release Timeline",
     output_dir: Path | None = None,
     plot_name: str = "enriched-timeline",
     fmt: str = "png",
@@ -1530,7 +1530,7 @@ def traffic_pattern_analysis(
     # --- Figure: scatter plot of inter-emission deltas per task ---
     fig, axes = plt.subplots(
         n_tasks, 1, figsize=(14, max(4, n_tasks * 2.0)),
-        sharex=True, constrained_layout=True,
+        sharex=True, sharey=True, constrained_layout=True,
     )
     if n_tasks == 1:
         axes = [axes]
