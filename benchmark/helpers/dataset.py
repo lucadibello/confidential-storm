@@ -381,6 +381,32 @@ def compute_run_summary(
             col_key = f"gauge_avg_{short_comp}_{name}"
             summary[col_key] = float(grp["total"].mean())
 
+    # --- Traffic pattern compliance ---
+    TRAFFIC_COMP = "bolt-data-perturbation"
+    dp_lc = lifecycle[lifecycle["component"] == TRAFFIC_COMP]
+    tick_ev = dp_lc[dp_lc["event"] == "TICK_INTERVAL_SECS"]
+    if not tick_ev.empty:
+        tick_s = float(tick_ev["epoch"].iloc[0])
+        summary["traffic_tick_interval_s"] = tick_s
+        tolerance = tick_s * 0.20
+        lo, hi = tick_s - tolerance, tick_s + tolerance
+        emission_events = dp_lc[dp_lc["event"].isin(["EPOCH_ADVANCED", "DUMMY_RELEASED"])]
+        all_deltas: list[float] = []
+        for task_id in emission_events["taskId"].unique():
+            task_em = emission_events[emission_events["taskId"] == task_id].sort_values("elapsed_s")
+            if len(task_em) >= 2:
+                deltas = task_em["elapsed_s"].diff().dropna().values
+                all_deltas.extend(deltas.tolist())
+        if all_deltas:
+            arr = np.array(all_deltas)
+            violations = int(((arr < lo) | (arr > hi)).sum())
+            summary["traffic_total_emissions"] = len(arr)
+            summary["traffic_violations"] = violations
+            summary["traffic_compliance_rate"] = (len(arr) - violations) / len(arr)
+            summary["traffic_mean_delta_s"] = float(arr.mean())
+            summary["traffic_std_delta_s"] = float(arr.std())
+            summary["traffic_max_deviation_s"] = float(np.abs(arr - tick_s).max())
+
     return summary
 
 

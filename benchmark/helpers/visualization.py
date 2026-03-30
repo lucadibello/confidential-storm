@@ -1603,6 +1603,227 @@ def traffic_pattern_analysis(
 
 
 # ---------------------------------------------------------------------------
+# Multi-run traffic pattern compliance plots (Section C2)
+# ---------------------------------------------------------------------------
+
+
+def traffic_compliance_strip(
+    df: pd.DataFrame,
+    *,
+    title: str = "Traffic Pattern Compliance by Run",
+    output_dir: Path | None = None,
+    plot_name: str = "c2-traffic-compliance-strip",
+    fmt: str = "png",
+    show: bool = True,
+) -> plt.Figure | None:
+    """Horizontal bar chart of per-run traffic compliance rate, sorted worst→best."""
+    col = "traffic_compliance_rate"
+    if col not in df.columns or df[col].isna().all():
+        print("Skipped traffic compliance strip: no data")
+        return None
+
+    plot_df = df.dropna(subset=[col]).sort_values(col).copy()
+    if plot_df.empty:
+        return None
+
+    n = len(plot_df)
+    fig, ax = plt.subplots(figsize=(10, max(4, n * 0.45)))
+
+    colors = [
+        COLOR_CONFIDENTIAL if t == "enclave" else COLOR_BASELINE
+        for t in plot_df["topology_type"]
+    ]
+    bars = ax.barh(range(n), plot_df[col], color=colors, alpha=0.8, edgecolor="white")
+
+    # Annotate with violation count
+    for i, (_, row) in enumerate(plot_df.iterrows()):
+        v = row.get("traffic_violations", 0)
+        total = row.get("traffic_total_emissions", 0)
+        if pd.notna(v) and pd.notna(total):
+            ax.text(
+                row[col] + 0.005, i,
+                f"{int(v)}/{int(total)} violations",
+                va="center", fontsize=7, color="#555",
+            )
+
+    ax.set_yticks(range(n))
+    ax.set_yticklabels(plot_df["label"], fontsize=8)
+    ax.set_xlabel("Compliance rate")
+    ax.set_xlim(0, 1.15)
+
+    ax.axvline(1.0, color="#27AE60", linestyle="--", linewidth=1, alpha=0.6, label="100%")
+    ax.axvline(0.95, color="#E67E22", linestyle=":", linewidth=1, alpha=0.6, label="95%")
+
+    # Legend for topology types + reference lines
+    handles = [
+        mpatches.Patch(color=COLOR_BASELINE, label="Baseline"),
+        mpatches.Patch(color=COLOR_CONFIDENTIAL, label="Confidential (SGX)"),
+        plt.Line2D([], [], color="#27AE60", linestyle="--", linewidth=1, alpha=0.6, label="100% compliance"),
+        plt.Line2D([], [], color="#E67E22", linestyle=":", linewidth=1, alpha=0.6, label="95% compliance"),
+    ]
+    ax.legend(handles=handles, fontsize=8, loc="lower right")
+
+    ax.set_title(title, fontsize=11)
+    ax.grid(True, axis="x", alpha=0.2)
+
+    save_or_show(fig, output_dir, plot_name, fmt, show)
+    return fig
+
+
+def traffic_compliance_sensitivity(
+    df: pd.DataFrame,
+    vary_cols: list[str],
+    *,
+    title: str = "Traffic Compliance vs Parameters",
+    output_dir: Path | None = None,
+    plot_name: str = "c2-traffic-compliance-sensitivity",
+    fmt: str = "png",
+    show: bool = True,
+) -> plt.Figure | None:
+    """Faceted line plot showing compliance rate vs each varying parameter."""
+    col = "traffic_compliance_rate"
+    if col not in df.columns or df[col].isna().all():
+        print("Skipped traffic compliance sensitivity: no data")
+        return None
+
+    plot_df = df.dropna(subset=[col])
+    # Keep only parameters that actually vary in the filtered data
+    vary = [c for c in vary_cols if c in plot_df.columns and plot_df[c].nunique(dropna=False) > 1]
+    if not vary:
+        print("Skipped traffic compliance sensitivity: no varying parameters")
+        return None
+
+    n_params = len(vary)
+    fig, axes = plt.subplots(1, n_params, figsize=(5 * n_params, 5), squeeze=False)
+
+    has_types = "topology_type" in plot_df.columns and plot_df["topology_type"].nunique() > 1
+
+    for pi, param in enumerate(vary):
+        ax = axes[0, pi]
+        if has_types:
+            for ttype, colour, label in [
+                ("baseline", COLOR_BASELINE, "Baseline"),
+                ("enclave", COLOR_CONFIDENTIAL, "Confidential (SGX)"),
+            ]:
+                sub = plot_df[plot_df["topology_type"] == ttype]
+                if sub.empty:
+                    continue
+                grouped = sub.groupby(param)[col].agg(["mean", "std", "count"]).sort_index()
+                x = grouped.index.values
+                y = grouped["mean"].values
+                err = grouped["std"].fillna(0).values
+                ax.plot(x, y, marker="o", color=colour, label=label, linewidth=2)
+                ax.fill_between(x, y - err, y + err, color=colour, alpha=0.15)
+        else:
+            grouped = plot_df.groupby(param)[col].agg(["mean", "std", "count"]).sort_index()
+            x = grouped.index.values
+            y = grouped["mean"].values
+            err = grouped["std"].fillna(0).values
+            ax.plot(x, y, marker="o", color=COLOR_BASELINE, linewidth=2)
+            ax.fill_between(x, y - err, y + err, color=COLOR_BASELINE, alpha=0.15)
+
+        ax.set_xlabel(_PARAM_DISPLAY.get(param, param))
+        ax.set_ylabel("Compliance rate" if pi == 0 else "")
+        ax.set_ylim(0, 1.05)
+        ax.axhline(1.0, color="#27AE60", linestyle="--", linewidth=0.8, alpha=0.5)
+        ax.axhline(0.95, color="#E67E22", linestyle=":", linewidth=0.8, alpha=0.5)
+        ax.grid(True, alpha=0.2)
+        if pi == 0 and has_types:
+            ax.legend(fontsize=8)
+
+    fig.suptitle(title, fontsize=12, fontweight="bold")
+    save_or_show(fig, output_dir, plot_name, fmt, show)
+    return fig
+
+
+def traffic_violation_scatter(
+    df: pd.DataFrame,
+    *,
+    title: str = "Traffic Violation Characteristics",
+    output_dir: Path | None = None,
+    plot_name: str = "c2-traffic-violation-scatter",
+    fmt: str = "png",
+    show: bool = True,
+) -> plt.Figure | None:
+    """Scatter: normalized mean delta vs normalized std delta, sized by emission count."""
+    needed = ["traffic_mean_delta_s", "traffic_std_delta_s",
+              "traffic_tick_interval_s", "traffic_total_emissions"]
+    if not all(c in df.columns for c in needed):
+        print("Skipped traffic violation scatter: missing columns")
+        return None
+
+    plot_df = df.dropna(subset=needed).copy()
+    if plot_df.empty:
+        return None
+
+    # Normalize by each run's tick interval
+    plot_df["norm_mean"] = plot_df["traffic_mean_delta_s"] / plot_df["traffic_tick_interval_s"]
+    plot_df["norm_std"] = plot_df["traffic_std_delta_s"] / plot_df["traffic_tick_interval_s"]
+
+    fig, ax = plt.subplots(figsize=(10, 7))
+
+    # Size proportional to emission count
+    sizes = plot_df["traffic_total_emissions"]
+    size_scale = 200 / max(sizes.max(), 1)
+    point_sizes = sizes * size_scale
+    point_sizes = point_sizes.clip(lower=20)
+
+    has_types = "topology_type" in plot_df.columns and plot_df["topology_type"].nunique() > 1
+
+    if has_types:
+        for ttype, colour, label in [
+            ("baseline", COLOR_BASELINE, "Baseline"),
+            ("enclave", COLOR_CONFIDENTIAL, "Confidential (SGX)"),
+        ]:
+            mask = plot_df["topology_type"] == ttype
+            if not mask.any():
+                continue
+            ax.scatter(
+                plot_df.loc[mask, "norm_mean"],
+                plot_df.loc[mask, "norm_std"],
+                s=point_sizes[mask],
+                c=colour, alpha=0.7, edgecolors="white", linewidths=0.5,
+                label=label,
+            )
+    else:
+        ax.scatter(
+            plot_df["norm_mean"], plot_df["norm_std"],
+            s=point_sizes, c=COLOR_BASELINE, alpha=0.7,
+            edgecolors="white", linewidths=0.5,
+        )
+
+    # Reference crosshair at (1.0, 0.0) = perfect
+    ax.axvline(1.0, color="#27AE60", linestyle="--", linewidth=1, alpha=0.5, label="Expected mean")
+    ax.axhline(0.0, color="#888", linestyle="-", linewidth=0.5, alpha=0.3)
+
+    # Annotate outliers (compliance < 0.95 or high std)
+    if "traffic_compliance_rate" in plot_df.columns:
+        outliers = plot_df[
+            (plot_df["traffic_compliance_rate"] < 0.95) |
+            (plot_df["norm_std"] > plot_df["norm_std"].quantile(0.85))
+        ]
+    else:
+        outliers = plot_df[plot_df["norm_std"] > plot_df["norm_std"].quantile(0.85)]
+
+    for _, row in outliers.iterrows():
+        ax.annotate(
+            row.get("label", ""),
+            (row["norm_mean"], row["norm_std"]),
+            fontsize=6, alpha=0.8,
+            xytext=(5, 5), textcoords="offset points",
+        )
+
+    ax.set_xlabel("Mean inter-emission delta / tick interval (1.0 = perfect)")
+    ax.set_ylabel("Std dev of inter-emission delta / tick interval (0.0 = perfect)")
+    ax.set_title(title, fontsize=11)
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.2)
+
+    save_or_show(fig, output_dir, plot_name, fmt, show)
+    return fig
+
+
+# ---------------------------------------------------------------------------
 # Counter / Gauge comparison plots (Section A6+)
 # ---------------------------------------------------------------------------
 
