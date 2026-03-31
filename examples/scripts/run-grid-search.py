@@ -24,6 +24,11 @@ Usage:
   # Change grid parameters (example: multiple tick intervals and parallelisms)
   python3 run-grid-search.py --mode enclave --tick-intervals 60 90
   TICK_INTERVALS="60 90" python3 run-grid-search.py --mode enclave
+
+  # Label runs for easy comparison between topology setups
+  python3 run-grid-search.py --mode enclave --label before-fix
+  python3 run-grid-search.py --mode enclave --label after-fix
+  LABEL=after-fix python3 run-grid-search.py --mode enclave
 """
 
 import argparse
@@ -328,7 +333,7 @@ ENCLAVE = TopologyType(
 class RunParams(object):
     def __init__(self, topo_type, run_id, tick_interval, max_time_steps, parallelism,
                  mu, num_users, num_keys, seed, ground_truth, poll_interval,
-                 wait_safety_factor, startup_timeout, total_runs, run_dir):
+                 wait_safety_factor, startup_timeout, total_runs, run_dir, label=""):
         self.topo_type = topo_type             # TopologyType instance
         self.run_id = run_id
         self.tick_interval = tick_interval
@@ -344,6 +349,7 @@ class RunParams(object):
         self.startup_timeout = startup_timeout
         self.total_runs = total_runs
         self.run_dir = run_dir
+        self.label = label
 
 
 def run_storm(*args):
@@ -609,6 +615,7 @@ def execute_run(p):
 
     meta_lines = [
         "run_id={}".format(p.run_id),
+        "label={}".format(p.label),
         "topology_name={}".format(topo_name),
         "topology_type={}".format(tt.name),
         "tick_interval_secs={}".format(p.tick_interval),
@@ -734,6 +741,11 @@ def parse_args():
     p.add_argument("--resume-from-run", type=int,
                    default=env_int("RESUME_FROM_RUN", 0),
                    help="Skip runs with run_id < this value (resume a stopped grid search)")
+    p.add_argument("--label", type=str,
+                   default=env_str("LABEL", ""),
+                   help="Optional label used as a subdirectory to group related runs "
+                        "(e.g. 'before-fix', 'after-fix'). Runs are stored under "
+                        "data/runs/<label>/<timestamp>/... when set.")
     return p.parse_args()
 
 
@@ -772,12 +784,16 @@ def main():
     estimated_hrs = estimated_secs / 3600
 
     grid_timestamp = time.strftime("%Y%m%d_%H%M%S")
+    label = args.label.strip()
     if args.mode == "comparison":
-        runs_dir = BASELINE_PROJECT / "data" / "comparison-runs" / grid_timestamp
+        base = BASELINE_PROJECT / "data" / "comparison-runs"
+        runs_dir = (base / label / grid_timestamp) if label else (base / grid_timestamp)
     elif args.mode == "baseline":
-        runs_dir = BASELINE_PROJECT / "data" / "runs" / grid_timestamp
+        base = BASELINE_PROJECT / "data" / "runs"
+        runs_dir = (base / label / grid_timestamp) if label else (base / grid_timestamp)
     else:
-        runs_dir = ENCLAVE_PROJECT / "data" / "runs" / grid_timestamp
+        base = ENCLAVE_PROJECT / "data" / "runs"
+        runs_dir = (base / label / grid_timestamp) if label else (base / grid_timestamp)
 
     mode_label = {
         "baseline": "Baseline DP Histogram (No SGX)",
@@ -800,6 +816,8 @@ def main():
     print(" Total runs:          {}".format(total_runs))
     print(" Estimated runtime:   {:.2f} hrs (worst case)".format(estimated_hrs))
     print(" Archive dir:         {}".format(runs_dir))
+    if label:
+        print(" Label:               {}".format(label))
     print(" Start run ID:        {}".format(args.start_run_id))
     if args.resume_from_run > 0:
         print(" Resume from run:     {} (skipping earlier runs)".format(args.resume_from_run))
@@ -857,6 +875,7 @@ def main():
                 num_keys=num_keys,
                 seed=args.seed,
                 ground_truth=args.ground_truth,
+                label=label,
                 poll_interval=args.poll_interval,
                 wait_safety_factor=args.wait_safety_factor,
                 startup_timeout=tt.startup_timeout,
