@@ -1064,6 +1064,9 @@ def run_timeline_gantt(
                                       suffixes=("_s", "_e"))
             for _, row in merged.iterrows():
                 dur = row["elapsed_s_e"] - row["elapsed_s_s"]
+
+                # NOTE: set minimum duration to maintain visibility even if timestamps are close or noisy
+
                 ax.barh(y, dur, left=row["elapsed_s_s"], height=0.6,
                         color=phase_colors["snapshot"], edgecolor="none", alpha=0.8)
 
@@ -1178,22 +1181,33 @@ def emission_timeline(
 
     # ---- Top panel: cumulative emissions (summed across tasks) ----
     _draw_grid(ax_top)
-    # Collect all unique timestamps, aggregate across tasks
-    _real_parts = [ts["real_emissions"][["elapsed_s", "total"]] for ts in task_series.values()
-                   if "real_emissions" in ts]
-    all_real = pd.concat(_real_parts, ignore_index=True) if _real_parts else pd.DataFrame()
-    _dummy_parts = [ts["dummy_emissions"][["elapsed_s", "total"]] for ts in task_series.values()
-                    if "dummy_emissions" in ts]
-    all_dummy = pd.concat(_dummy_parts, ignore_index=True) if _dummy_parts else pd.DataFrame()
-    if not all_real.empty:
-        cum_real = all_real.groupby("elapsed_s")["total"].sum().sort_index()
+    # Build per-task series on a common time index and forward-fill so that
+    # tasks missing a data point at a given timestamp carry their last known
+    # cumulative value instead of being treated as zero (which caused the
+    # summed cumulative line to decrease).
+    def _sum_cumulative(name: str) -> pd.Series | None:
+        per_task = {}
+        for task_id, ts in task_series.items():
+            if name not in ts:
+                continue
+            s = ts[name].set_index("elapsed_s")["total"]
+            s = s[~s.index.duplicated(keep="last")]
+            per_task[task_id] = s
+        if not per_task:
+            return None
+        combined = pd.DataFrame(per_task)
+        combined = combined.sort_index().ffill().fillna(0)
+        return combined.sum(axis=1)
+
+    cum_real = _sum_cumulative("real_emissions")
+    cum_dummy = _sum_cumulative("dummy_emissions")
+    if cum_real is not None:
         ax_top.step(cum_real.index, cum_real.values, where="post",
                     color="#27AE60", linewidth=1.5, label="Real (cumulative)")
-    if not all_dummy.empty:
-        cum_dummy = all_dummy.groupby("elapsed_s")["total"].sum().sort_index()
+    if cum_dummy is not None:
         ax_top.step(cum_dummy.index, cum_dummy.values, where="post",
                     color="#E74C3C", linewidth=1.5, label="Dummy (cumulative)")
-    elif not all_real.empty:
+    elif cum_real is not None:
         # No dummy data — show a zero line so the absence is explicit
         ax_top.step(cum_real.index, np.zeros(len(cum_real)), where="post",
                     color="#E74C3C", linewidth=1.5, label="Dummy (cumulative)")
@@ -1290,8 +1304,11 @@ def dp_release_timeline(
             if y is None:
                 continue
             dur = row["elapsed_s_e"] - row["elapsed_s_s"]
-            ax.barh(y, dur, left=row["elapsed_s_s"], height=0.5,
-                    color="#E74C3C", alpha=0.35, edgecolor="none")
+
+            # NOTE: we add a minimum width to make short snapshots visible, but this can cause overlaps if snapshots are very close together
+            min_width = tick_s * 0.05 if tick_s else 0.5
+            plot_dur = max(dur, min_width)
+            ax.barh(y, plot_dur, left=row["elapsed_s_s"], height=0.5, color="#E74C3C", alpha=0.35, edgecolor="none")
 
     # Marker styles per event
     _event_style = {
@@ -1839,6 +1856,429 @@ def traffic_violation_scatter(
     ax.legend(fontsize=8)
     ax.grid(True, alpha=0.2)
 
+    save_or_show(fig, output_dir, plot_name, fmt, show)
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Tick irregularity cross-run analysis (Section D1e)
+# ---------------------------------------------------------------------------
+
+def tick_irregularity_overview(
+    df: pd.DataFrame,
+    *,
+    title: str = "Tick Tuple Irregularity Across Runs",
+    output_dir: Path | None = None,
+    plot_name: str = "d1e-tick-irregularity-overview",
+    fmt: str = "png",
+    show: bool = True,
+    annotate_outliers: bool = False
+) -> plt.Figure | None:
+    """Box + strip chart of normalized tick irregularity metrics across runs.
+
+    Three panels: normalized mean delta, normalized std delta, and normalized
+    max deviation — each grouped by topology type.
+    """
+    needed = ["traffic_mean_delta_s", "traffic_std_delta_s",
+              "traffic_tick_interval_s"]
+    if not all(c in df.columns for c in needed):
+        print("Skipped tick irregularity overview: missing columns")
+        return None
+
+    plot_df = df.dropna(subset=needed).copy()
+    if plot_df.empty:
+        return None
+
+    plot_df["norm_mean"] = plot_df["traffic_mean_delta_s"] / plot_df["traffic_tick_interval_s"]
+    plot_df["norm_std"] = plot_df["traffic_std_delta_s"] / plot_df["traffic_tick_interval_s"]
+    has_max_dev = "traffic_max_deviation_s" in plot_df.columns
+    if has_max_dev:
+        plot_df["norm_max_dev"] = plot_df["traffic_max_deviation_s"] / plot_df["traffic_tick_interval_s"]
+
+    panels = [
+        ("norm_mean", "Normalized mean delta\n(1.0 = perfect)", 1.0),
+        ("norm_std", "Normalized std delta\n(0.0 = perfect)", 0.0),
+    ]
+    if has_max_dev:
+        panels.append(("norm_max_dev", "Normalized max deviation", None))
+
+    n_panels = len(panels)
+    fig, axes = plt.subplots(1, n_panels, figsize=(5 * n_panels, 6), squeeze=False)
+
+    has_types = "topology_type" in plot_df.columns and plot_df["topology_type"].nunique() > 1
+    type_order = ["baseline", "enclave"] if has_types else [None]
+    type_colors = {"baseline": COLOR_BASELINE, "enclave": COLOR_CONFIDENTIAL, None: COLOR_BASELINE}
+    type_labels = {"baseline": "Baseline", "enclave": "Confidential (SGX)", None: "All runs"}
+
+    for pi, (col, ylabel, ref_val) in enumerate(panels):
+        ax = axes[0, pi]
+
+        positions = []
+        for ti, ttype in enumerate(type_order):
+            sub = plot_df[plot_df["topology_type"] == ttype] if ttype else plot_df
+            if sub.empty:
+                continue
+            pos = ti
+            positions.append(pos)
+            vals = sub[col].dropna().values
+            colour = type_colors[ttype]
+
+            # Box plot
+            bp = ax.boxplot(
+                vals, positions=[pos], widths=0.4, patch_artist=True,
+                boxprops=dict(facecolor=colour, alpha=0.3),
+                medianprops=dict(color=colour, linewidth=2),
+                whiskerprops=dict(color=colour), capprops=dict(color=colour),
+                flierprops=dict(marker="", markersize=0),  # hide default outliers
+            )
+
+            # Strip (jittered scatter)
+            jitter = np.random.default_rng(42).uniform(-0.12, 0.12, len(vals))
+            ax.scatter(
+                np.full(len(vals), pos) + jitter, vals,
+                c=colour, s=30, alpha=0.6, edgecolors="white", linewidths=0.5,
+                label=type_labels[ttype] if pi == 0 else None,
+                zorder=3,
+            )
+
+            # Annotate outliers (compliance < 0.95)
+            if annotate_outliers:
+                if "traffic_compliance_rate" in sub.columns:
+                    outliers = sub[sub["traffic_compliance_rate"] < 0.95]
+                    for _, row in outliers.iterrows():
+                        lbl = row.get("label", str(row.name))
+                        ax.annotate(
+                            lbl, (pos, row[col]),
+                            fontsize=6, alpha=0.7,
+                            xytext=(8, 0), textcoords="offset points",
+                        )
+
+        if ref_val is not None:
+            ax.axhline(ref_val, color="#27AE60", linestyle="--", linewidth=1, alpha=0.6)
+
+        ax.set_ylabel(ylabel)
+        ax.set_xticks([i for i in range(len(type_order))])
+        ax.set_xticklabels([type_labels[t] for t in type_order], fontsize=9)
+        ax.grid(True, axis="y", alpha=0.2)
+
+    if has_types:
+        axes[0, 0].legend(fontsize=8)
+
+    fig.suptitle(title, fontsize=12, fontweight="bold")
+    fig.tight_layout()
+    save_or_show(fig, output_dir, plot_name, fmt, show)
+    return fig
+
+
+def tick_irregularity_sensitivity(
+    df: pd.DataFrame,
+    vary_cols: list[str],
+    *,
+    title: str = "Tick Irregularity vs Parameters",
+    output_dir: Path | None = None,
+    plot_name: str = "d1e-tick-irregularity-sensitivity",
+    fmt: str = "png",
+    show: bool = True,
+) -> plt.Figure | None:
+    """Faceted line plots: normalized mean & std delta vs each varying parameter."""
+    needed = ["traffic_mean_delta_s", "traffic_std_delta_s", "traffic_tick_interval_s"]
+    if not all(c in df.columns for c in needed):
+        print("Skipped tick irregularity sensitivity: missing columns")
+        return None
+
+    plot_df = df.dropna(subset=needed).copy()
+    plot_df["norm_mean"] = plot_df["traffic_mean_delta_s"] / plot_df["traffic_tick_interval_s"]
+    plot_df["norm_std"] = plot_df["traffic_std_delta_s"] / plot_df["traffic_tick_interval_s"]
+
+    vary = [c for c in vary_cols if c in plot_df.columns and plot_df[c].nunique(dropna=False) > 1]
+    if not vary:
+        print("Skipped tick irregularity sensitivity: no varying parameters")
+        return None
+
+    n_params = len(vary)
+    rows_spec = [("norm_mean", "Normalized mean delta", 1.0),
+                 ("norm_std", "Normalized std delta", 0.0)]
+    fig, axes = plt.subplots(2, n_params, figsize=(5 * n_params, 8), squeeze=False)
+
+    has_types = "topology_type" in plot_df.columns and plot_df["topology_type"].nunique() > 1
+
+    for ri, (metric, ylabel, ref_val) in enumerate(rows_spec):
+        for pi, param in enumerate(vary):
+            ax = axes[ri, pi]
+            if has_types:
+                for ttype, colour, label in [
+                    ("baseline", COLOR_BASELINE, "Baseline"),
+                    ("enclave", COLOR_CONFIDENTIAL, "Confidential (SGX)"),
+                ]:
+                    sub = plot_df[plot_df["topology_type"] == ttype]
+                    if sub.empty:
+                        continue
+                    grouped = sub.groupby(param)[metric].agg(["mean", "std"]).sort_index()
+                    x = grouped.index.values
+                    y = grouped["mean"].values
+                    err = grouped["std"].fillna(0).values
+                    ax.plot(x, y, marker="o", color=colour, label=label, linewidth=2)
+                    ax.fill_between(x, y - err, y + err, color=colour, alpha=0.15)
+            else:
+                grouped = plot_df.groupby(param)[metric].agg(["mean", "std"]).sort_index()
+                x = grouped.index.values
+                y = grouped["mean"].values
+                err = grouped["std"].fillna(0).values
+                ax.plot(x, y, marker="o", color=COLOR_BASELINE, linewidth=2)
+                ax.fill_between(x, y - err, y + err, color=COLOR_BASELINE, alpha=0.15)
+
+            ax.axhline(ref_val, color="#27AE60", linestyle="--", linewidth=0.8, alpha=0.5)
+            ax.set_xlabel(_PARAM_DISPLAY.get(param, param))
+            if pi == 0:
+                ax.set_ylabel(ylabel)
+            ax.grid(True, alpha=0.2)
+            if ri == 0 and pi == 0 and has_types:
+                ax.legend(fontsize=8)
+
+    fig.suptitle(title, fontsize=12, fontweight="bold")
+    save_or_show(fig, output_dir, plot_name, fmt, show)
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Compliance / irregularity vs performance relation analysis (Section D1f)
+# ---------------------------------------------------------------------------
+
+def _compliance_scatter_grid(
+    df: pd.DataFrame,
+    y_col: str,
+    y_label: str,
+    ref_y: float,
+    ref_y_extra: float | None,
+    *,
+    title: str,
+    output_dir: Path | None = None,
+    plot_name: str = "scatter-grid",
+    fmt: str = "png",
+    show: bool = True,
+    annotate_outliers: bool = False,
+) -> plt.Figure | None:
+    """Internal: 2x2 scatter grid of y_col vs four performance metrics."""
+    x_specs = [
+        ("throughput_tuples_per_s", "Throughput (tuples/s)", True),
+        ("avg_epoch_duration_s", "Avg epoch duration (s)", False),
+        ("avg_snapshot_duration_s", "Avg snapshot duration (s)", False),
+        ("tuples_per_epoch", "Tuples per epoch", True),
+    ]
+    # Keep only panels whose columns exist
+    x_specs = [(col, lbl, log) for col, lbl, log in x_specs if col in df.columns]
+    if not x_specs:
+        print(f"Skipped {plot_name}: no performance columns available")
+        return None
+
+    plot_df = df.dropna(subset=[y_col]).copy()
+    if plot_df.empty:
+        return None
+
+    n = len(x_specs)
+    ncols = min(n, 2)
+    nrows = (n + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, figsize=(7 * ncols, 5.5 * nrows), squeeze=False)
+
+    has_types = "topology_type" in plot_df.columns and plot_df["topology_type"].nunique() > 1
+
+    for idx, (x_col, x_label, use_log) in enumerate(x_specs):
+        ax = axes[idx // ncols, idx % ncols]
+        sub = plot_df.dropna(subset=[x_col])
+        if sub.empty:
+            ax.set_visible(False)
+            continue
+
+        if has_types:
+            for ttype, colour, label in [
+                ("baseline", COLOR_BASELINE, "Baseline"),
+                ("enclave", COLOR_CONFIDENTIAL, "Confidential (SGX)"),
+            ]:
+                mask = sub["topology_type"] == ttype
+                if not mask.any():
+                    continue
+                ax.scatter(
+                    sub.loc[mask, x_col], sub.loc[mask, y_col],
+                    c=colour, s=50, alpha=0.7, edgecolors="white", linewidths=0.5,
+                    label=label,
+                )
+        else:
+            ax.scatter(
+                sub[x_col], sub[y_col],
+                c=COLOR_BASELINE, s=50, alpha=0.7, edgecolors="white", linewidths=0.5,
+            )
+
+        # Reference lines
+        ax.axhline(ref_y, color="#27AE60", linestyle="--", linewidth=0.8, alpha=0.6)
+        if ref_y_extra is not None:
+            ax.axhline(ref_y_extra, color="#E67E22", linestyle=":", linewidth=0.8, alpha=0.6)
+
+        # Pearson r
+        valid = sub[[x_col, y_col]].dropna()
+        if len(valid) >= 5:
+            r = valid[x_col].corr(valid[y_col])
+            ax.annotate(
+                f"r = {r:.3f}", xy=(0.02, 0.02), xycoords="axes fraction",
+                fontsize=9, fontstyle="italic",
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.7),
+            )
+
+        # WARNING: Annotate outliers (temporarily disabled)
+        if annotate_outliers:
+            if "traffic_compliance_rate" in sub.columns:
+                outliers = sub[sub["traffic_compliance_rate"] < 0.95]
+            else:
+                q85 = sub[y_col].quantile(0.85)
+                outliers = sub[sub[y_col] > q85]
+            for _, row in outliers.iterrows():
+                lbl = row.get("label", str(row.name))
+            ax.annotate(
+                lbl, (row[x_col], row[y_col]),
+                fontsize=6, alpha=0.7,
+                xytext=(5, 5), textcoords="offset points",
+            )
+
+        if use_log:
+            ax.set_xscale("log")
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label if idx % ncols == 0 else "")
+        ax.grid(True, alpha=0.2)
+        if idx == 0 and has_types:
+            ax.legend(fontsize=8)
+
+    # Hide unused axes
+    for idx in range(n, nrows * ncols):
+        axes[idx // ncols, idx % ncols].set_visible(False)
+
+    fig.suptitle(title, fontsize=12, fontweight="bold")
+    save_or_show(fig, output_dir, plot_name, fmt, show)
+    return fig
+
+
+def compliance_vs_performance_scatter(
+    df: pd.DataFrame,
+    *,
+    title: str = "Traffic Compliance vs Performance Metrics",
+    output_dir: Path | None = None,
+    plot_name: str = "d1f-compliance-vs-performance",
+    fmt: str = "png",
+    show: bool = True,
+    annotate_outliers: bool = False,
+) -> plt.Figure | None:
+    """2x2 scatter: traffic_compliance_rate vs throughput, epoch/snapshot duration."""
+    if "traffic_compliance_rate" not in df.columns:
+        print("Skipped compliance vs performance scatter: no compliance data")
+        return None
+    return _compliance_scatter_grid(
+        df, y_col="traffic_compliance_rate", y_label="Traffic compliance rate",
+        ref_y=1.0, ref_y_extra=0.95,
+        title=title, output_dir=output_dir, plot_name=plot_name, fmt=fmt, show=show,
+        annotate_outliers=annotate_outliers,
+    )
+
+
+def irregularity_vs_performance_scatter(
+    df: pd.DataFrame,
+    *,
+    title: str = "Tick Irregularity vs Performance Metrics",
+    output_dir: Path | None = None,
+    plot_name: str = "d1f-irregularity-vs-performance",
+    fmt: str = "png",
+    show: bool = True,
+    annotate_outliers: bool = False,
+) -> plt.Figure | None:
+    """2x2 scatter: normalized std delta vs throughput, epoch/snapshot duration."""
+    needed = ["traffic_std_delta_s", "traffic_tick_interval_s"]
+    if not all(c in df.columns for c in needed):
+        print("Skipped irregularity vs performance scatter: missing columns")
+        return None
+    plot_df = df.dropna(subset=needed).copy()
+    plot_df["norm_std"] = plot_df["traffic_std_delta_s"] / plot_df["traffic_tick_interval_s"]
+    return _compliance_scatter_grid(
+        plot_df, y_col="norm_std", y_label="Normalized std of inter-emission delta",
+        ref_y=0.0, ref_y_extra=None,
+        title=title, output_dir=output_dir, plot_name=plot_name, fmt=fmt, show=show,
+        annotate_outliers=annotate_outliers,
+    )
+
+
+def compliance_correlation_heatmap(
+    df: pd.DataFrame,
+    *,
+    title: str = "Correlation: Compliance & Irregularity vs Performance",
+    output_dir: Path | None = None,
+    plot_name: str = "d1f-compliance-correlation-heatmap",
+    fmt: str = "png",
+    show: bool = True,
+) -> plt.Figure | None:
+    """Heatmap of Pearson correlations between compliance/irregularity and performance."""
+    needed_base = ["traffic_compliance_rate", "traffic_std_delta_s", "traffic_tick_interval_s"]
+    if not all(c in df.columns for c in needed_base):
+        print("Skipped compliance correlation heatmap: missing columns")
+        return None
+
+    plot_df = df.dropna(subset=needed_base).copy()
+    plot_df["norm_mean_delta"] = plot_df["traffic_mean_delta_s"] / plot_df["traffic_tick_interval_s"]
+    plot_df["norm_std_delta"] = plot_df["traffic_std_delta_s"] / plot_df["traffic_tick_interval_s"]
+
+    # Compliance / irregularity columns (rows in heatmap)
+    y_cols = [
+        ("traffic_compliance_rate", "Compliance rate"),
+        ("norm_mean_delta", "Norm. mean delta"),
+        ("norm_std_delta", "Norm. std delta"),
+    ]
+    # Performance columns (columns in heatmap)
+    x_cols = [
+        ("throughput_tuples_per_s", "Throughput (t/s)"),
+        ("tuples_per_epoch", "Tuples/epoch"),
+        ("avg_epoch_duration_s", "Avg epoch dur. (s)"),
+        ("avg_snapshot_duration_s", "Avg snapshot dur. (s)"),
+        ("total_snapshot_time_s", "Total snapshot time (s)"),
+        ("active_duration_s", "Active duration (s)"),
+    ]
+
+    # Keep only columns that exist
+    y_cols = [(c, l) for c, l in y_cols if c in plot_df.columns]
+    x_cols = [(c, l) for c, l in x_cols if c in plot_df.columns]
+    if not y_cols or not x_cols:
+        print("Skipped compliance correlation heatmap: not enough columns")
+        return None
+
+    if len(plot_df) < 5:
+        print(f"Warning: only {len(plot_df)} data points — correlations may be unreliable")
+
+    # Build correlation sub-matrix
+    all_cols = [c for c, _ in y_cols] + [c for c, _ in x_cols]
+    corr_full = plot_df[all_cols].corr()
+    corr_sub = corr_full.loc[[c for c, _ in y_cols], [c for c, _ in x_cols]]
+
+    fig, ax = plt.subplots(figsize=(max(8, len(x_cols) * 1.8), max(3, len(y_cols) * 1.2 + 1)))
+
+    # Clamp for TwoSlopeNorm (needs range spanning 0)
+    vmin = min(corr_sub.min().min(), -0.01)
+    vmax = max(corr_sub.max().max(), 0.01)
+    norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+
+    im = ax.imshow(corr_sub.values, cmap="RdBu_r", norm=norm, aspect="auto")
+    fig.colorbar(im, ax=ax, shrink=0.8, label="Pearson r")
+
+    # Labels
+    ax.set_xticks(range(len(x_cols)))
+    ax.set_xticklabels([l for _, l in x_cols], rotation=30, ha="right", fontsize=9)
+    ax.set_yticks(range(len(y_cols)))
+    ax.set_yticklabels([l for _, l in y_cols], fontsize=9)
+
+    # Annotate cells
+    for i in range(len(y_cols)):
+        for j in range(len(x_cols)):
+            val = corr_sub.values[i, j]
+            if np.isfinite(val):
+                color = "white" if abs(val) > 0.6 else "black"
+                ax.text(j, i, f"{val:.2f}", ha="center", va="center",
+                        fontsize=10, fontweight="bold", color=color)
+
+    ax.set_title(title, fontsize=12, fontweight="bold", pad=12)
+    fig.tight_layout()
     save_or_show(fig, output_dir, plot_name, fmt, show)
     return fig
 
