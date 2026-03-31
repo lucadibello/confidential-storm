@@ -21,8 +21,9 @@ public class StreamingDPMechanism {
     private final Map<String, Integer> predictedReleaseTimes = new HashMap<>();
     private final Map<String, Set<String>> observedUsersForKeySelection = new HashMap<>();
     private final Map<String, Double> unreleasedHistogramBuffer = new HashMap<>();
-    private final Map<String, Double> currentWindowCounts = new HashMap<>();
-    private final Map<String, Set<String>> currentWindowUniqueUsers = new HashMap<>();
+    private Map<String, Double> stagingWindowCounts = new HashMap<>();
+    private Map<String, Set<String>> stagingWindowUniqueUsers = new HashMap<>();
+    private final Object bufferLock = new Object();
 
     private final double sigmaKey;
     private final double sigmaHist;
@@ -52,12 +53,23 @@ public class StreamingDPMechanism {
     }
 
     public void addContribution(String userId, String key, double clamped_count) {
-        currentWindowCounts.merge(key, clamped_count, Double::sum);
-        currentWindowUniqueUsers.computeIfAbsent(key, k -> new HashSet<>()).add(userId);
+        synchronized (bufferLock) {
+            stagingWindowCounts.merge(key, clamped_count, Double::sum);
+            stagingWindowUniqueUsers.computeIfAbsent(key, k -> new HashSet<>()).add(userId);
+        }
     }
 
     public Map<String, Long> snapshot() {
         log.debug("[DP-MECHANISM] snapshot() START - timeStep={}, maxTimeSteps={}", timeStep, maxTimeSteps);
+
+        final Map<String, Double> currentWindowCounts;
+        final Map<String, Set<String>> currentWindowUniqueUsers;
+        synchronized (bufferLock) {
+            currentWindowCounts = this.stagingWindowCounts;
+            currentWindowUniqueUsers = this.stagingWindowUniqueUsers;
+            this.stagingWindowCounts = new HashMap<>();
+            this.stagingWindowUniqueUsers = new HashMap<>();
+        }
 
         if (timeStep >= maxTimeSteps) {
             log.info("[DP-MECHANISM] timeStep >= maxTimeSteps, returning final histogram");
@@ -137,9 +149,6 @@ public class StreamingDPMechanism {
             }
         }
 
-        currentWindowCounts.clear();
-        currentWindowUniqueUsers.clear();
-
         timeStep++;
 
         Map<String, Long> result = produceHistogram();
@@ -211,6 +220,10 @@ public class StreamingDPMechanism {
         observedUsersForKeySelection.clear();
         predictedReleaseTimes.clear();
         unreleasedHistogramBuffer.clear();
+        synchronized (bufferLock) {
+            stagingWindowCounts.clear();
+            stagingWindowUniqueUsers.clear();
+        }
         log.info("[DP-MECHANISM] trimExpiredState: released all per-key state after maxTimeSteps={}", maxTimeSteps);
     }
 
