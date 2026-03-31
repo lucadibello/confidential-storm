@@ -339,6 +339,8 @@ public class StreamingDPMechanism {
         // Proceed to next time step
         timeStep++;
 
+        // NOTE: GC will take care of cleaning up old hashmaps
+
         // Produce and return the noisy histogram
         Map<String, Long> result = produceHistogram();
         log.info("[DP-MECHANISM] snapshot() COMPLETE - returning {} keys", result.size());
