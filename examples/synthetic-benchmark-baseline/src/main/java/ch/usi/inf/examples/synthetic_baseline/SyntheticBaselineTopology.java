@@ -10,6 +10,7 @@ import ch.usi.inf.examples.synthetic_baseline.util.ComponentConstants;
 import org.apache.storm.Config;
 import org.apache.storm.StormSubmitter;
 import org.apache.storm.generated.StormTopology;
+import org.apache.storm.metric.LoggingMetricsConsumer;
 import org.apache.storm.topology.TopologyBuilder;
 import org.apache.storm.tuple.Fields;
 import org.slf4j.Logger;
@@ -138,6 +139,11 @@ public class SyntheticBaselineTopology {
         conf.put("dp.max.time.steps", DPConfig.maxTimeSteps());
         conf.put("dp.mu", DPConfig.mu());
         conf.put("dp.tick.interval.secs", Integer.getInteger("dp.tick.interval.secs", 5));
+
+        // Enable Storm's built-in metric collection when profiler is active
+        if (ProfilerConfig.ENABLED) {
+            conf.registerMetricsConsumer(LoggingMetricsConsumer.class, 1);
+        }
 
         LOG.info("Topology Config: numUsers={}, numKeys={}, seed={}", numUsers, numKeys, seed);
 
