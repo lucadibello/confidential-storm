@@ -21,6 +21,7 @@ TOPOLOGY_CLASS := ch.usi.inf.examples.confidential_word_count.host.WordCountTopo
 TOPOLOGY_NAME  := confidential-word-count
 
 .PHONY: all build help clean common generate-graph enclave host run-local \
+       build-profiled run-profiled \
        seal-dataset seal-chacha20 seal-aes256gcm seal-none \
        test-enclave dataset-with-users percentile
 
@@ -37,6 +38,8 @@ help:
 	@echo "    make host              - Build the Storm topology (depends on enclave output)"
 	@echo "    make clean             - Run 'mvn clean' for the example project"
 	@echo "    make run-local         - Run the topology locally"
+	@echo "    make build-profiled    - Build with profiling baked in (compile-time constants)"
+	@echo "    make run-profiled      - Build with profiling + run locally"
 	@echo "    make test-enclave      - Run enclave unit tests"
 	@echo ""
 	@echo "  Docker cluster (requires 'make cluster-up'):"
@@ -96,6 +99,27 @@ run-local:
 	@echo "Running Storm topology locally with debug logging (120 seconds)..."
 	@sudo storm local -c topology.debug=true --local-ttl 120 $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) -- --local
 	@echo "Finished local run."
+
+# Profiling build-time configuration (override on command line, e.g. make build-profiled PROFILER_SAMPLE_RATE=0.05)
+# These are baked into the JAR at compile time via maven-templating-plugin.
+PROFILER_SAMPLE_RATE ?= 0.05
+PROFILER_REPORT_TICKS ?= 10
+PROFILER_OUTPUT_DIR ?= /logs/storm
+
+PROFILER_MAVEN_FLAGS := -Dprofiler.enabled=true \
+  -Dprofiler.sample.rate=$(PROFILER_SAMPLE_RATE) \
+  -Dprofiler.report.interval.ticks=$(PROFILER_REPORT_TICKS) \
+  -Dprofiler.output.dir=$(PROFILER_OUTPUT_DIR)
+
+build-profiled:
+	@echo "Rebuilding framework + example with profiling baked in..."
+	$(MAKE) install-framework EXTRA_FRAMEWORK_FLAGS="$(PROFILER_MAVEN_FLAGS)"
+	$(MVN) -f $(ROOT_POM) clean $(MAVEN_GOALS) $(MAVEN_FLAGS) $(PROFILER_MAVEN_FLAGS)
+
+run-profiled: build-profiled
+	@echo "Running Storm topology locally with profiling enabled (120 seconds)..."
+	@sudo storm local -c topology.debug=true --local-ttl 120 $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) -- --local
+	@echo "Finished profiled run. Reports in $(PROFILER_OUTPUT_DIR)/profiler-*.csv"
 
 # ---------------------------------------------------------------------------
 # Dataset sealing

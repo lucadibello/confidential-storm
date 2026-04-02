@@ -15,8 +15,43 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
+    <!-- Profiler defaults (override with -Dprofiler.enabled=true etc.) -->
+    <properties>
+        <profiler.enabled>false</profiler.enabled>
+        <profiler.sample.rate>0.01</profiler.sample.rate>
+        <profiler.report.interval.ticks>10</profiler.report.interval.ticks>
+        <profiler.report.interval.tuples>10000</profiler.report.interval.tuples>
+        <profiler.output.dir>/logs/storm</profiler.output.dir>
+        <profiler.always.sample.snapshots>true</profiler.always.sample.snapshots>
+    </properties>
+
+    <profiles>
+        <!-- Convenience profile: mvn compile -Pprofiling -->
+        <profile>
+            <id>profiling</id>
+            <properties>
+                <profiler.enabled>true</profiler.enabled>
+            </properties>
+        </profile>
+    </profiles>
+
     <build>
         <plugins>
+            <!-- Generate ProfilerConfig from java-templates/ with Maven property substitution.
+                 This is needed to have zero-overhead profiling when the profiler is disabled. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>templating-maven-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <id>filter-src</id>
+                        <goals>
+                            <goal>filter-sources</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>

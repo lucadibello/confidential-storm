@@ -3,6 +3,8 @@ package ch.usi.inf.examples.synthetic_dp.host.bolts;
 import ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.EncryptedDataPerturbationSnapshot;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.dp.AbstractDataPerturbationBolt;
+import ch.usi.inf.examples.synthetic_dp.common.config.DPConfig;
+import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
 import org.apache.storm.tuple.Fields;
 import org.apache.storm.tuple.Tuple;
@@ -16,6 +18,27 @@ public class SyntheticDataPerturbationBolt extends AbstractDataPerturbationBolt 
 
     // create logger for this class
     private static final Logger LOG = LoggerFactory.getLogger(SyntheticDataPerturbationBolt.class);
+
+    private int maxEpochs;
+    private int tickIntervalSecs;
+
+    @Override
+    protected void afterPrepare(Map<String, Object> topoConf, TopologyContext context) {
+        this.maxEpochs = ((Number) topoConf.getOrDefault("dp.max.time.steps", DPConfig.maxTimeSteps())).intValue();
+        this.tickIntervalSecs = ((Number) topoConf.getOrDefault("dp.tick.interval.secs", 5)).intValue();
+        super.afterPrepare(topoConf, context);
+        LOG.info("[CONFIG] {}", DPConfig.describe());
+    }
+
+    @Override
+    protected int getMaxEpochs() {
+        return maxEpochs;
+    }
+
+    @Override
+    protected int getTickIntervalSecs() {
+        return tickIntervalSecs > 0 ? tickIntervalSecs : Integer.getInteger("dp.tick.interval.secs", super.getTickIntervalSecs());
+    }
 
     @Override
     protected boolean useEncryptedSnapshots() {

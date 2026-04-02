@@ -113,6 +113,7 @@ services:
       - storm-data:/data
       - /var/run/aesmd/aesm.socket:/var/run/aesmd/aesm.socket
       - ./data/storm-logs/supervisor:/logs/storm
+      - ./data/storm-logs/supervisor/profiler:/logs/storm/profiler
 
   # --- Log Viewer (access worker logs via UI) ------------------------------
   logviewer:

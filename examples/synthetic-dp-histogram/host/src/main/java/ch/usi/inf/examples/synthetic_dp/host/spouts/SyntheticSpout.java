@@ -23,48 +23,39 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Synthetic data spout matching Section 5.1 specifications:
  * - 10 million unique users
- * - Contribution per user sampled Zipf-Mandelbrot(N=100_000,q=26,s=6.738) distribution
  * - 1 million distinct keys, where each key is sampled from Zipf-Mandelbrot(N=1_000_000,q=1000,s=1.4) distribution
+ * <p>
+ * When ground truth collection is enabled ({@code synthetic.ground-truth.enabled=true}),
+ * the spout mirrors the enclave-side per-user contribution limit (C={@link DPConfig#MAX_CONTRIBUTIONS_PER_USER})
+ * to track only tuples that would survive bounding. This is needed for utility measurement
+ * (comparing noisy DP output against the true histogram) but adds overhead from per-user bookkeeping.
  */
 public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
     private static final Logger LOG = LoggerFactory.getLogger(SyntheticSpout.class);
 
-    // Paper specifications (Section 5.1)
     private int numUsers;
     private int numKeys;
-    private int batchSize;
-    private long sleepMs;
     private long randomSeed;
+    private boolean groundTruthEnabled;
 
     /**
-     * The Zipf-Mandelbrot distribution for key selection and user record contribution counts.
+     * The Zipf-Mandelbrot distribution for key selection.
      */
     private ZipfMandelbrotDistribution keyDistribution;
-
-    /**
-     * The Zipf-Mandelbrot distribution for user record contribution counts.
-     */
-    private ZipfMandelbrotDistribution userRecordDistribution;
 
     /**
      * Random number generator for sampling.
      */
     private Random rng;
 
-    /**
-     * Tracking user contribution counts to enforce contribution bounding.
-     */
-    private final Map<Long, Integer> userCounts = new ConcurrentHashMap<>();
-
-    /**
-     * Tracking target record counts per user based on the natural distribution.
-     */
-    private final Map<Long, Integer> userTargetRecords = new ConcurrentHashMap<>();
-
-    // Statistics for validation
     private final AtomicLong totalRecordsEmitted = new AtomicLong(0);
-    private final AtomicLong totalRecordsDropped = new AtomicLong(0);
-    private final Map<String, Long> keyFrequency = new ConcurrentHashMap<>();
+
+    /**
+     * Per-user contribution counts, only allocated when ground truth is enabled.
+     * Mirrors the enclave-side {@code UserContributionLimiter} to predict which
+     * tuples will survive the bounding bolt.
+     */
+    private Map<Long, Long> userContributionCounts;
 
     public SyntheticSpout() {
         super(SyntheticDataService.class);
@@ -72,103 +63,50 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
 
     @Override
     protected void afterOpen(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector) {
-        // Initialize configuration from topology config (safely handling types)
         this.numUsers = ((Number) conf.getOrDefault("synthetic.num.users", 10_000_000)).intValue();
         this.numKeys = ((Number) conf.getOrDefault("synthetic.num.keys", 1_000_000)).intValue();
-        this.batchSize = ((Number) conf.getOrDefault("synthetic.batch.size", 20_000)).intValue();
-        this.sleepMs = ((Number) conf.getOrDefault("synthetic.sleep.ms", 100L)).longValue();
         this.randomSeed = ((Number) conf.getOrDefault("synthetic.seed", 42L)).longValue();
+        this.groundTruthEnabled = Boolean.parseBoolean(
+                String.valueOf(conf.getOrDefault("synthetic.ground-truth.enabled", "false")));
 
-        LOG.info("SyntheticSpout initialized with: numUsers={}, numKeys={}, batchSize={}, sleepMs={}, seed={}",
-                numUsers, numKeys, batchSize, sleepMs, randomSeed);
+        LOG.info("SyntheticSpout initialized with: numUsers={}, numKeys={}, seed={}, groundTruth={}",
+                numUsers, numKeys, randomSeed, groundTruthEnabled);
 
         this.rng = new Random(randomSeed);
 
-        // create distributions based on paper specifications (Section 5.1)
-
-        // Key distribution: zipf-mandelbrot with N=10^6, q=1000, s=1.4
+        // Key distribution: zipf-mandelbrot with N=10^6, q=1000, s=1.4 (Section 5.1)
         this.keyDistribution = new ZipfMandelbrotDistribution(numKeys, 1000, 1.4, rng);
-        // User record contribution count distribution: zipf-mandelbrot with N=10^5, q=26, s=6.738
-        this.userRecordDistribution = new ZipfMandelbrotDistribution(100_000, 26, 6.738, rng);
+
+        if (groundTruthEnabled) {
+            this.userContributionCounts = new ConcurrentHashMap<>();
+        }
     }
 
     @Override
     protected void executeNextTuple() throws EnclaveServiceException {
-        LOG.debug("Emitting batch of {} records", batchSize);
+        long userId = rng.nextInt(numUsers);
+        int keyId = keyDistribution.sample();
+        String key = "k" + keyId;
 
-        for (int i = 0; i < batchSize; i++) {
-            // Select random user
-            long userId = rng.nextInt(numUsers);
-
-            // Determine target record count for this user (if not already set)
-            int targetRecords = userTargetRecords.computeIfAbsent(userId,
-                    uid -> userRecordDistribution.sample());
-
-            // Check if user has reached their target (natural distribution limit)
-            int currentCount = userCounts.getOrDefault(userId, 0);
-            if (currentCount >= targetRecords) {
-                // User has emitted all their records according to distribution
-                totalRecordsDropped.incrementAndGet();
-                continue;
-            }
-
-            // Check contribution bounding (C = 32 per paper)
-            if (currentCount >= DPConfig.MAX_CONTRIBUTIONS_PER_USER) {
-                totalRecordsDropped.incrementAndGet();
-                continue;
-            }
-
-            // Sample key from Zipf distribution
-            int keyId = keyDistribution.sample();
-            String key = "k" + keyId;
-
-            // Encrypt record using enclave service
-            LOG.trace("Encrypting record for user {}: key={}", userId, key);
-            SyntheticEncryptedRecord rec = getService().encryptRecord(key, "1", Long.toString(userId));
-            if (rec == null) {
-                totalRecordsDropped.incrementAndGet();
-                continue;
-            }
-
-            // Only update state after successful encryption
-            userCounts.merge(userId, 1, Integer::sum);
-            keyFrequency.merge(key, 1L, Long::sum);
-            GroundTruthCollector.record(key, 1L);
-
-            // Emit encrypted record to bounding bolt
-            totalRecordsEmitted.incrementAndGet();
-            getCollector().emit(new Values(rec.key(), rec.count(), rec.userId(), rec.routingKey()));
+        SyntheticEncryptedRecord rec = getService().encryptRecord(key, "1", Long.toString(userId));
+        if (rec == null) {
+            return;
         }
 
-        // Log statistics periodically (every 100 batches)
-        if (totalRecordsEmitted.get() % (batchSize * 100L) == 0) {
-            logStatistics();
-        }
-
-        // Small delay between batches to avoid overwhelming the system
-        if (sleepMs > 0) {
-            try {
-                Thread.sleep(sleepMs);
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt();
+        // Track ground truth only for tuples that would survive contribution bounding
+        if (groundTruthEnabled) {
+            long count = userContributionCounts.merge(userId, 1L, Long::sum);
+            if (count <= DPConfig.MAX_CONTRIBUTIONS_PER_USER) {
+                GroundTruthCollector.record(key, 1L);
             }
         }
-    }
 
-    /**
-     * Logs validation statistics to verify distribution properties.
-     */
-    private void logStatistics() {
-        long emitted = totalRecordsEmitted.get();
-        long dropped = totalRecordsDropped.get();
-        int uniqueUsers = userCounts.size();
+        totalRecordsEmitted.incrementAndGet();
+        getCollector().emit(new Values(rec.key(), rec.count(), rec.userId(), rec.routingKey()));
 
-        LOG.info("=== Spout Statistics ===");
-        LOG.info("Records emitted: {}", emitted);
-        LOG.info("Records dropped: {}", dropped);
-        LOG.info("Unique users: {}", uniqueUsers);
-        LOG.info("Unique keys: {}", keyFrequency.size());
-        LOG.info("========================");
+        if (totalRecordsEmitted.get() % 100_000 == 0) {
+            LOG.info("SyntheticSpout: {} records emitted", totalRecordsEmitted.get());
+        }
     }
 
     @Override

@@ -3,6 +3,7 @@ package ch.usi.inf.examples.synthetic_dp.host.bolts;
 import ch.usi.inf.confidentialstorm.common.api.dp.aggregation.HistogramAggregationService;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.dp.AbstractHistogramAggregationBolt;
+import ch.usi.inf.examples.synthetic_dp.common.config.DPConfig;
 import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
 import ch.usi.inf.examples.synthetic_dp.host.GroundTruthCollector;
 import org.apache.storm.task.TopologyContext;
@@ -26,9 +27,28 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
 
     private final String outputFile;
     private int roundCount = 0;
+    private int maxEpochs;
+    private int tickIntervalSecs;
 
     public SyntheticHistogramAggregationBolt() {
         this.outputFile = String.format("%s/synthetic-report-run%d.txt", OUTPUT_DIR, RUN_ID);
+    }
+
+    @Override
+    protected void afterPrepare(Map<String, Object> topoConf, TopologyContext context) {
+        this.maxEpochs = ((Number) topoConf.getOrDefault("dp.max.time.steps", DPConfig.maxTimeSteps())).intValue();
+        this.tickIntervalSecs = ((Number) topoConf.getOrDefault("dp.tick.interval.secs", 5)).intValue();
+        super.afterPrepare(topoConf, context);
+    }
+
+    @Override
+    protected int getMaxEpochs() {
+        return maxEpochs;
+    }
+
+    @Override
+    protected int getTickIntervalSecs() {
+        return tickIntervalSecs > 0 ? tickIntervalSecs : Integer.getInteger("dp.tick.interval.secs", super.getTickIntervalSecs());
     }
 
     @Override

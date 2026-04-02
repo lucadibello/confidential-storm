@@ -6,14 +6,16 @@
 #   ./scripts/run-paper-scale.sh <max_time_steps> <run_id>
 #
 # Examples:
-#   ./scripts/run-paper-scale.sh 100 1    # 100 micro-batches, run 1
-#   ./scripts/run-paper-scale.sh 1000 4   # 1000 micro-batches, run 4
+#   ./scripts/run-paper-scale.sh 100 1    # 100 time-steps, run 1
+#   ./scripts/run-paper-scale.sh 1000 4   # 1000 time-steps, run 4
 #
 # Scale: 10M users, 1M keys, parallelism=8
 #
 # Runtime guidance (SGX enclave, 30-core server):
-#   100  micro-batches: ~60-90 minutes
-#   1000 micro-batches: ~6-10 hours (Algorithm 3 is CPU-intensive)
+#   100  time-steps: ~60-90 minutes
+#   1000 time-steps: ~6-10 hours (Algorithm 3 is CPU-intensive)
+#
+# Supports MODE=local (default) or MODE=cluster.
 #
 set -euo pipefail
 
@@ -23,8 +25,9 @@ if [ $# -lt 2 ]; then
     echo "Usage: $0 <max_time_steps> <run_id>"
     echo ""
     echo "Examples:"
-    echo "  $0 100 1     # 100 micro-batches, run 1"
-    echo "  $0 1000 4    # 1000 micro-batches, run 4"
+    echo "  $0 100 1     # 100 time-steps, run 1"
+    echo "  $0 1000 4    # 1000 time-steps, run 4"
+    echo "  MODE=cluster $0 100 1    # submit to cluster"
     exit 1
 fi
 
@@ -40,12 +43,11 @@ else
     RUNTIME=3600
 fi
 
-echo "=== Paper Scale (10M users, 1M keys, ${MAX_TIME_STEPS} micro-batches) ==="
+echo "=== Paper Scale (10M users, 1M keys, ${MAX_TIME_STEPS} time-steps) ==="
 echo ""
 
 NUM_USERS=10000000 \
 NUM_KEYS=1000000 \
-BATCH_SIZE=20000 \
-SLEEP_MS=100 \
 RUNTIME_SECONDS="$RUNTIME" \
+GROUND_TRUTH=false \
 "$SCRIPT_DIR/run-experiment.sh" "$MAX_TIME_STEPS" "$RUN_ID"

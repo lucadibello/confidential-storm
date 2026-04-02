@@ -1,0 +1,20 @@
+storm.zookeeper.servers:
+  - "zookeeper"
+
+nimbus.seeds: ["nimbus"]
+
+storm.local.dir: "/data"
+
+# Log directory — bind-mounted to the host via docker-compose.yml so that
+# Storm daemon and worker logs are accessible at data/storm-logs/<service>/.
+storm.log.dir: "/logs/storm"
+
+ui.port: 8080
+
+# Worker slot ports (each slot runs one worker JVM).
+# Uncomment / extend to allow more workers per supervisor.
+supervisor.slots.ports:
+  - 6700
+  - 6701
+  - 6702
+  - 6703

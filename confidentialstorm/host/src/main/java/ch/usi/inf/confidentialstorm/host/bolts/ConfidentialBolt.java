@@ -2,6 +2,8 @@ package ch.usi.inf.confidentialstorm.host.bolts;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.host.base.ConfidentialComponentState;
+import ch.usi.inf.confidentialstorm.host.profiling.BoltProfiler;
+import ch.usi.inf.confidentialstorm.host.profiling.ProfilerConfig;
 import ch.usi.inf.confidentialstorm.host.util.EnclaveErrorUtils;
 import org.apache.storm.Constants;
 import org.apache.storm.task.OutputCollector;
@@ -32,6 +34,12 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
      * Holds the confidential state of the component.
      */
     protected transient ConfidentialComponentState<OutputCollector, S> state;
+
+    /**
+     * Profiler instance, created during {@code prepare()} when {@link ProfilerConfig#ENABLED} is true.
+     * Subclasses access this via {@link #getProfiler()} to record ECALL timings, counters, and gauges.
+     */
+    private transient BoltProfiler profiler;
 
     /**
      * Constructs a new ConfidentialBolt with default enclave type (TEE_SDK).
@@ -65,10 +73,26 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
                 state.getComponentId(), state.getTaskId(), state.getEnclaveManager().getActiveEnclaveType());
         try {
             LOG.debug("Attempting to initialize enclave for bolt {} (task {})", state.getComponentId(), state.getTaskId());
+
+            // log lifecycle event before/after initialization in order to capture enclave initialization time in profiler
+            if (ProfilerConfig.ENABLED && profiler != null) {
+                profiler.recordLifecycleEvent(ConfidentialBoltLifecycleEvent.COMPONENT_INITIALIZING_ENCLAVE);
+            }
             state.getEnclaveManager().initializeEnclave(topoConf);
+            if (ProfilerConfig.ENABLED && profiler != null) {
+                profiler.recordLifecycleEvent(ConfidentialBoltLifecycleEvent.COMPONENT_ENCLAVE_INITIALIZED);
+            }
             LOG.debug("Successfully initialized enclave for bolt {} (task {})", state.getComponentId(), state.getTaskId());
+            // initialize profiler if enabled
+            if (ProfilerConfig.ENABLED) {
+                this.profiler = new BoltProfiler(state.getComponentId(), state.getTaskId());
+            }
             // execute hook for subclasses
             afterPrepare(topoConf, context);
+            // record lifecycle event after all initialization is complete
+            if (ProfilerConfig.ENABLED && profiler != null) {
+                profiler.recordLifecycleEvent(ConfidentialBoltLifecycleEvent.COMPONENT_STARTED);
+            }
         } catch (Throwable e) {
             LOG.error("Failed to prepare bolt {} (task {})",
                     state.getComponentId(), state.getTaskId(), e);
@@ -97,8 +121,18 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
 
     @Override
     public void cleanup() {
+        // record lifecycle event before any cleanup
+        if (ProfilerConfig.ENABLED && profiler != null) {
+            profiler.recordLifecycleEvent(ConfidentialBoltLifecycleEvent.COMPONENT_STOPPING);
+        }
+
         // run hook for subclasses
         beforeCleanup();
+
+        // write profiler report before enclave destruction
+        if (ProfilerConfig.ENABLED && profiler != null) {
+            profiler.writeReport();
+        }
 
         // destroy the enclave via EnclaveManager
         try {
@@ -159,6 +193,14 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
 
     protected int getTaskId() {
         return state.getTaskId();
+    }
+
+    /**
+     * Returns the profiler instance, or {@code null} if profiling is disabled.
+     * Subclasses use this to record ECALL timings, counters, and gauges.
+     */
+    protected BoltProfiler getProfiler() {
+        return profiler;
     }
 
     private String summarizeTuple(Tuple input) {

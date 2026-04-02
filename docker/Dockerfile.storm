@@ -60,3 +60,8 @@ RUN set -eux; \
         "https://raw.githubusercontent.com/apache/teaclave-java-tee-sdk/${TEACLAVE_SDK_VERSION}/sdk/native/config/template/java_enclave_configure.json" \
         -o /opt/javaenclave/config/template/java_enclave_configure.json; \
     echo "Teaclave SDK config template installed successfully."
+
+# --- Log directories ---------------------------------------------------------
+
+# Create the Storm log directory and the default profiler log directory
+RUN mkdir -p /logs/storm/profiler

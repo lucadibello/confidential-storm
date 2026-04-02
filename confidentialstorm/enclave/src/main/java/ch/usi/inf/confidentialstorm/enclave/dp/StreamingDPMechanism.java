@@ -78,13 +78,26 @@ public class StreamingDPMechanism {
     /**
      * Buffers for current time window contributions (needed for key selection).
      * Stores the raw count of contributions for each key in the current time step.
+     * <p>
+     * <b>Double-buffer design:</b> {@code addContribution()} writes into the staging
+     * maps. {@code snapshot()} atomically swaps them out (under {@link #bufferLock})
+     * and drains them without holding any lock that blocks the executor thread.
      */
-    private final Map<String, Double> currentWindowCounts = new HashMap<>();
+    private Map<String, Double> stagingWindowCounts = new HashMap<>();
 
     /**
      * Links each key to the set of unique user IDs that have contributed to it in the current time step {@link #timeStep}.
+     * Written by {@code addContribution()}, swapped and drained by {@code snapshot()}.
      */
-    private final Map<String, Set<String>> currentWindowUniqueUsers = new HashMap<>();
+    private Map<String, Set<String>> stagingWindowUniqueUsers = new HashMap<>();
+
+    /**
+     * Lightweight lock that protects only the reference swap between the staging
+     * buffers and the snapshot drain buffers. Held for O(1).
+     * 
+     * NOTE: held for just two reference, so it never blocks the executor thread for a meaningful duration.
+     */
+    private final Object bufferLock = new Object();
 
     /**
      * The noise scale parameters for the Gaussian noise added during key selection (Algorithm 1).
@@ -156,16 +169,20 @@ public class StreamingDPMechanism {
     /**
      * Records a contribution from a user for a specific key in the current time window.
      * Enforces per-user contribution bounding (C) as required by Section 3.2.
+     * <p>
+     * This method is thread-safe and can be called concurrently by multiple executor threads.
      *
      * @param key    The aggregation key
      * @param clamped_count  The clamped contribution value
      * @param userId The user ID contributing this value
      */
     public void addContribution(String userId, String key, double clamped_count) {
-        // accumulate contribution for this key in the current window
-        currentWindowCounts.merge(key, clamped_count, Double::sum);
-        // record contribution from this user to this key in the current window
-        currentWindowUniqueUsers.computeIfAbsent(key, k -> new HashSet<>()).add(userId);
+        synchronized (bufferLock) {
+            // accumulate contribution for this key in the current window
+            stagingWindowCounts.merge(key, clamped_count, Double::sum);
+            // record contribution from this user to this key in the current window
+            stagingWindowUniqueUsers.computeIfAbsent(key, k -> new HashSet<>()).add(userId);
+        }
     }
 
     /**
@@ -182,6 +199,20 @@ public class StreamingDPMechanism {
      */
     public Map<String, Long> snapshot() {
         log.debug("[DP-MECHANISM] snapshot() START - timeStep={}, maxTimeSteps={}", timeStep, maxTimeSteps);
+
+        /* 
+         * Swap-and-drain mechanism to atomically grab the staging buffers and replace them
+         * with fresh empty maps. The lock is held for O(1) (two reference swaps).
+         * NOTE: needed in order to make `addContribution()` thread-safe and avoid Apache Storm's task threads being blocked.
+        */
+        final Map<String, Double> currentWindowCounts;
+        final Map<String, Set<String>> currentWindowUniqueUsers;
+        synchronized (bufferLock) {
+            currentWindowCounts = this.stagingWindowCounts;
+            currentWindowUniqueUsers = this.stagingWindowUniqueUsers;
+            this.stagingWindowCounts = new HashMap<>();
+            this.stagingWindowUniqueUsers = new HashMap<>();
+        }
 
         // if timeStep exceeds maxTimeSteps, return final histogram
         // NOTE: no further processing as we won't have DP guarantees in the next release
@@ -305,12 +336,10 @@ public class StreamingDPMechanism {
             }
         }
 
-        // Cleanup current window buffers
-        currentWindowCounts.clear();
-        currentWindowUniqueUsers.clear();
-
         // Proceed to next time step
         timeStep++;
+
+        // NOTE: GC will take care of cleaning up old hashmaps
 
         // Produce and return the noisy histogram
         Map<String, Long> result = produceHistogram();
@@ -444,6 +473,11 @@ public class StreamingDPMechanism {
         observedUsersForKeySelection.clear();
         predictedReleaseTimes.clear();
         unreleasedHistogramBuffer.clear();
+        // acquire lock to safely clear staging buffers
+        synchronized (bufferLock) {
+            stagingWindowCounts.clear();
+            stagingWindowUniqueUsers.clear();
+        }
         log.info("[DP-MECHANISM] trimExpiredState: released all per-key state after maxTimeSteps={}", maxTimeSteps);
     }
 
