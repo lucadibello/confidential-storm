@@ -17,7 +17,6 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Base implementation for a bolt that performs data perturbation (DP).
@@ -25,21 +24,26 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>
  * <b>Epoch synchronization</b> uses a Curator {@code SharedCount} via {@link EpochBarrierCoordinator}.
  * The global counter ({@code /current-epoch}) only advances when ALL replicas have completed
- * the current epoch, ensuring all replicas call {@code getEncryptedSnapshot()} the same number
+ * the current epoch, ensuring all replicas call {@code startEncryptedSnapshot()} the same number
  * of times, keeping enclave timeSteps perfectly in sync.
  * <p>
  * <b>Tick-driven emission</b>: Every replica emits exactly once per tick tuple -- either the
- * real partial (if the background computation finished) or a dummy (if still computing).
+ * real partial (if the enclave-internal computation finished) or a dummy (if still computing).
  * This guarantees that epochs never complete faster than the configured tick interval.
+ * <p>
+ * <b>Async snapshot via start/poll</b>: Instead of blocking a host thread on a long ECALL,
+ * the snapshot computation runs inside the enclave on an internal thread. The host issues
+ * a short {@code startEncryptedSnapshot()} ECALL to kick it off, then polls with
+ * {@code pollEncryptedSnapshot()} on each tick. All ECALLs are sub-millisecond, so
+ * {@code addContribution()} is never blocked for meaningful duration.
  * <p>
  * <b>Tick lifecycle</b>:
  * <ol>
  *   <li>Tick arrives -> read targetEpoch (locally cached by Curator's {@code SharedCount})</li>
- *   <li>If bg thread finished: emit real partial, advance localEpoch, register completion</li>
- *   <li>If behind target and no bg thread running: start bg thread</li>
+ *   <li>If snapshot in progress: poll enclave; if ready, emit real partial, advance localEpoch</li>
+ *   <li>If behind target and no snapshot in progress: call startSnapshot ECALL</li>
  *   <li>If no result ready: emit dummy (except on the very first tick when localEpoch==0)</li>
  *   <li>Try to advance global epoch via versioned CAS</li>
- *   <li>If epoch just advanced: eagerly start next bg snapshot (result consumed on next tick)</li>
  * </ol>
  */
 public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<DataPerturbationService> {
@@ -49,33 +53,24 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     private static final int DEFAULT_EPOCH_TIMEOUT_SECS = 30;
 
     /**
-     * How many times this replica has called getEncryptedSnapshot() and emitted the result.
+     * How many times this replica has completed a snapshot and emitted the result.
      * Must stay in sync with the enclave's internal epoch/timeStep.
+     * Volatile because it is read by the Curator event thread (setOnEpochAdvanced callback)
+     * and written by the bolt executor thread.
      */
-    private int localEpoch = 0;
+    private volatile int localEpoch = 0;
 
     /**
-     * Holds the result of the background encrypted snapshot computation.
-     * Set by the background thread, consumed by the main bolt thread on the next tick.
-     * null means the computation is still in progress (or hasn't started).
+     * Whether an async snapshot computation is currently in progress inside the enclave.
+     * Accessed only from the bolt executor thread (single-threaded per Storm task)
+     * and from the Curator event thread (setOnEpochAdvanced callback), so we use volatile.
      */
-    private transient AtomicReference<EncryptedDataPerturbationSnapshot> completedSnapshot;
-
-    /**
-     * Holds the result of the background plaintext snapshot computation.
-     * Used only when {@link #useEncryptedSnapshots()} returns false.
-     */
-    private transient AtomicReference<DataPerturbationSnapshot> completedPlaintextSnapshot;
-
-    /**
-     * The background thread running the snapshot computation.
-     */
-    private transient Thread snapshotThread;
+    private volatile boolean snapshotInProgress = false;
 
     /**
      * Lock to serialize access to the enclave service.
-     * The StreamingDPMechanism inside the enclave is NOT thread-safe -- addContribution()
-     * and snapshot() must not run concurrently.
+     * With the start/poll pattern, every ECALL completes in sub-millisecond time,
+     * so this lock is never held for meaningful duration.
      */
     private transient Object serviceLock;
 
@@ -96,9 +91,6 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     @Override
     protected void afterPrepare(Map<String, Object> topoConf, TopologyContext context) {
         super.afterPrepare(topoConf, context);
-        this.completedSnapshot = new AtomicReference<>(null);
-        this.completedPlaintextSnapshot = new AtomicReference<>(null);
-        this.snapshotThread = null;
         this.serviceLock = new Object();
 
         int totalReplicas = context.getComponentTasks(context.getThisComponentId()).size();
@@ -111,20 +103,30 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 totalReplicas, DEFAULT_EPOCH_TIMEOUT_SECS, isLeader);
 
         // Register the SharedCountListener callback: when the global epoch advances,
-        // start the next background computation immediately (from the Curator event thread).
+        // start the next enclave-internal snapshot immediately (from the Curator event thread).
         DataPerturbationService service = state.getEnclaveManager().getService();
         coordinator.setOnEpochAdvanced(() -> {
             if (!finished
                     && coordinator.getTargetEpoch() > localEpoch
-                    && (snapshotThread == null || !snapshotThread.isAlive())) {
-                LOG.info("[DataPerturbation] Task {} starting bg snapshot from watch (localEpoch={}, targetEpoch={})",
+                    && !snapshotInProgress) {
+                LOG.info("[DataPerturbation] Task {} starting snapshot from watch (localEpoch={}, targetEpoch={})",
                         getTaskId(), localEpoch, coordinator.getTargetEpoch());
-
-                // trigger correct snapshot method based on whether we're using encrypted snapshots or not
-                if (useEncryptedSnapshots()) {
-                    startBackgroundSnapshot(service);
-                } else {
-                    startBackgroundPlaintextSnapshot(service);
+                try {
+                    synchronized (serviceLock) {
+                        boolean ret = useEncryptedSnapshots() ? service.startEncryptedSnapshot() : service.startSnapshot();
+                        if (!ret) {
+                            LOG.warn("[DataPerturbation] Task {} failed to start snapshot from watch - start call " +
+                                    "returned false, likely because the thread is still running from a previous tick.",
+                                    getTaskId());
+                            return;
+                        }
+                        snapshotInProgress = true;
+                    }
+                    if (ProfilerConfig.ENABLED) {
+                        getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_STARTED, localEpoch + 1);
+                    }
+                } catch (EnclaveServiceException e) {
+                    LOG.error("[DataPerturbation] Task {} failed to start snapshot from watch", getTaskId(), e);
                 }
             }
         });
@@ -195,7 +197,7 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
 
     @Override
     protected void processTuple(Tuple input, DataPerturbationService service) throws EnclaveServiceException {
-        // check finished first to avoid unnecessary processing and background snapshot starts after reaching max epochs
+        // check finished first to avoid unnecessary processing after reaching max epochs
         if (finished) {
             if (!isTickTuple(input)) getCollector().ack(input);
             return;
@@ -224,12 +226,12 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
 
     /**
      * Tick-driven epoch handler. Every tick, each replica either:
-     * - Emits a real partial (bg thread finished), OR
-     * - Emits a dummy (no result ready, including when caught up waiting for other replicas), OR
+     * - Emits a real partial (enclave snapshot ready), OR
+     * - Emits a dummy (snapshot still computing or caught up waiting), OR
      * - Does nothing (only when localEpoch==0, i.e., before the first real partial).
      * <p>
-     * Background computation is started reactively by the {@code SharedCountListener}
-     * callback when the epoch advances. The tick handler only starts a computation as
+     * Snapshot computation is started reactively by the {@code SharedCountListener}
+     * callback when the epoch advances. The tick handler starts a computation as
      * a fallback if the listener notification was missed.
      */
     private void handleEpochTick(DataPerturbationService service) throws EnclaveServiceException {
@@ -255,209 +257,184 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     }
 
     private void handleEncryptedTick(DataPerturbationService service, int targetEpoch) throws EnclaveServiceException {
-        // 1. Check if a previously started bg computation finished.
-        //    IMPORTANT: must check BEFORE the fallback to avoid starting a redundant
-        //    snapshot when the listener-started one already completed (which would
-        //    call getEncryptedSnapshot() twice, double-incrementing the enclave epoch).
-        EncryptedDataPerturbationSnapshot result = completedSnapshot.getAndSet(null);
+        if (snapshotInProgress) {
+            // Poll for the result of the enclave-internal async snapshot
+            EncryptedDataPerturbationSnapshot result;
+            synchronized (serviceLock) {
+                long t0 = ProfilerConfig.ENABLED && getProfiler().shouldSample() ? System.nanoTime() : 0;
+                LOG.info("[POLLING] Task {} polling for encrypted snapshot result for epoch {}", getTaskId(), localEpoch + 1);
+                result = service.pollEncryptedSnapshot();
+                LOG.info("[POLLING] Task {} pollEncryptedSnapshot call returned for epoch {}", getTaskId(), localEpoch + 1);
+                if (t0 != 0) getProfiler().recordEcall("pollEncryptedSnapshot", System.nanoTime() - t0);
+            }
+            if (ProfilerConfig.ENABLED) getProfiler().incrementEcallTotal("pollEncryptedSnapshot");
 
-        if (result != null) {
-            // Background thread finished -- emit real partial
-            processEncryptedSnapshot(result);
-            localEpoch++;
-            coordinator.registerCompletion(localEpoch);
+            if (result.ready()) {
+                LOG.info("[POLLING] Task {} snapshot ready for epoch {}", getTaskId(), localEpoch + 1);
+                // Snapshot finished -- emit real partial
+                processEncryptedSnapshot(result);
+                snapshotInProgress = false;
+                localEpoch++;
+                coordinator.registerCompletion(localEpoch);
+                if (ProfilerConfig.ENABLED) {
+                    getProfiler().incrementCounter("real_emissions");
+                    getProfiler().recordGauge("contributions_this_epoch", contributionsThisEpoch);
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.EPOCH_ADVANCED, localEpoch);
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_COMPLETED, localEpoch);
+                    contributionsThisEpoch = 0;
+                }
+                LOG.info("[POLLING] Task {} emitted real partial for epoch {}", getTaskId(), localEpoch);
+
+                // Check if we've reached the max epoch limit
+                if (getMaxEpochs() > 0 && localEpoch >= getMaxEpochs()) {
+                    finished = true;
+                    LOG.info("[POLLING] Task {} reached max epochs ({}), deactivating",
+                            getTaskId(), getMaxEpochs());
+                    if (ProfilerConfig.ENABLED) {
+                        getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCH_REACHED, localEpoch);
+                        getProfiler().writeReport();
+                    }
+                    return;
+                }
+            } else {
+                LOG.info("[POLLING] Task {} snapshot still computing for epoch {}", getTaskId(), localEpoch + 1);
+                // Snapshot still computing -- emit dummy
+                emitEncryptedDummy(service, targetEpoch);
+            }
+        } else if (targetEpoch > localEpoch) {
+            // Behind target and no snapshot in progress -- start one
+            LOG.info("[DataPerturbation] Task {} starting snapshot (localEpoch={}, targetEpoch={})",
+                    getTaskId(), localEpoch, targetEpoch);
+            synchronized (serviceLock) {
+                long t0 = ProfilerConfig.ENABLED && getProfiler().shouldSample() ? System.nanoTime() : 0;
+                boolean ret = service.startEncryptedSnapshot();
+                if (!ret) {
+                    LOG.warn("[DataPerturbation] Task {} failed to start snapshot - start call " +
+                            "returned false, likely because the thread is still running from a previous tick.",
+                            getTaskId());
+                    return;
+                } else {
+                    LOG.info("[POLLING] Task {} startEncryptedSnapshot call succeeded", getTaskId());
+                }
+                if (t0 != 0) getProfiler().recordEcall("startEncryptedSnapshot", System.nanoTime() - t0);
+            }
             if (ProfilerConfig.ENABLED) {
-                getProfiler().incrementCounter("real_emissions");
-                getProfiler().recordGauge("contributions_this_epoch", contributionsThisEpoch);
-                getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.EPOCH_ADVANCED, localEpoch);
-                contributionsThisEpoch = 0;
+                getProfiler().incrementEcallTotal("startEncryptedSnapshot");
+                getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_STARTED, localEpoch + 1);
             }
-            LOG.info("[DataPerturbation] Task {} emitted real partial for epoch {}", getTaskId(), localEpoch);
+            snapshotInProgress = true;
 
-            // Check if we've reached the max epoch limit after processing this tick
-            if (getMaxEpochs() > 0 && localEpoch >= getMaxEpochs()) {
-                finished = true;
-                LOG.info("[DataPerturbation] Task {} reached max epochs ({}), deactivating",
-                        getTaskId(), getMaxEpochs());
-                if (ProfilerConfig.ENABLED) {
-                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCH_REACHED, localEpoch);
-                    getProfiler().writeReport();
-                }
-                return;
-            }
+            // Emit dummy on this tick (result will be polled on next tick)
+            emitEncryptedDummy(service, targetEpoch);
         } else {
-            // 2. No result ready - start bg snapshot if behind and not already running
-            if (targetEpoch > localEpoch && (snapshotThread == null || !snapshotThread.isAlive())) {
-                LOG.info("[DataPerturbation] Task {} starting bg snapshot (localEpoch={}, targetEpoch={})",
-                        getTaskId(), localEpoch, targetEpoch);
-                startBackgroundSnapshot(service);
-            }
-            // 3. Emit dummy to maintain constant-rate communication pattern.
-            //    This covers the following cases:
-            //    (a) behind target with snapshot in progress
-            //    (b) caught up (targetEpoch == localEpoch) waiting for other replicas
-            if (localEpoch > 0) {
-                synchronized (serviceLock) {
-                    long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                    processEncryptedSnapshot(service.getEncryptedDummyPartial());
-                    if (t0 != 0) getProfiler().recordEcall("getEncryptedDummyPartial", System.nanoTime() - t0);
-                }
-                if (ProfilerConfig.ENABLED) {
-                    getProfiler().incrementEcallTotal("getEncryptedDummyPartial");
-                    getProfiler().incrementCounter("dummy_emissions");
-                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.DUMMY_RELEASED, localEpoch);
-                }
-                LOG.info("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
-                        getTaskId(), localEpoch, targetEpoch);
-            }
+            // Caught up (targetEpoch == localEpoch), waiting for other replicas
+            emitEncryptedDummy(service, targetEpoch);
         }
 
         // Try to advance the global epoch (every replica will try to trigger this)
         coordinator.tryAdvanceEpoch(targetEpoch);
+    }
+
+    private void emitEncryptedDummy(DataPerturbationService service, int targetEpoch) throws EnclaveServiceException {
+        if (localEpoch > 0) {
+            synchronized (serviceLock) {
+                long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
+                processEncryptedSnapshot(service.getEncryptedDummyPartial());
+                if (t0 != 0) getProfiler().recordEcall("getEncryptedDummyPartial", System.nanoTime() - t0);
+            }
+            if (ProfilerConfig.ENABLED) {
+                getProfiler().incrementEcallTotal("getEncryptedDummyPartial");
+                getProfiler().incrementCounter("dummy_emissions");
+                getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.DUMMY_RELEASED, localEpoch);
+            }
+            LOG.info("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
+                    getTaskId(), localEpoch, targetEpoch);
+        }
     }
 
     private void handlePlaintextTick(DataPerturbationService service, int targetEpoch) throws EnclaveServiceException {
-        // 1. Check if a previously started bg computation finished.
-        DataPerturbationSnapshot result = completedPlaintextSnapshot.getAndSet(null);
+        if (snapshotInProgress) {
+            // Poll for the result of the enclave-internal async snapshot
+            DataPerturbationSnapshot result;
+            synchronized (serviceLock) {
+                long t0 = ProfilerConfig.ENABLED && getProfiler().shouldSample() ? System.nanoTime() : 0;
+                result = service.pollSnapshot();
+                if (t0 != 0) getProfiler().recordEcall("pollSnapshot", System.nanoTime() - t0);
+            }
+            if (ProfilerConfig.ENABLED) getProfiler().incrementEcallTotal("pollSnapshot");
 
-        if (result != null) {
-            // Background thread finished -- emit real partial
-            processSnapshot(result.histogramSnapshot());
-            localEpoch++;
-            coordinator.registerCompletion(localEpoch);
+            if (result.ready()) {
+                // Snapshot finished -- emit real partial
+                processSnapshot(result.histogramSnapshot());
+                snapshotInProgress = false;
+                localEpoch++;
+                coordinator.registerCompletion(localEpoch);
+                if (ProfilerConfig.ENABLED) {
+                    getProfiler().incrementCounter("real_emissions");
+                    getProfiler().recordGauge("contributions_this_epoch", contributionsThisEpoch);
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.EPOCH_ADVANCED, localEpoch);
+                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_COMPLETED, localEpoch);
+                    contributionsThisEpoch = 0;
+                }
+                LOG.info("[DataPerturbation] Task {} emitted real partial for epoch {}", getTaskId(), localEpoch);
+
+                // Check if we've reached the max epoch limit
+                if (getMaxEpochs() > 0 && localEpoch >= getMaxEpochs()) {
+                    finished = true;
+                    LOG.info("[DataPerturbation] Task {} reached max epochs ({}), deactivating",
+                            getTaskId(), getMaxEpochs());
+                    if (ProfilerConfig.ENABLED) {
+                        getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCH_REACHED, localEpoch);
+                        getProfiler().writeReport();
+                    }
+                    return;
+                }
+            } else {
+                // Snapshot still computing -- emit dummy
+                emitPlaintextDummy(service, targetEpoch);
+            }
+        } else if (targetEpoch > localEpoch) {
+            // Behind target and no snapshot in progress -- start one
+            LOG.info("[DataPerturbation] Task {} starting snapshot (localEpoch={}, targetEpoch={})",
+                    getTaskId(), localEpoch, targetEpoch);
+            synchronized (serviceLock) {
+                long t0 = ProfilerConfig.ENABLED && getProfiler().shouldSample() ? System.nanoTime() : 0;
+                service.startSnapshot();
+                if (t0 != 0) getProfiler().recordEcall("startSnapshot", System.nanoTime() - t0);
+            }
             if (ProfilerConfig.ENABLED) {
-                getProfiler().incrementCounter("real_emissions");
-                getProfiler().recordGauge("contributions_this_epoch", contributionsThisEpoch);
-                getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.EPOCH_ADVANCED, localEpoch);
-                contributionsThisEpoch = 0;
+                getProfiler().incrementEcallTotal("startSnapshot");
+                getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_STARTED, localEpoch + 1);
             }
-            LOG.info("[DataPerturbation] Task {} emitted real partial for epoch {}", getTaskId(), localEpoch);
+            snapshotInProgress = true;
 
-            // Check if we've reached the max epoch limit
-            if (getMaxEpochs() > 0 && localEpoch >= getMaxEpochs()) {
-                finished = true;
-                LOG.info("[DataPerturbation] Task {} reached max epochs ({}), deactivating",
-                        getTaskId(), getMaxEpochs());
-                if (ProfilerConfig.ENABLED) {
-                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.MAX_EPOCH_REACHED, localEpoch);
-                    getProfiler().writeReport();
-                }
-                return;
-            }
+            // Emit dummy on this tick (result will be polled on next tick)
+            emitPlaintextDummy(service, targetEpoch);
         } else {
-            // 2. No result ready -- start bg snapshot if behind and not already running
-            if (targetEpoch > localEpoch && (snapshotThread == null || !snapshotThread.isAlive())) {
-                LOG.info("[DataPerturbation] Task {} starting bg snapshot (localEpoch={}, targetEpoch={})",
-                        getTaskId(), localEpoch, targetEpoch);
-                startBackgroundPlaintextSnapshot(service);
-            }
-            // 3. Emit dummy to maintain constant-rate communication pattern.
-            //    This covers both cases: (a) behind target with snapshot in progress,
-            //    and (b) caught up (targetEpoch == localEpoch) waiting for other replicas.
-            if (localEpoch > 0) {
-                synchronized (serviceLock) {
-                    long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                    DataPerturbationSnapshot dummy = service.getDummyPartial();
-                    if (t0 != 0) getProfiler().recordEcall("getDummyPartial", System.nanoTime() - t0);
-                    processSnapshot(dummy.histogramSnapshot());
-                }
-                if (ProfilerConfig.ENABLED) {
-                    getProfiler().incrementEcallTotal("getDummyPartial");
-                    getProfiler().incrementCounter("dummy_emissions");
-                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.DUMMY_RELEASED, localEpoch);
-                }
-                LOG.info("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
-                        getTaskId(), localEpoch, targetEpoch);
-            }
+            // Caught up (targetEpoch == localEpoch), waiting for other replicas
+            emitPlaintextDummy(service, targetEpoch);
         }
 
         // Try to advance the global epoch (every replica will try to trigger this)
         coordinator.tryAdvanceEpoch(targetEpoch);
     }
 
-    /**
-     * Starts the snapshot computation on a background thread.
-     * Called from the bolt executor's tick handler or the SharedCountListener callback.
-     */
-    private synchronized void startBackgroundSnapshot(DataPerturbationService service) {
-        if (snapshotThread != null && snapshotThread.isAlive()) {
-            LOG.debug("[DataPerturbation] Previous snapshot still computing -- skipping");
-            return;
-        }
-
-        snapshotThread = new Thread(() -> {
-            try {
-                if (ProfilerConfig.ENABLED) {
-                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_STARTED, localEpoch + 1);
-                }
-                long lockWaitStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                long ecallStart;
-                EncryptedDataPerturbationSnapshot result;
-                synchronized (serviceLock) {
-                    ecallStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                    result = service.getEncryptedSnapshot();
-                    if (ecallStart != 0) {
-                        getProfiler().recordEcall("getEncryptedSnapshot", System.nanoTime() - ecallStart);
-                        getProfiler().incrementEcallTotal("getEncryptedSnapshot");
-                    }
-                }
-                if (lockWaitStart != 0) {
-                    getProfiler().recordEcall("snapshot_lock_wait", ecallStart - lockWaitStart);
-                }
-                completedSnapshot.set(result);
-                if (ProfilerConfig.ENABLED) {
-                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_COMPLETED, localEpoch + 1);
-                }
-                LOG.debug("[DataPerturbation] Background snapshot computation complete");
-            } catch (EnclaveServiceException e) {
-                LOG.error("[DataPerturbation] Background snapshot computation failed", e);
+    private void emitPlaintextDummy(DataPerturbationService service, int targetEpoch) throws EnclaveServiceException {
+        if (localEpoch > 0) {
+            synchronized (serviceLock) {
+                long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
+                DataPerturbationSnapshot dummy = service.getDummyPartial();
+                if (t0 != 0) getProfiler().recordEcall("getDummyPartial", System.nanoTime() - t0);
+                processSnapshot(dummy.histogramSnapshot());
             }
-        }, "dp-snapshot-" + getTaskId());
-        snapshotThread.setDaemon(true);
-        snapshotThread.start();
-    }
-
-    /**
-     * Starts the plaintext snapshot computation on a background thread.
-     * Same concurrency pattern as {@link #startBackgroundSnapshot}, but stores
-     * the result in {@link #completedPlaintextSnapshot}.
-     */
-    private synchronized void startBackgroundPlaintextSnapshot(DataPerturbationService service) {
-        if (snapshotThread != null && snapshotThread.isAlive()) {
-            LOG.debug("[DataPerturbation] Previous snapshot still computing -- skipping");
-            return;
-        }
-
-        snapshotThread = new Thread(() -> {
-            try {
-                if (ProfilerConfig.ENABLED) {
-                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_STARTED, localEpoch + 1);
-                }
-                long lockWaitStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                long snapshotStart;
-                DataPerturbationSnapshot result;
-                synchronized (serviceLock) {
-                    snapshotStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                    result = service.getSnapshot();
-                    if (snapshotStart != 0) {
-                        getProfiler().recordEcall("getSnapshot", System.nanoTime() - snapshotStart);
-                        getProfiler().incrementEcallTotal("getSnapshot");
-                    }
-                }
-                if (lockWaitStart != 0) {
-                    getProfiler().recordEcall("snapshot_lock_wait", snapshotStart - lockWaitStart);
-                }
-                completedPlaintextSnapshot.set(result);
-                if (ProfilerConfig.ENABLED) {
-                    getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_COMPLETED, localEpoch + 1);
-                }
-                LOG.debug("[DataPerturbation] Background plaintext snapshot computation complete");
-            } catch (EnclaveServiceException e) {
-                LOG.error("[DataPerturbation] Background plaintext snapshot computation failed", e);
+            if (ProfilerConfig.ENABLED) {
+                getProfiler().incrementEcallTotal("getDummyPartial");
+                getProfiler().incrementCounter("dummy_emissions");
+                getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.DUMMY_RELEASED, localEpoch);
             }
-        }, "dp-snapshot-" + getTaskId());
-        snapshotThread.setDaemon(true);
-        snapshotThread.start();
+            LOG.info("[DataPerturbation] Task {} emitted dummy (localEpoch={}, targetEpoch={})",
+                    getTaskId(), localEpoch, targetEpoch);
+        }
     }
 
     protected abstract EncryptedValue getUserIdEntry(Tuple input);

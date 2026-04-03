@@ -7,10 +7,13 @@ import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.enclave.dp.StreamingDPMechanism;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
 import ch.usi.inf.confidentialstorm.enclave.util.DPUtil;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
+import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.logging.Logger;
 
 /**
  * Abstract base implementation of the {@link DataPerturbationService}.
@@ -29,8 +32,43 @@ public abstract class AbstractDataPerturbationServiceProvider
      */
     static final String DUMMY_MARKER_KEY = "__dummy";
 
+
+    private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(AbstractDataPerturbationServiceProvider.class);
     private final StreamingDPMechanism mechanism;
     private int epoch = 0;
+
+    /**
+     * Epoch value captured at {@link #startEncryptedSnapshot()} time for use by the
+     * background thread's encrypt call.
+     * NOTE: only one async snapshot can be in progress at a time - a single field is sufficient.
+     */
+    private volatile int asyncEpoch = -1;
+
+    /**
+     * Holds the result of the background plaintext snapshot computation.
+     */
+    private volatile Map<String, Long> completedPlaintextResult;
+
+    /**
+     * Holds the result of the background encrypted snapshot computation.
+     */
+    private volatile EncryptedDataPerturbationSnapshot completedEncryptedResult;
+
+    /**
+     * Whether an async snapshot computation is currently in progress.
+     */
+    private volatile boolean snapshotInProgress;
+
+    /**
+     * The background thread running the async snapshot computation.
+     */
+    private Thread snapshotThread;
+
+    /**
+     * Holds an exception thrown by the background snapshot thread, to be
+     * propagated on the next {@link #pollSnapshot()} or {@link #pollEncryptedSnapshot()} call.
+     */
+    private volatile Throwable asyncError;
 
     // template methods for subclasses to specify privacy parameters and sensitivity
 
@@ -124,7 +162,9 @@ public abstract class AbstractDataPerturbationServiceProvider
 
     @Override
     protected Map<String, Object> getExtraAADAttributes() {
-        return Map.of("epoch", epoch);
+        // When called from the async snapshot thread, use the captured epoch
+        int effectiveEpoch = (asyncEpoch >= 0) ? asyncEpoch : epoch;
+        return Map.of("epoch", effectiveEpoch);
     }
 
     private boolean verifyContribution(DataPerturbationContributionEntryRequest update) {
@@ -219,6 +259,146 @@ public abstract class AbstractDataPerturbationServiceProvider
         } catch (Throwable t) {
             this.exceptionCtx.handleException(t);
             return null;
+        }
+    }
+
+    // ---- Async snapshot methods ----
+
+    @Override
+    public boolean startSnapshot() throws EnclaveServiceException {
+        try {
+            if (snapshotInProgress) {
+                log.warn("Attempted to start a new snapshot while another is still in progress");
+                return false; // already computing
+            }
+            snapshotInProgress = true;
+            asyncError = null;
+            this.epoch++;
+
+            log.info("Starting async snapshot computation for epoch " + this.epoch);
+            snapshotThread = new Thread(() -> {
+                try {
+                    log.info("[BG THREAD] Computing snapshot for epoch " + this.epoch);
+                    completedPlaintextResult = mechanism.snapshot();
+                    log.info("[BG THREAD] Snapshot computation completed for epoch " + this.epoch);
+                } catch (Throwable t) {
+                    asyncError = t;
+                    log.error("[BG THREAD] Snapshot computation failed for epoch " + this.epoch, t);
+                }
+            }, "enclave-snapshot");
+            snapshotThread.setDaemon(true);
+            snapshotThread.start();
+            log.info("Async snapshot thread started successfully for epoch " + this.epoch);
+        } catch (Throwable t) {
+            snapshotInProgress = false;
+            this.exceptionCtx.handleException(t);
+            return false;
+        }
+        // signal that snapshot computation has started successfully
+        return true;
+    }
+
+    @Override
+    public boolean startEncryptedSnapshot() throws EnclaveServiceException {
+        try {
+            if (snapshotInProgress) {
+                log.warn("Attempted to start a new encrypted snapshot while another is still in progress");
+                return false; // already computing
+            }
+            snapshotInProgress = true;
+            asyncError = null;
+            this.epoch++;
+
+            // Capture epoch and sequence number now (in the ECALL thread) to guarantee
+            // correct ordering and AAD consistency. The background thread will use these
+            // captured values for encryption.
+            final int capturedEpoch = this.epoch;
+            final int capturedSeqNum = nextSequenceNumber();
+
+            log.info("Starting async encrypted snapshot computation for epoch " + capturedEpoch + ", seqNum " + capturedSeqNum);
+            snapshotThread = new Thread(() -> {
+                try {
+                    log.info("[BG THREAD] Computing encrypted snapshot for epoch " + capturedEpoch + ", seqNum " + capturedSeqNum);
+                    Map<String, Long> snapshot = mechanism.snapshot();
+                    log.info("[BG THREAD] Snapshot computation completed for epoch " + capturedEpoch + ", seqNum " + capturedSeqNum);
+
+                    // Widen Long -> Object for the generic encrypt method
+                    Map<String, Object> payload = new LinkedHashMap<>(snapshot.size());
+                    payload.putAll(snapshot);
+
+                    // Set asyncEpoch so getExtraAADAttributes() uses the captured value
+                    asyncEpoch = capturedEpoch;
+                    EncryptedValue encrypted = encrypt(payload, capturedSeqNum);
+                    asyncEpoch = -1; // reset
+
+                    completedEncryptedResult = new EncryptedDataPerturbationSnapshot(encrypted);
+                } catch (Throwable t) {
+                    asyncEpoch = -1; // reset on error
+                    asyncError = t;
+                    log.error("[BG THREAD] Encrypted snapshot computation failed for epoch " + capturedEpoch + ", seqNum " + capturedSeqNum, t);
+                }
+            }, "enclave-snapshot");
+            snapshotThread.setDaemon(true);
+            snapshotThread.start();
+            log.info("Async encrypted snapshot thread started successfully for epoch " + capturedEpoch + ", seqNum " + capturedSeqNum);
+        } catch (Throwable t) {
+            snapshotInProgress = false;
+            this.exceptionCtx.handleException(t);
+            return false;
+        }
+        // signal that snapshot computation has started successfully
+        return true;
+    }
+
+    @Override
+    public DataPerturbationSnapshot pollSnapshot() throws EnclaveServiceException {
+        try {
+            // Check for errors from the background thread
+            if (asyncError != null) {
+                Throwable error = asyncError;
+                asyncError = null;
+                snapshotInProgress = false;
+                throw new EnclaveServiceException("Async snapshot computation failed", error);
+            }
+
+            Map<String, Long> result = completedPlaintextResult;
+            if (result != null) {
+                completedPlaintextResult = null;
+                snapshotInProgress = false;
+                return new DataPerturbationSnapshot(result);
+            }
+            return DataPerturbationSnapshot.notReady();
+        } catch (EnclaveServiceException e) {
+            throw e;
+        } catch (Throwable t) {
+            this.exceptionCtx.handleException(t);
+            return null; // signal error if exceptions are disabled
+        }
+    }
+
+    @Override
+    public EncryptedDataPerturbationSnapshot pollEncryptedSnapshot() throws EnclaveServiceException {
+        try {
+            // Check for errors from the background thread
+            if (asyncError != null) {
+                Throwable error = asyncError;
+                asyncError = null;
+                snapshotInProgress = false;
+                throw new EnclaveServiceException("Async encrypted snapshot computation failed", error);
+            }
+
+            EncryptedDataPerturbationSnapshot result = completedEncryptedResult;
+            if (result != null) {
+                completedEncryptedResult = null;
+                snapshotInProgress = false;
+                return result;
+            }
+            return EncryptedDataPerturbationSnapshot.notReady();
+        } catch (EnclaveServiceException e) {
+            throw e;
+        } catch (Throwable t) {
+            this.exceptionCtx.handleException(t);
+            return null; // signal error if exceptions are disabled
         }
     }
 }

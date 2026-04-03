@@ -74,4 +74,54 @@ public interface DataPerturbationService {
      * @throws EnclaveServiceException if encryption fails
      */
     EncryptedDataPerturbationSnapshot getEncryptedDummyPartial() throws EnclaveServiceException;
+
+    /**
+     * Initiates an asynchronous plaintext snapshot computation inside the enclave.
+     * The enclave spawns an internal thread to run the DP mechanism's {@code snapshot()}
+     * and returns immediately, making this ECALL O(1).
+     * <p>
+     * The result can be retrieved via {@link #pollSnapshot()}.
+     * Calling this while a previous async snapshot is still in progress is a no-op.
+     *
+     * @return true if a new snapshot computation was started, or false if a previous computation is still in progress
+     * @throws EnclaveServiceException if an error occurs
+     */
+    boolean startSnapshot() throws EnclaveServiceException;
+
+    /**
+     * Initiates an asynchronous encrypted snapshot computation inside the enclave.
+     * The enclave spawns an internal thread to run the DP mechanism's {@code snapshot()}
+     * followed by encryption, and returns immediately, making this ECALL O(1).
+     * <p>
+     * The result can be retrieved via {@link #pollEncryptedSnapshot()}.
+     * Calling this while a previous async snapshot is still in progress is a no-op.
+     *
+     * @throws EnclaveServiceException if an error occurs
+     * @return true if a new encrypted snapshot computation was started, or false if a previous computation is still in progress
+     */
+    boolean startEncryptedSnapshot() throws EnclaveServiceException;
+
+    /**
+     * Polls for the result of a previously started async plaintext snapshot.
+     * Returns a snapshot with {@code ready() == true} if the computation has completed,
+     * or {@code ready() == false} if it is still in progress.
+     * <p>
+     * This ECALL is O(1) regardless of whether the result is ready.
+     *
+     * @return a snapshot (always non-null; check {@code ready()} to determine if data is available)
+     * @throws EnclaveServiceException if the background computation failed
+     */
+    DataPerturbationSnapshot pollSnapshot() throws EnclaveServiceException;
+
+    /**
+     * Polls for the result of a previously started async encrypted snapshot.
+     * Returns a snapshot with {@code ready() == true} if the computation has completed,
+     * or {@code ready() == false} if it is still in progress.
+     * <p>
+     * This ECALL is O(1) regardless of whether the result is ready.
+     *
+     * @return an encrypted snapshot (always non-null; check {@code ready()} to determine if data is available)
+     * @throws EnclaveServiceException if the background computation failed
+     */
+    EncryptedDataPerturbationSnapshot pollEncryptedSnapshot() throws EnclaveServiceException;
 }
