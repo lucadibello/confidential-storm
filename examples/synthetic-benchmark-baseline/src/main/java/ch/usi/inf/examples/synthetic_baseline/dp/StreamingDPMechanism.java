@@ -9,7 +9,12 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Differentially Private Stream Aggregation mechanism (DP-SQLP).
- * (copied from confidentialstorm/enclave + EnclaveLogger replaced with SLF4J)
+ * <p>
+ * This DP mechanism includes the following components as described in the paper:
+ * 1. Streaming Key Selection (Algorithm 1): Identifying keys with sufficient unique user contributions.
+ * 2. Hierarchical Perturbation (Algorithm 2): Releasing noisy aggregate counts for selected keys.
+ * 3. Empty Key Release Prediction (Algorithm 3): Predicting when keys might be released due to noise.
+ * 4. Use of Binary Aggregation Trees (Algorithm 4) for efficient DP aggregation over time.
  */
 public class StreamingDPMechanism {
     private static final Logger log = LoggerFactory.getLogger(StreamingDPMechanism.class);
@@ -21,8 +26,28 @@ public class StreamingDPMechanism {
     private final Map<String, Integer> predictedReleaseTimes = new HashMap<>();
     private final Map<String, Set<String>> observedUsersForKeySelection = new HashMap<>();
     private final Map<String, Double> unreleasedHistogramBuffer = new HashMap<>();
-    private final Map<String, Double> currentWindowCounts = new HashMap<>();
-    private final Map<String, Set<String>> currentWindowUniqueUsers = new HashMap<>();
+
+    /**
+     * Buffers for current time window contributions (needed for key selection).
+     * Stores the raw count of contributions for each key in the current time step.
+     * <p>
+     * <b>Double-buffer design:</b> {@code addContribution()} writes into the staging
+     * maps. {@code snapshot()} atomically swaps them out (under {@link #bufferLock})
+     * and drains them without holding any lock that blocks the executor thread.
+     */
+    private Map<String, Double> stagingWindowCounts = new HashMap<>();
+
+    /**
+     * Links each key to the set of unique user IDs that have contributed to it in the current time step.
+     * Written by {@code addContribution()}, swapped and drained by {@code snapshot()}.
+     */
+    private Map<String, Set<String>> stagingWindowUniqueUsers = new HashMap<>();
+
+    /**
+     * Lightweight lock that protects only the reference swap between the staging
+     * buffers and the snapshot drain buffers. Held for O(1).
+     */
+    private final Object bufferLock = new Object();
 
     private final double sigmaKey;
     private final double sigmaHist;
@@ -51,13 +76,31 @@ public class StreamingDPMechanism {
         this.mu = mu;
     }
 
+    /**
+     * Records a contribution from a user for a specific key in the current time window.
+     * This method is thread-safe and can be called concurrently by multiple executor threads.
+     */
     public void addContribution(String userId, String key, double clamped_count) {
-        currentWindowCounts.merge(key, clamped_count, Double::sum);
-        currentWindowUniqueUsers.computeIfAbsent(key, k -> new HashSet<>()).add(userId);
+        synchronized (bufferLock) {
+            stagingWindowCounts.merge(key, clamped_count, Double::sum);
+            stagingWindowUniqueUsers.computeIfAbsent(key, k -> new HashSet<>()).add(userId);
+        }
     }
 
+    /**
+     * Proceeds by one time step, processing all contributions in the current window.
+     */
     public Map<String, Long> snapshot() {
         log.debug("[DP-MECHANISM] snapshot() START - timeStep={}, maxTimeSteps={}", timeStep, maxTimeSteps);
+
+        final Map<String, Double> currentWindowCounts;
+        final Map<String, Set<String>> currentWindowUniqueUsers;
+        synchronized (bufferLock) {
+            currentWindowCounts = this.stagingWindowCounts;
+            currentWindowUniqueUsers = this.stagingWindowUniqueUsers;
+            this.stagingWindowCounts = new HashMap<>();
+            this.stagingWindowUniqueUsers = new HashMap<>();
+        }
 
         if (timeStep >= maxTimeSteps) {
             log.info("[DP-MECHANISM] timeStep >= maxTimeSteps, returning final histogram");
@@ -137,9 +180,6 @@ public class StreamingDPMechanism {
             }
         }
 
-        currentWindowCounts.clear();
-        currentWindowUniqueUsers.clear();
-
         timeStep++;
 
         Map<String, Long> result = produceHistogram();
@@ -211,6 +251,10 @@ public class StreamingDPMechanism {
         observedUsersForKeySelection.clear();
         predictedReleaseTimes.clear();
         unreleasedHistogramBuffer.clear();
+        synchronized (bufferLock) {
+            stagingWindowCounts.clear();
+            stagingWindowUniqueUsers.clear();
+        }
         log.info("[DP-MECHANISM] trimExpiredState: released all per-key state after maxTimeSteps={}", maxTimeSteps);
     }
 

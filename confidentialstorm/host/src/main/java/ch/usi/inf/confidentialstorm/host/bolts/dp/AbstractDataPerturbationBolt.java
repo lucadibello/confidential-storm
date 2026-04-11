@@ -72,12 +72,6 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
      */
     private transient Thread snapshotThread;
 
-    /**
-     * Lock to serialize access to the enclave service.
-     * The StreamingDPMechanism inside the enclave is NOT thread-safe -- addContribution()
-     * and snapshot() must not run concurrently.
-     */
-    private transient Object serviceLock;
 
 
     /**
@@ -99,8 +93,6 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
         this.completedSnapshot = new AtomicReference<>(null);
         this.completedPlaintextSnapshot = new AtomicReference<>(null);
         this.snapshotThread = null;
-        this.serviceLock = new Object();
-
         int totalReplicas = context.getComponentTasks(context.getThisComponentId()).size();
         int minTaskId = context.getComponentTasks(context.getThisComponentId()).stream()
                 .mapToInt(Integer::intValue).min().orElse(getTaskId());
@@ -205,15 +197,13 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
         if (isTickTuple(input)) {
             handleEpochTick(service);
         } else {
-            synchronized (serviceLock) {
-                long t0 = ProfilerConfig.ENABLED && getProfiler().shouldSample() ? System.nanoTime() : 0;
-                service.addContribution(new DataPerturbationContributionEntryRequest(
-                        getUserIdEntry(input),
-                        getWordEntry(input),
-                        getClampedCountEntry(input)
-                ));
-                if (t0 != 0) getProfiler().recordEcall("addContribution", System.nanoTime() - t0);
-            }
+            long t0 = ProfilerConfig.ENABLED && getProfiler().shouldSample() ? System.nanoTime() : 0;
+            service.addContribution(new DataPerturbationContributionEntryRequest(
+                    getUserIdEntry(input),
+                    getWordEntry(input),
+                    getClampedCountEntry(input)
+            ));
+            if (t0 != 0) getProfiler().recordEcall("addContribution", System.nanoTime() - t0);
             if (ProfilerConfig.ENABLED) {
                 getProfiler().incrementEcallTotal("addContribution");
                 contributionsThisEpoch++;
@@ -297,11 +287,9 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
             //    (a) behind target with snapshot in progress
             //    (b) caught up (targetEpoch == localEpoch) waiting for other replicas
             if (localEpoch > 0) {
-                synchronized (serviceLock) {
-                    long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                    processEncryptedSnapshot(service.getEncryptedDummyPartial());
-                    if (t0 != 0) getProfiler().recordEcall("getEncryptedDummyPartial", System.nanoTime() - t0);
-                }
+                long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
+                processEncryptedSnapshot(service.getEncryptedDummyPartial());
+                if (t0 != 0) getProfiler().recordEcall("getEncryptedDummyPartial", System.nanoTime() - t0);
                 if (ProfilerConfig.ENABLED) {
                     getProfiler().incrementEcallTotal("getEncryptedDummyPartial");
                     getProfiler().incrementCounter("dummy_emissions");
@@ -355,12 +343,10 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
             //    This covers both cases: (a) behind target with snapshot in progress,
             //    and (b) caught up (targetEpoch == localEpoch) waiting for other replicas.
             if (localEpoch > 0) {
-                synchronized (serviceLock) {
-                    long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                    DataPerturbationSnapshot dummy = service.getDummyPartial();
-                    if (t0 != 0) getProfiler().recordEcall("getDummyPartial", System.nanoTime() - t0);
-                    processSnapshot(dummy.histogramSnapshot());
-                }
+                long t0 = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
+                DataPerturbationSnapshot dummy = service.getDummyPartial();
+                if (t0 != 0) getProfiler().recordEcall("getDummyPartial", System.nanoTime() - t0);
+                processSnapshot(dummy.histogramSnapshot());
                 if (ProfilerConfig.ENABLED) {
                     getProfiler().incrementEcallTotal("getDummyPartial");
                     getProfiler().incrementCounter("dummy_emissions");
@@ -390,19 +376,11 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 if (ProfilerConfig.ENABLED) {
                     getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_STARTED, localEpoch + 1);
                 }
-                long lockWaitStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                long ecallStart;
-                EncryptedDataPerturbationSnapshot result;
-                synchronized (serviceLock) {
-                    ecallStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                    result = service.getEncryptedSnapshot();
-                    if (ecallStart != 0) {
-                        getProfiler().recordEcall("getEncryptedSnapshot", System.nanoTime() - ecallStart);
-                        getProfiler().incrementEcallTotal("getEncryptedSnapshot");
-                    }
-                }
-                if (lockWaitStart != 0) {
-                    getProfiler().recordEcall("snapshot_lock_wait", ecallStart - lockWaitStart);
+                long ecallStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
+                EncryptedDataPerturbationSnapshot result = service.getEncryptedSnapshot();
+                if (ecallStart != 0) {
+                    getProfiler().recordEcall("getEncryptedSnapshot", System.nanoTime() - ecallStart);
+                    getProfiler().incrementEcallTotal("getEncryptedSnapshot");
                 }
                 completedSnapshot.set(result);
                 if (ProfilerConfig.ENABLED) {
@@ -433,19 +411,11 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
                 if (ProfilerConfig.ENABLED) {
                     getProfiler().recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_STARTED, localEpoch + 1);
                 }
-                long lockWaitStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                long snapshotStart;
-                DataPerturbationSnapshot result;
-                synchronized (serviceLock) {
-                    snapshotStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                    result = service.getSnapshot();
-                    if (snapshotStart != 0) {
-                        getProfiler().recordEcall("getSnapshot", System.nanoTime() - snapshotStart);
-                        getProfiler().incrementEcallTotal("getSnapshot");
-                    }
-                }
-                if (lockWaitStart != 0) {
-                    getProfiler().recordEcall("snapshot_lock_wait", snapshotStart - lockWaitStart);
+                long snapshotStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
+                DataPerturbationSnapshot result = service.getSnapshot();
+                if (snapshotStart != 0) {
+                    getProfiler().recordEcall("getSnapshot", System.nanoTime() - snapshotStart);
+                    getProfiler().incrementEcallTotal("getSnapshot");
                 }
                 completedPlaintextSnapshot.set(result);
                 if (ProfilerConfig.ENABLED) {

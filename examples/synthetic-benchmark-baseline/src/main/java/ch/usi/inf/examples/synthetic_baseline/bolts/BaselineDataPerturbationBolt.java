@@ -45,7 +45,6 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
     private int localEpoch = 0;
     private transient AtomicReference<Map<String, Long>> completedSnapshot;
     private transient Thread snapshotThread;
-    private transient Object serviceLock;
 
     private volatile boolean finished = false;
 
@@ -59,7 +58,6 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
         this.taskId = context.getThisTaskId();
         this.completedSnapshot = new AtomicReference<>(null);
         this.snapshotThread = null;
-        this.serviceLock = new Object();
 
         // Read runtime config from topology conf (set by the submitter via Storm Config),
         this.maxTimeSteps = ((Number) topoConf.getOrDefault("dp.max.time.steps", DPConfig.maxTimeSteps())).intValue();
@@ -145,9 +143,7 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
             double clampedCount = input.getDoubleByField("count");
 
             long t0 = ProfilerConfig.ENABLED && profiler.shouldSample() ? System.nanoTime() : 0;
-            synchronized (serviceLock) {
-                mechanism.addContribution(userId, word, clampedCount);
-            }
+            mechanism.addContribution(userId, word, clampedCount);
             if (t0 != 0) profiler.recordEcall("addContribution", System.nanoTime() - t0);
             if (ProfilerConfig.ENABLED) {
                 profiler.incrementEcallTotal("addContribution");
@@ -237,19 +233,11 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
             if (ProfilerConfig.ENABLED) {
                 profiler.recordLifecycleEvent(DPBoltLifecycleEvent.SNAPSHOT_STARTED, localEpoch + 1);
             }
-            long lockWaitStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-            long snapshotStart;
-            Map<String, Long> result;
-            synchronized (serviceLock) {
-                snapshotStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
-                result = mechanism.snapshot();
-                if (snapshotStart != 0) {
-                    profiler.recordEcall("snapshot", System.nanoTime() - snapshotStart);
-                    profiler.incrementEcallTotal("snapshot");
-                }
-            }
-            if (lockWaitStart != 0) {
-                profiler.recordEcall("snapshot_lock_wait", snapshotStart - lockWaitStart);
+            long snapshotStart = ProfilerConfig.ENABLED ? System.nanoTime() : 0;
+            Map<String, Long> result = mechanism.snapshot();
+            if (snapshotStart != 0) {
+                profiler.recordEcall("snapshot", System.nanoTime() - snapshotStart);
+                profiler.incrementEcallTotal("snapshot");
             }
             completedSnapshot.set(result);
             if (ProfilerConfig.ENABLED) {
