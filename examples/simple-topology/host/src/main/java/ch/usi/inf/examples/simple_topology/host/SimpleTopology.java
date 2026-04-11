@@ -1,10 +1,12 @@
 package ch.usi.inf.examples.simple_topology.host;
 
+import ch.usi.inf.confidentialstorm.host.profiling.ProfilerConfig;
 import ch.usi.inf.examples.simple_topology.host.bolts.SimpleBolt;
 import ch.usi.inf.examples.simple_topology.host.spouts.RandomNumberSpout;
 import org.apache.storm.Config;
 import org.apache.storm.LocalCluster;
 import org.apache.storm.generated.StormTopology;
+import org.apache.storm.metric.LoggingMetricsConsumer;
 import org.apache.storm.topology.TopologyBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +25,11 @@ public class SimpleTopology {
         // configure topology
         Config conf = new Config();
         conf.setDebug(false);
+
+        // Enable Storm's built-in metric collection when profiler is active
+        if (ProfilerConfig.ENABLED) {
+            conf.registerMetricsConsumer(LoggingMetricsConsumer.class, 1);
+        }
 
         // Use MOCK_IN_SVM for development (change to TEE_SDK for production SGX)
         conf.put("confidentialstorm.enclave.type", "MOCK_IN_SVM");

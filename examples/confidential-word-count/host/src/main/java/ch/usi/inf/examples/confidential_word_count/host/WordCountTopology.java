@@ -1,6 +1,7 @@
 package ch.usi.inf.examples.confidential_word_count.host;
 
 import ch.usi.inf.confidentialstorm.common.annotation.ConfidentialTopologyBuilder;
+import ch.usi.inf.confidentialstorm.host.profiling.ProfilerConfig;
 import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentConstants;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.DataPerturbationBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.HistogramAggregatorBolt;
@@ -8,6 +9,7 @@ import ch.usi.inf.examples.confidential_word_count.host.bolts.SplitSentenceBolt;
 import ch.usi.inf.examples.confidential_word_count.host.bolts.UserContributionBoundingBolt;
 import ch.usi.inf.examples.confidential_word_count.host.spouts.RandomJokeSpout;
 import org.apache.storm.Config;
+import org.apache.storm.metric.LoggingMetricsConsumer;
 import org.apache.storm.topology.ConfigurableTopology;
 import org.apache.storm.topology.TopologyBuilder;
 import org.apache.storm.tuple.Fields;
@@ -33,6 +35,11 @@ public class WordCountTopology extends ConfigurableTopology {
         conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_PROGRESSIVE_LEVEL3_SLEEP_MILLIS, 1); // sleep 1 ms at level 3
 
         conf.setDebug(false);
+
+        // Enable Storm's built-in metric collection when profiler is active
+        if (ProfilerConfig.ENABLED) {
+            conf.registerMetricsConsumer(LoggingMetricsConsumer.class, 1);
+        }
 
         LOG.info("Submitting WordCountTopology to cluster...");
         return submit("WordCountTopology", conf, builder);
