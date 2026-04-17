@@ -10,11 +10,11 @@ package ch.usi.inf.examples.synthetic_dp.common.config;
  * take effect before the values are read.
  */
 public final class DPConfig {
+
     /**
      * Private constructor to prevent instantiation.
      */
-    private DPConfig() {
-    }
+    private DPConfig() {}
 
     /**
      * Privacy budget for the (epsilon, delta)-DP guarantee.
@@ -76,14 +76,23 @@ public final class DPConfig {
      * @return a string describing the DP configuration.
      */
     public static String describe() {
-        return "DPConfig{" +
-                "EPSILON=" + EPSILON +
-                ", DELTA=" + DELTA +
-                ", MAX_CONTRIBUTIONS_PER_USER=" + MAX_CONTRIBUTIONS_PER_USER +
-                ", PER_RECORD_CLAMP=" + PER_RECORD_CLAMP +
-                ", MU=" + mu() +
-                ", MAX_TIME_STEPS=" + maxTimeSteps() +
-                ", PARALLELISM=" + parallelism() +
-                '}';
+        return (
+            "DPConfig{" +
+            "EPSILON=" +
+            EPSILON +
+            ", DELTA=" +
+            DELTA +
+            ", MAX_CONTRIBUTIONS_PER_USER=" +
+            MAX_CONTRIBUTIONS_PER_USER +
+            ", PER_RECORD_CLAMP=" +
+            PER_RECORD_CLAMP +
+            ", MU=" +
+            mu() +
+            ", MAX_TIME_STEPS=" +
+            maxTimeSteps() +
+            ", PARALLELISM=" +
+            parallelism() +
+            '}'
+        );
     }
 }

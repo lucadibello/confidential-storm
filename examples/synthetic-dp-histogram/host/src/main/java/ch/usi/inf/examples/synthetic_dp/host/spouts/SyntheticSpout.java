@@ -1,24 +1,22 @@
 package ch.usi.inf.examples.synthetic_dp.host.spouts;
 
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
+import ch.usi.inf.confidentialstorm.host.spouts.ConfidentialSpout;
 import ch.usi.inf.examples.synthetic_dp.common.api.SyntheticDataService;
 import ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticEncryptedRecord;
 import ch.usi.inf.examples.synthetic_dp.common.config.DPConfig;
 import ch.usi.inf.examples.synthetic_dp.host.GroundTruthCollector;
 import ch.usi.inf.examples.synthetic_dp.host.util.ZipfMandelbrotDistribution;
-import ch.usi.inf.confidentialstorm.host.spouts.ConfidentialSpout;
+import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
+import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
 import org.apache.storm.tuple.Fields;
 import org.apache.storm.tuple.Values;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.storm.spout.SpoutOutputCollector;
-
-import java.util.Map;
-import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Synthetic data spout matching Section 5.1 specifications:
@@ -31,7 +29,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * (comparing noisy DP output against the true histogram) but adds overhead from per-user bookkeeping.
  */
 public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
-    private static final Logger LOG = LoggerFactory.getLogger(SyntheticSpout.class);
+
+    private static final Logger LOG = LoggerFactory.getLogger(
+        SyntheticSpout.class
+    );
 
     private int numUsers;
     private int numKeys;
@@ -44,11 +45,19 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
     private ZipfMandelbrotDistribution keyDistribution;
 
     /**
+     * The Zipf-Mandelbrot distribution for user contribution counts, used to decide how many records each user contributes.
+     */
+    private ZipfMandelbrotDistribution userContributionDistribution;
+
+    /**
+     * Stores the remaining contributions for each user, initialized from the user contribution distribution.
+     */
+    private long[] userRemainingContributions;
+
+    /**
      * Random number generator for sampling.
      */
     private Random rng;
-
-    private final AtomicLong totalRecordsEmitted = new AtomicLong(0);
 
     /**
      * Per-user contribution counts, only allocated when ground truth is enabled.
@@ -62,21 +71,71 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
     }
 
     @Override
-    protected void afterOpen(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector) {
-        this.numUsers = ((Number) conf.getOrDefault("synthetic.num.users", 10_000_000)).intValue();
-        this.numKeys = ((Number) conf.getOrDefault("synthetic.num.keys", 1_000_000)).intValue();
-        this.randomSeed = ((Number) conf.getOrDefault("synthetic.seed", 42L)).longValue();
+    protected void afterOpen(
+        Map<String, Object> conf,
+        TopologyContext context,
+        SpoutOutputCollector collector
+    ) {
+        this.numUsers = (
+            (Number) conf.getOrDefault("synthetic.num.users", 10_000_000)
+        ).intValue();
+        this.numKeys = (
+            (Number) conf.getOrDefault("synthetic.num.keys", 1_000_000)
+        ).intValue();
+        this.randomSeed = (
+            (Number) conf.getOrDefault("synthetic.seed", 42L)
+        ).longValue();
         this.groundTruthEnabled = Boolean.parseBoolean(
-                String.valueOf(conf.getOrDefault("synthetic.ground-truth.enabled", "false")));
+            String.valueOf(
+                conf.getOrDefault("synthetic.ground-truth.enabled", "false")
+            )
+        );
 
-        LOG.info("SyntheticSpout initialized with: numUsers={}, numKeys={}, seed={}, groundTruth={}",
-                numUsers, numKeys, randomSeed, groundTruthEnabled);
+        LOG.info(
+            "SyntheticSpout initialized with: numUsers={}, numKeys={}, seed={}, groundTruth={}",
+            numUsers,
+            numKeys,
+            randomSeed,
+            groundTruthEnabled
+        );
 
         this.rng = new Random(randomSeed);
 
-        // Key distribution: zipf-mandelbrot with N=10^6, q=1000, s=1.4 (Section 5.1)
-        this.keyDistribution = new ZipfMandelbrotDistribution(numKeys, 1000, 1.4, rng);
+        // User contribution distribution: zipf-mandelbrot with N=10^5, q=26, s=6.738 (Section 5.1),
+        // NOTE: with this settings, ~15% of users contribute more than 10 records.
+        this.userContributionDistribution = new ZipfMandelbrotDistribution(
+            100_000,
+            26,
+            6.738,
+            rng
+        );
 
+        // Key distribution: zipf-mandelbrot with N=10^6, q=1000, s=1.4 (Section 5.1)
+        // NOTE: with these settings, roughly 1/3 of records have the first 10^3 keys
+        this.keyDistribution = new ZipfMandelbrotDistribution(
+            numKeys,
+            1000,
+            1.4,
+            rng
+        );
+
+        // Initialize target contributions for each user based on the user contribution distribution
+        this.userRemainingContributions = new long[numUsers];
+        for (int i = 0; i < numUsers; i++) {
+            // Sample the target contribution count for this user, capped at MAX_CONTRIBUTIONS_PER
+            long target = userContributionDistribution.sample();
+
+            // NOTE: these assertions are just to ensure that the user contribution distribution is calibrated correctly to produce values in the expected range
+            assert target >
+            0 : "User contribution distribution should only produce positive values";
+            assert target <=
+            DPConfig.MAX_CONTRIBUTIONS_PER_USER : "User contribution distribution should be calibrated to produce values within the max contributions per user";
+
+            // Initialize the remaining contributions for this user
+            userRemainingContributions[i] = target;
+        }
+
+        // enable ground truth if requested to keep track of accurate counts of distributions
         if (groundTruthEnabled) {
             this.userContributionCounts = new ConcurrentHashMap<>();
         }
@@ -84,29 +143,50 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
 
     @Override
     protected void executeNextTuple() throws EnclaveServiceException {
-        long userId = rng.nextInt(numUsers);
-        int keyId = keyDistribution.sample();
-        String key = "k" + keyId;
+        // fetch the next user to emit for
+        final int userId = rng.nextInt(numUsers);
 
-        SyntheticEncryptedRecord rec = getService().encryptRecord(key, "1", Long.toString(userId));
+        // check if user has already emitted their target contribution count, if so skip
+        if (userRemainingContributions[userId] <= 0) return;
+
+        // fetch a new record for this user
+        final int keyId = keyDistribution.sample();
+        final String key = "k" + keyId;
+
+        // encrypt the record using the custom enclave service
+        // FIXME: we should convert the "count" parameter from String to long in the service API (the count will always be a number)
+        SyntheticEncryptedRecord rec = getService().encryptRecord(
+            key,
+            "1",
+            Integer.toString(userId)
+        );
+        // if encryption fails, means that the enclave has crashed or is unresponsive - in either case, we should trigger a fatal error to signal that the topology cannot continue processing
         if (rec == null) {
-            return;
+            throw new EnclaveServiceException(
+                "Failed to encrypt record for user " + userId
+            );
         }
 
         // Track ground truth only for tuples that would survive contribution bounding
         if (groundTruthEnabled) {
-            long count = userContributionCounts.merge(userId, 1L, Long::sum);
+            // FIXME: we need to check if this makes sense!
+            long count = userContributionCounts.merge(
+                Long.valueOf(userId),
+                1L,
+                Long::sum
+            );
             if (count <= DPConfig.MAX_CONTRIBUTIONS_PER_USER) {
                 GroundTruthCollector.record(key, 1L);
             }
         }
 
-        totalRecordsEmitted.incrementAndGet();
-        getCollector().emit(new Values(rec.key(), rec.count(), rec.userId(), rec.routingKey()));
+        // emit tuple
+        getCollector().emit(
+            new Values(rec.key(), rec.count(), rec.userId(), rec.routingKey())
+        );
 
-        if (totalRecordsEmitted.get() % 100_000 == 0) {
-            LOG.info("SyntheticSpout: {} records emitted", totalRecordsEmitted.get());
-        }
+        // record that userId has emitted one more record
+        userRemainingContributions[userId]--;
     }
 
     @Override

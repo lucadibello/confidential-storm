@@ -8,7 +8,11 @@ import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
 import com.google.auto.service.AutoService;
 
 @AutoService(DataPerturbationService.class)
-public class SyntheticDataPerturbationServiceProvider extends AbstractDataPerturbationServiceProvider {
+public class SyntheticDataPerturbationServiceProvider
+    extends AbstractDataPerturbationServiceProvider
+{
+
+    // key selection parameters (refer to Section 5 "Experiments" of the paper for details)
 
     @Override
     public double getEpsilonK() {
@@ -16,13 +20,15 @@ public class SyntheticDataPerturbationServiceProvider extends AbstractDataPertur
     }
 
     @Override
-    public double getEpsilonH() {
-        return DPConfig.EPSILON / 2.0;
-    }
-
-    @Override
     public double getDeltaK() {
         return (2.0 / 3.0) * DPConfig.DELTA;
+    }
+
+    // perturbation parameters (refer to Section 5 "Experiments" of the paper for details)
+
+    @Override
+    public double getEpsilonH() {
+        return DPConfig.EPSILON / 2.0;
     }
 
     @Override

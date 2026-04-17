@@ -62,6 +62,17 @@ public class EnclaveServiceException extends Exception {
         this.originalMessage = cause.getMessage();
     }
 
+    /**
+     * Constructs a new EnclaveServiceException with a message.
+     *
+     * @param message the detail message
+     */
+    public EnclaveServiceException(String message) {
+        super(message);
+        this.originalType = "Unknown";
+        this.originalMessage = message;
+    }
+
     private static String buildMessage(
         String operation,
         String type,
