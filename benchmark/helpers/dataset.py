@@ -105,34 +105,49 @@ def parse_params(params_path: Path) -> dict[str, Any] | None:
         return None
 
 
-def discover_runs(base_dir: Path) -> pd.DataFrame:
-    """Discover all grid-search runs under base_dir/<timestamp>/<run_dir>/.
+def discover_runs(base_dir: Path, labels: list[str] | None = None) -> pd.DataFrame:
+    """Discover all grid-search runs under base_dir/<label>/<timestamp>/<run_dir>/.
 
     Returns a DataFrame with one row per run containing all params.txt fields
-    plus metadata columns: grid_timestamp, run_path, profiler_dir, has_profiler_data.
+    plus metadata columns: label, grid_timestamp, run_path, profiler_dir, has_profiler_data.
+
+    Args:
+        base_dir: Root directory containing label subdirectories.
+        labels: If provided, only runs under these label directories are included.
+                If None, all label directories are scanned.
     """
     if not base_dir.is_dir():
         raise FileNotFoundError(f"Runs base directory not found: {base_dir}")
 
     records: list[dict[str, Any]] = []
-    for ts_dir in sorted(base_dir.iterdir()):
-        if not ts_dir.is_dir():
+
+    for label_dir in sorted(base_dir.iterdir()):
+        if not label_dir.is_dir():
             continue
-        for run_dir in sorted(ts_dir.iterdir()):
-            if not run_dir.is_dir():
+        if labels is not None and label_dir.name not in labels:
+            continue
+
+        for ts_dir in sorted(label_dir.iterdir()):
+            if not ts_dir.is_dir():
                 continue
-            params_path = run_dir / "params.txt"
-            params = parse_params(params_path)
-            if params is None:
-                print(f"  WARNING: Skipping {run_dir.name} (no valid params.txt)")
-                continue
-            profiler_dir = run_dir / "profiler"
-            has_profiler = profiler_dir.is_dir() and any(profiler_dir.glob("profiler-*.csv"))
-            params["grid_timestamp"] = ts_dir.name
-            params["run_path"] = run_dir
-            params["profiler_dir"] = profiler_dir
-            params["has_profiler_data"] = has_profiler
-            records.append(params)
+
+            for run_dir in sorted(ts_dir.iterdir()):
+                if not run_dir.is_dir():
+                    continue
+
+                params_path = run_dir / "params.txt"
+                params = parse_params(params_path)
+                if params is None:
+                    print(f"  WARNING: Skipping {run_dir.name} (no valid params.txt)")
+                    continue
+                profiler_dir = run_dir / "profiler"
+                has_profiler = profiler_dir.is_dir() and any(profiler_dir.glob("profiler-*.csv"))
+                params["label"] = label_dir.name
+                params["grid_timestamp"] = ts_dir.name
+                params["run_path"] = run_dir
+                params["profiler_dir"] = profiler_dir
+                params["has_profiler_data"] = has_profiler
+                records.append(params)
 
     if not records:
         raise ValueError(f"No valid runs found under {base_dir}")
@@ -143,6 +158,7 @@ def discover_runs(base_dir: Path) -> pd.DataFrame:
 def discover_all_runs(
     *dirs: Path,
     require_all: bool = False,
+    labels: list[str] | None = None,
 ) -> pd.DataFrame:
     """Discover runs from multiple base directories and return a unified catalog.
 
@@ -154,6 +170,8 @@ def discover_all_runs(
         *dirs: One or more base directories containing grid-search runs.
         require_all: If True, raise if any directory is missing.  If False
             (default), silently skip missing directories.
+        labels: A list of labels to include in the catalog. If None, all runs are included.
+            Labels are part of the path structure: <base_dir>/<label>/<timestamp>/<run_dir>/.
 
     Returns:
         A single DataFrame combining all discovered runs.
@@ -166,7 +184,7 @@ def discover_all_runs(
             print(f"  INFO: Skipping missing directory: {d}")
             continue
         try:
-            frames.append(discover_runs(d))
+            frames.append(discover_runs(d, labels))
         except ValueError as exc:
             if require_all:
                 raise
