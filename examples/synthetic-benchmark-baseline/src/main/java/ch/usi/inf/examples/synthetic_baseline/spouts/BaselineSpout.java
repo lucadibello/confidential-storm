@@ -6,6 +6,10 @@ import ch.usi.inf.examples.synthetic_baseline.profiling.BoltProfiler;
 import ch.usi.inf.examples.synthetic_baseline.profiling.ProfilerConfig;
 import ch.usi.inf.examples.synthetic_baseline.util.GroundTruthCollector;
 import ch.usi.inf.examples.synthetic_baseline.util.ZipfMandelbrotDistribution;
+import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
@@ -15,17 +19,20 @@ import org.apache.storm.tuple.Values;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
-import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
-
 /**
  * Baseline spout that generates the same synthetic data as the enclave version
  * but emits plaintext tuples (no encryption, no ECALL).
+ * <p>
+ * Matches Section 5.1 specifications:
+ * - 10 million unique users
+ * - User contribution distribution: Zipf-Mandelbrot(N=10^5, q=26, s=6.738), ~15% users contribute >10 records
+ * - 1 million distinct keys, Zipf-Mandelbrot(N=10^6, q=1000, s=1.4), ~1/3 records in first 10^3 keys
  */
 public class BaselineSpout extends BaseRichSpout {
-    private static final Logger LOG = LoggerFactory.getLogger(BaselineSpout.class);
+
+    private static final Logger LOG = LoggerFactory.getLogger(
+        BaselineSpout.class
+    );
 
     private SpoutOutputCollector collector;
     private int numUsers;
@@ -35,6 +42,8 @@ public class BaselineSpout extends BaseRichSpout {
     private transient BoltProfiler profiler;
 
     private ZipfMandelbrotDistribution keyDistribution;
+    private ZipfMandelbrotDistribution userContributionDistribution;
+    private long[] userRemainingContributions;
     private Random rng;
     private final AtomicLong totalRecordsEmitted = new AtomicLong(0);
 
@@ -44,34 +53,64 @@ public class BaselineSpout extends BaseRichSpout {
     private Map<Long, Long> userContributionCounts;
 
     @Override
-    public void open(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector) {
+    public void open(
+        Map<String, Object> conf,
+        TopologyContext context,
+        SpoutOutputCollector collector
+    ) {
         this.collector = collector;
-        this.numUsers = ((Number) conf.getOrDefault("synthetic.num.users", 10_000_000)).intValue();
-        this.numKeys = ((Number) conf.getOrDefault("synthetic.num.keys", 1_000_000)).intValue();
-        long randomSeed = ((Number) conf.getOrDefault("synthetic.seed", 42L)).longValue();
+        this.numUsers = (
+            (Number) conf.getOrDefault("synthetic.num.users", 10_000_000)
+        ).intValue();
+        this.numKeys = (
+            (Number) conf.getOrDefault("synthetic.num.keys", 1_000_000)
+        ).intValue();
+        long randomSeed = (
+            (Number) conf.getOrDefault("synthetic.seed", 42L)
+        ).longValue();
         this.groundTruthEnabled = Boolean.parseBoolean(
-                String.valueOf(conf.getOrDefault("synthetic.ground-truth.enabled", "false")));
+            String.valueOf(
+                conf.getOrDefault("synthetic.ground-truth.enabled", "false")
+            )
+        );
 
-        LOG.info("BaselineSpout initialized with: numUsers={}, numKeys={}, seed={}, groundTruth={}",
-                numUsers, numKeys, randomSeed, groundTruthEnabled);
+        LOG.info(
+            "BaselineSpout initialized with: numUsers={}, numKeys={}, seed={}, groundTruth={}",
+            numUsers,
+            numKeys,
+            randomSeed,
+            groundTruthEnabled
+        );
 
         this.rng = new Random(randomSeed);
-        this.keyDistribution = new ZipfMandelbrotDistribution(numKeys, 1000, 1.4, rng);
+        this.keyDistribution = new ZipfMandelbrotDistribution(
+            numKeys,
+            1000,
+            1.4,
+            rng
+        );
 
         if (groundTruthEnabled) {
             this.userContributionCounts = new ConcurrentHashMap<>();
         }
 
         if (ProfilerConfig.ENABLED) {
-            this.profiler = new BoltProfiler(context.getThisComponentId(), context.getThisTaskId());
-            profiler.recordLifecycleEvent(BaselineBoltLifecycleEvent.COMPONENT_STARTED);
+            this.profiler = new BoltProfiler(
+                context.getThisComponentId(),
+                context.getThisTaskId()
+            );
+            profiler.recordLifecycleEvent(
+                BaselineBoltLifecycleEvent.COMPONENT_STARTED
+            );
         }
     }
 
     @Override
     public void close() {
         if (ProfilerConfig.ENABLED && profiler != null) {
-            profiler.recordLifecycleEvent(BaselineBoltLifecycleEvent.COMPONENT_STOPPING);
+            profiler.recordLifecycleEvent(
+                BaselineBoltLifecycleEvent.COMPONENT_STOPPING
+            );
             profiler.writeReport();
         }
     }

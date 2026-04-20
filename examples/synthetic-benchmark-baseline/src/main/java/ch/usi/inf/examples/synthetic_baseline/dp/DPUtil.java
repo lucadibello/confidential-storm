@@ -6,67 +6,116 @@ import org.apache.commons.math3.util.FastMath;
  * Utility class for Differential Privacy (DP) calculations.
  * (copy of confidentialstorm/enclave)
  */
-public class DPUtil {
+ public class DPUtil {
 
-    /**
-     * Converts an (epsilon, delta)-DP guarantee into an equivalent rho-zCDP guarantee.
-     */
-    public static double cdpRho(double eps, double delta) {
-        if (eps < 0 || delta <= 0) {
-            throw new IllegalArgumentException("epsilon must be non-negative and delta must be positive");
-        }
-        if (delta >= 1) return 0.0;
+     /**
+      * Converts an (epsilon, delta)-DP guarantee into an equivalent rho-zCDP guarantee.
+      * <p>
+      * Uses tight Rènyi DP conversion [Bun & Steinke 2016] via binary search.
+      * Finds the maximum rho such that rho-zCDP implies (eps, delta)-DP, which
+      * minimizes the noise needed while satisfying the privacy constraint.
+      *
+      * @param eps   target epsilon (privacy loss parameter)
+      * @param delta target delta (failure probability in (eps, delta)-DP)
+      * @return rho parameter for zCDP satisfying the requested (eps, delta)-DP
+      */
+     public static double cdpRho(double eps, double delta) {
+         if (eps < 0 || delta <= 0) {
+             throw new IllegalArgumentException(
+                 "epsilon must be non-negative and delta must be positive"
+             );
+         }
+         if (delta >= 1) return 0.0;
 
-        double rho_min = 0.0;
-        double rho_max = eps + 1;
+         double rho_min = 0.0;
+         double rho_max = eps + 1;
 
-        for (int i = 0; i < 1000; i++) {
-            double rho = (rho_min + rho_max) / 2;
-            if (cdpDelta(rho, eps) <= delta) {
-                rho_min = rho;
-            } else {
-                rho_max = rho;
-            }
-        }
-        return rho_min;
-    }
+         // Binary search: find max rho where cdpDelta(rho, eps) <= delta
+         // Higher rho means weaker privacy and higher delta, so we want largest valid rho
+         for (int i = 0; i < 1000; i++) {
+             double rho = (rho_min + rho_max) / 2;
+             if (cdpDelta(rho, eps) <= delta) {
+                 rho_min = rho; // rho satisfies constraint, try larger
+             } else {
+                 rho_max = rho; // rho too weak, try smaller
+             }
+         }
+         return rho_min;
+     }
 
-    private static double cdpDelta(double rho, double eps) {
-        if (rho < 0 || eps < 0) {
-            throw new IllegalArgumentException("rho and epsilon must be non-negative");
-        }
-        if (rho == 0) return 0.0;
+     /**
+      * Computes the delta that corresponds to a given rho-zCDP and epsilon bound.
+      * <p>
+      * Uses Renyi DP conversion: optimizes over Renyi order alpha to find tightest delta
+      * such that rho-zCDP implies (eps, delta)-DP.
+      * <p>
+      * Formula: delta = exp((alpha-1)(alpha*rho-eps) + alpha*ln(1-1/alpha)) / (alpha-1)
+      *
+      * @param rho zCDP privacy parameter
+      * @param eps epsilon bound
+      * @return the resulting delta value
+      */
+     private static double cdpDelta(double rho, double eps) {
+         if (rho < 0 || eps < 0) {
+             throw new IllegalArgumentException(
+                 "rho and epsilon must be non-negative"
+             );
+         }
+         if (rho == 0) return 0.0;
 
-        double amin = 1.01;
-        double amax = (eps + 1) / (2 * rho) + 2;
+         double amin = 1.01;
+         double amax = (eps + 1) / (2 * rho) + 2;
 
-        for (int i = 0; i < 1000; i++) {
-            double alpha = (amin + amax) / 2;
-            double derivative = (2 * alpha - 1) * rho - eps + FastMath.log1p(-1.0 / alpha);
-            if (derivative < 0) {
-                amin = alpha;
-            } else {
-                amax = alpha;
-            }
-        }
+         // Binary search for optimal alpha (minimize delta by finding root of derivative)
+         for (int i = 0; i < 1000; i++) {
+             double alpha = (amin + amax) / 2;
+             double derivative =
+                 (2 * alpha - 1) * rho - eps + FastMath.log1p(-1.0 / alpha);
+             if (derivative < 0) {
+                 amin = alpha;
+             } else {
+                 amax = alpha;
+             }
+         }
 
-        double alpha = (amin + amax) / 2;
-        double delta = FastMath.exp((alpha - 1) * (alpha * rho - eps) + alpha * FastMath.log1p(-1.0 / alpha)) / (alpha - 1.0);
-        return FastMath.min(delta, 1.0);
-    }
+         double alpha = (amin + amax) / 2;
+         double delta =
+             FastMath.exp(
+                 (alpha - 1) * (alpha * rho - eps) +
+                     alpha * FastMath.log1p(-1.0 / alpha)
+             ) /
+             (alpha - 1.0);
+         return FastMath.min(delta, 1.0);
+     }
 
-    /**
-     * Computes the Gaussian sigma needed for binary tree aggregation under rho-zCDP.
-     */
-    public static double calculateSigma(double rho, double T, double L) {
-        double log2T = FastMath.log(T) / FastMath.log(2);
-        return FastMath.sqrt((log2T * L * L) / ((2 * rho)));
-    }
+     /**
+      * Computes the Gaussian sigma needed for binary tree aggregation under rho-zCDP.
+      * <p>
+      * Formula from Theorem C.1: rho = (L^2 * ceil(log2(T))) / (2 * sigma^2)
+      * Rearranged: sigma = L * sqrt(ceil(log2(T)) / (2 * rho))
+      *
+      * @param rho zCDP privacy parameter
+      * @param T   number of releases/time steps supported by the tree
+      * @param L   per-user L1 sensitivity
+      * @return standard deviation for the Gaussian noise
+      */
+     public static double calculateSigma(double rho, double T, double L) {
+         // use ceiling of log base 2 for tree height calculation as per theorem C.1
+         double log2T = FastMath.ceil(FastMath.log(T) / FastMath.log(2));
+         return FastMath.sqrt((log2T * L * L) / (2 * rho));
+     }
 
-    /**
-     * Returns the user-level L1 sensitivity C * L_m.
-     */
-    public static double l1Sensitivity(long maxContributionsPerUser, double perRecordClamp) {
-        return maxContributionsPerUser * perRecordClamp;
-    }
-}
+     /**
+      * Returns the user-level L1 sensitivity C * L_m.
+      *
+      * @param maxContributionsPerUser maximum contributions per user (C)
+      * @param perRecordClamp          per-record clamp value (L_m)
+      * @return the L1 sensitivity
+      */
+     public static double l1Sensitivity(
+         long maxContributionsPerUser,
+         double perRecordClamp
+     ) {
+         return maxContributionsPerUser * perRecordClamp;
+     }
+ }
