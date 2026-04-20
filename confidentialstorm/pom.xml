@@ -14,8 +14,10 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <junit.jupiter.version>5.10.2</junit.jupiter.version>
+        <junit.jupiter.version>6.0.3</junit.jupiter.version>
+        <junit.platform.console.version>6.0.3</junit.platform.console.version>
         <junit.pioneer.version>2.2.0</junit.pioneer.version>
+        <surefire.version>3.5.4</surefire.version>
         <org.apache.teaclave.javasdk.platform>MOCK_IN_SVM:TEE_SDK</org.apache.teaclave.javasdk.platform>
     </properties>
 
@@ -61,6 +63,12 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-console-standalone</artifactId>
+                <version>${junit.platform.console.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
                 <groupId>org.junit-pioneer</groupId>
                 <artifactId>junit-pioneer</artifactId>
                 <version>${junit.pioneer.version}</version>
@@ -101,7 +109,14 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.4</version>
+                    <version>${surefire.version}</version>
+                    <configuration>
+                        <useFile>true</useFile>
+                        <redirectTestOutputToFile>false</redirectTestOutputToFile>
+                        <trimStackTrace>false</trimStackTrace>
+                        <reportFormat>plain</reportFormat>
+                        <printSummary>true</printSummary>
+                    </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>
