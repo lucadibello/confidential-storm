@@ -113,6 +113,7 @@ public class SyntheticBaselineTopology {
         boolean groundTruth = cliArgs.containsKey("ground-truth")
                 ? Boolean.parseBoolean(cliArgs.get("ground-truth"))
                 : Boolean.getBoolean("synthetic.ground-truth.enabled");
+        String outputDir = cliArgs.getOrDefault("output-dir", System.getProperty("synthetic.output.dir", "/logs/storm/profiler"));
 
         LOG.info("=== Synthetic DP Histogram Baseline Topology (No SGX) ===");
         LOG.info("Mode: {}", testMode ? "TEST (parallelism=1)" : "BENCHMARK");
@@ -135,6 +136,7 @@ public class SyntheticBaselineTopology {
         conf.put("synthetic.seed", seed);
         conf.put("synthetic.runtime.seconds", runtimeSeconds);
         conf.put("synthetic.run.id", runId);
+        conf.put("synthetic.output.dir", outputDir);
         conf.put("synthetic.ground-truth.enabled", String.valueOf(groundTruth));
         conf.put("dp.max.time.steps", DPConfig.maxTimeSteps());
         conf.put("dp.mu", DPConfig.mu());

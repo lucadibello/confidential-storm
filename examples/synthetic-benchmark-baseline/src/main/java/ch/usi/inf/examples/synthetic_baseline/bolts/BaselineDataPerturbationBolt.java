@@ -67,7 +67,15 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
         // Budget split (from SyntheticDataPerturbationServiceProvider):
         //   epsilon: 50/50 split
         //   delta: 2/3 for key selection, 1/3 for histogram
-        double rhoK = DPUtil.cdpRho(DPConfig.EPSILON / 2.0, (2.0 / 3.0) * DPConfig.DELTA);
+        //
+        // Per paper Section 4.4, key selection composes over at most C rounds,
+        // so we first convert total key-selection budget into per-round budget.
+        DPUtil.PerRoundBudget keyRoundBudget = DPUtil.keySelectionPerRoundBudget(
+                DPConfig.EPSILON / 2.0,
+                (2.0 / 3.0) * DPConfig.DELTA,
+                DPConfig.MAX_CONTRIBUTIONS_PER_USER
+        );
+        double rhoK = DPUtil.cdpRho(keyRoundBudget.epsilon(), keyRoundBudget.delta());
         double sigmaKey = DPUtil.calculateSigma(rhoK, maxTimeSteps, 1.0);
 
         double rhoH = DPUtil.cdpRho(DPConfig.EPSILON / 2.0, (1.0 / 3.0) * DPConfig.DELTA);

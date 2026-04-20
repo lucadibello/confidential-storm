@@ -33,8 +33,7 @@ import java.util.*;
 public class BaselineHistogramAggregationBolt extends BaseRichBolt {
     private static final Logger LOG = LoggerFactory.getLogger(BaselineHistogramAggregationBolt.class);
 
-    private static final String OUTPUT_DIR = System.getProperty("synthetic.output.dir", "data");
-    private static final int RUN_ID = Integer.getInteger("synthetic.run.id", 1);
+    private static final String DEFAULT_OUTPUT_DIR = "/logs/storm/profiler";
     private static final String DUMMY_MARKER_KEY = "__dummy";
     private static final int MAX_PENDING_EPOCHS = 8;
 
@@ -53,7 +52,7 @@ public class BaselineHistogramAggregationBolt extends BaseRichBolt {
     // Per-epoch aggregation state (inlined from enclave service)
     private final TreeMap<Integer, EpochState> epochStates = new TreeMap<>();
 
-    private final String outputFile;
+    private String outputFile;
 
     private transient BoltProfiler profiler;
     private transient int ticksSinceLastCompletion;
@@ -65,10 +64,6 @@ public class BaselineHistogramAggregationBolt extends BaseRichBolt {
         final Set<String> contributors = new HashSet<>();
     }
 
-    public BaselineHistogramAggregationBolt() {
-        this.outputFile = String.format("%s/synthetic-report-run%d.txt", OUTPUT_DIR, RUN_ID);
-    }
-
     @Override
     public void prepare(Map<String, Object> topoConf, TopologyContext context, OutputCollector collector) {
         this.collector = collector;
@@ -76,6 +71,9 @@ public class BaselineHistogramAggregationBolt extends BaseRichBolt {
                 ComponentConstants.BOLT_DATA_PERTURBATION).size();
         this.maxTimeSteps = ((Number) topoConf.getOrDefault("dp.max.time.steps", DPConfig.maxTimeSteps())).intValue();
         this.tickIntervalSecs = ((Number) topoConf.getOrDefault("dp.tick.interval.secs", 5)).intValue();
+        String outputDir = (String) topoConf.getOrDefault("synthetic.output.dir", DEFAULT_OUTPUT_DIR);
+        int runId = ((Number) topoConf.getOrDefault("synthetic.run.id", 1)).intValue();
+        this.outputFile = String.format("%s/synthetic-report-run%d.txt", outputDir, runId);
 
         if (ProfilerConfig.ENABLED) {
             this.profiler = new BoltProfiler(context.getThisComponentId(), context.getThisTaskId());

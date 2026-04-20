@@ -75,13 +75,20 @@ public class SyntheticTopology {
                 new Fields("dpRoutingKey")
         );
 
-        // HistogramAggregationBolt: merges encrypted partial histograms and writes report
+        // HistogramAggregationBolt: merges encrypted partial histograms and writes report.
+        // Also subscribes to the spout's ground-truth stream (plaintext keys) so it can
+        // compute utility metrics (l0, l_inf, l_1, l_2) against the true histogram.
+        // When ground-truth is disabled, the spout never emits on that stream, so this
+        // subscription adds no runtime traffic (it's just a declared edge in the DAG).
         builder.setBolt(
                 ComponentConstants.BOLT_HISTOGRAM_AGGREGATION.toString(),
                 new SyntheticHistogramAggregationBolt(),
                 1
         ).shuffleGrouping(
                 ComponentConstants.BOLT_DATA_PERTURBATION.toString()
+        ).localOrShuffleGrouping(
+                ComponentConstants.SPOUT.toString(),
+                ComponentConstants.GROUND_TRUTH_STREAM
         );
 
         return builder;
@@ -130,6 +137,7 @@ public class SyntheticTopology {
         boolean groundTruth = cliArgs.containsKey("ground-truth")
                 ? Boolean.parseBoolean(cliArgs.get("ground-truth"))
                 : Boolean.getBoolean("synthetic.ground-truth.enabled");
+        String outputDir = cliArgs.getOrDefault("output-dir", System.getProperty("synthetic.output.dir", "/logs/storm/profiler"));
 
         LOG.info("=== Synthetic DP Histogram Topology ===");
         LOG.info("Mode: {}", testMode ? "TEST (parallelism=1)" : "BENCHMARK");
@@ -156,6 +164,7 @@ public class SyntheticTopology {
         conf.put("synthetic.num.keys", numKeys);
         conf.put("synthetic.seed", seed);
         conf.put("synthetic.run.id", runId);
+        conf.put("synthetic.output.dir", outputDir);
         conf.put("synthetic.ground-truth.enabled", String.valueOf(groundTruth));
         conf.put("dp.max.time.steps", DPConfig.maxTimeSteps());
         conf.put("dp.mu", DPConfig.mu());

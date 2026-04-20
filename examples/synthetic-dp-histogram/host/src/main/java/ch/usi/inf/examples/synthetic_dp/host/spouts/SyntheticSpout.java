@@ -5,11 +5,10 @@ import ch.usi.inf.confidentialstorm.host.spouts.ConfidentialSpout;
 import ch.usi.inf.examples.synthetic_dp.common.api.SyntheticDataService;
 import ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticEncryptedRecord;
 import ch.usi.inf.examples.synthetic_dp.common.config.DPConfig;
-import ch.usi.inf.examples.synthetic_dp.host.GroundTruthCollector;
+import ch.usi.inf.examples.synthetic_dp.common.topology.ComponentConstants;
 import ch.usi.inf.examples.synthetic_dp.host.util.ZipfMandelbrotDistribution;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
 import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
@@ -24,9 +23,9 @@ import org.slf4j.LoggerFactory;
  * - 1 million distinct keys, where each key is sampled from Zipf-Mandelbrot(N=1_000_000,q=1000,s=1.4) distribution
  * <p>
  * When ground truth collection is enabled ({@code synthetic.ground-truth.enabled=true}),
- * the spout mirrors the enclave-side per-user contribution limit (C={@link DPConfig#MAX_CONTRIBUTIONS_PER_USER})
- * to track only tuples that would survive bounding. This is needed for utility measurement
- * (comparing noisy DP output against the true histogram) but adds overhead from per-user bookkeeping.
+ * the spout emits a plaintext {@code (key)} tuple on {@link ComponentConstants#GROUND_TRUTH_STREAM}
+ * for every record, so the aggregation bolt can build a worker-local ground-truth histogram.
+ * When disabled, nothing is emitted on that stream (no allocation, no extra Storm traffic).
  */
 public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
 
@@ -59,12 +58,6 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
      */
     private Random rng;
 
-    /**
-     * Per-user contribution counts, only allocated when ground truth is enabled.
-     * Mirrors the enclave-side {@code UserContributionLimiter} to predict which
-     * tuples will survive the bounding bolt.
-     */
-    private Map<Long, Long> userContributionCounts;
 
     public SyntheticSpout() {
         super(SyntheticDataService.class);
@@ -135,10 +128,6 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
             userRemainingContributions[i] = target;
         }
 
-        // enable ground truth if requested to keep track of accurate counts of distributions
-        if (groundTruthEnabled) {
-            this.userContributionCounts = new ConcurrentHashMap<>();
-        }
     }
 
     @Override
@@ -150,8 +139,7 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
         if (userRemainingContributions[userId] <= 0) return;
 
         // fetch a new record for this user
-        final int keyId = keyDistribution.sample();
-        final String key = "k" + keyId;
+        final String key = Integer.toString(keyDistribution.sample());
 
         // encrypt the record using the custom enclave service
         // FIXME: we should convert the "count" parameter from String to long in the service API (the count will always be a number)
@@ -167,23 +155,18 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
             );
         }
 
-        // Track ground truth only for tuples that would survive contribution bounding
-        if (groundTruthEnabled) {
-            // FIXME: we need to check if this makes sense!
-            long count = userContributionCounts.merge(
-                Long.valueOf(userId),
-                1L,
-                Long::sum
-            );
-            if (count <= DPConfig.MAX_CONTRIBUTIONS_PER_USER) {
-                GroundTruthCollector.record(key, 1L);
-            }
-        }
-
-        // emit tuple
+        // emit tuple on the default stream to the contribution-bounding bolt
         getCollector().emit(
             new Values(rec.key(), rec.count(), rec.userId(), rec.routingKey())
         );
+
+        // emit the plaintext key on the ground-truth stream to the aggregation bolt (only if enabled)
+        if (groundTruthEnabled) {
+            getCollector().emit(
+                ComponentConstants.GROUND_TRUTH_STREAM,
+                new Values(key)
+            );
+        }
 
         // record that userId has emitted one more record
         userRemainingContributions[userId]--;
@@ -192,5 +175,12 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
         declarer.declare(new Fields("key", "count", "userId", "routingKey"));
+
+        // Ground truth stream for emitting plaintext keys for building the ground-truth histogram in the aggregation bolt
+        // NOTE: when ground truth collection is disabled, no tuples will be emitted on this stream, so there is no overhead in declaring it
+        declarer.declareStream(
+            ComponentConstants.GROUND_TRUTH_STREAM,
+            new Fields("key")
+        );
     }
 }

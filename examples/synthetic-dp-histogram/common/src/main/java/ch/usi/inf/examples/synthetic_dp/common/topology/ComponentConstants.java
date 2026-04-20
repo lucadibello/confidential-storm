@@ -8,5 +8,8 @@ public final class ComponentConstants {
     public static final TopologySpecification.Component BOLT_DATA_PERTURBATION = TopologySpecification.Component.of("bolt-data-perturbation");
     public static final TopologySpecification.Component BOLT_HISTOGRAM_AGGREGATION = TopologySpecification.Component.of("bolt-histogram-aggregation");
 
+    /** Stream id used by the spout to emit plaintext ground-truth keys to the aggregation bolt. */
+    public static final String GROUND_TRUTH_STREAM = "ground-truth";
+
     private ComponentConstants() {}
 }
