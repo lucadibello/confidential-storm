@@ -73,7 +73,7 @@ class BinaryAggregationTreeTest {
     }
 
     private static class BinaryAggregationTreeOriginal {
-        private static int height = 0;
+        private int height = 0;
         private final ArrayList<Double> tree;
         private Double curPrivateSum = 0.00;
 
