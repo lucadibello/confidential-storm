@@ -71,7 +71,7 @@ fi
 
 # --- Print configuration ---
 echo "=============================================="
-echo " Synthetic DP Histogram — Run $RUN_ID"
+echo " Synthetic DP Histogram -- Run $RUN_ID"
 echo "=============================================="
 echo " Mode:            $MODE"
 echo " Users:           $NUM_USERS"

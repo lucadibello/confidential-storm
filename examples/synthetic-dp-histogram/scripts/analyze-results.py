@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-analyze-results.py — Analyze Synthetic DP Histogram benchmark results.
+analyze-results.py -- Analyze Synthetic DP Histogram benchmark results.
 
 Parses report files produced by the topology, extracts final-tick metrics
 from each run, averages across runs, and compares with the paper's Table 1.
@@ -146,7 +146,7 @@ def main():
     # Print results
     print()
     print("=" * 72)
-    print(" Synthetic DP Histogram — Results Analysis")
+    print(" Synthetic DP Histogram -- Results Analysis")
     print("=" * 72)
 
     for config in configs_to_show:

@@ -81,7 +81,7 @@ public abstract class AbstractHistogramAggregationServiceProvider
     protected int getExpectedReplicaCount() {
         if (expectedReplicaCount <= 0) {
             throw new IllegalStateException(
-                "expectedReplicaCount not set — setExpectedReplicaCount() must be called before mergePartial()"
+                "expectedReplicaCount not set -- setExpectedReplicaCount() must be called before mergePartial()"
             );
         }
         return expectedReplicaCount;
@@ -128,7 +128,7 @@ public abstract class AbstractHistogramAggregationServiceProvider
             // check if the partial is a dummy (contains the dummy marker key)
             if (partialMap.containsKey(AbstractDataPerturbationServiceProvider.DUMMY_MARKER_KEY)) {
                 log.debug(
-                    "[AGGREGATION] Dummy partial from producer {} in epoch {} — discarded",
+                    "[AGGREGATION] Dummy partial from producer {} in epoch {} -- discarded",
                     senderId,
                     epoch
                 );

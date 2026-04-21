@@ -300,7 +300,7 @@ public class BaselineHistogramAggregationBolt extends BaseRichBolt {
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        // Terminal sink — no output streams
+        // Terminal sink -- no output streams
     }
 
     private static boolean isTickTuple(Tuple tuple) {

@@ -181,7 +181,7 @@ public class TopologyGraphGenerator {
                     .getMethod("stop", long.class, java.util.concurrent.TimeUnit.class);
             stop.invoke(context, 5L, java.util.concurrent.TimeUnit.SECONDS);
         } catch (Exception ignored) {
-            // Log4j2 not present or already shut down — nothing to do
+            // Log4j2 not present or already shut down -- nothing to do
         }
     }
 

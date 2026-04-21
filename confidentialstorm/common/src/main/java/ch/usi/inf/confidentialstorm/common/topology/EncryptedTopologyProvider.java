@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
  * enclave from loading a forged topology.
  * <p>
  * At construction time this class builds both a <em>forward</em> index
- * (source -> downstream neighbours) and a <em>reverse</em> index (destination → upstream
+ * (source -> downstream neighbours) and a <em>reverse</em> index (destination -> upstream
  * neighbours) so that both {@link #getDownstream} and {@link #getUpstream} can be served
  * in O(1).
  * <p>
@@ -76,7 +76,7 @@ public class EncryptedTopologyProvider implements TopologyProvider {
         try (InputStream is = getClass().getResourceAsStream(RESOURCE_NAME)) {
             if (is == null) {
                 // Fail-closed: missing topology file means route validation cannot be performed.
-                // Do NOT silently disable security checks — abort enclave startup instead.
+                // Do NOT silently disable security checks -- abort enclave startup instead.
                 throw new IllegalStateException(
                         RESOURCE_NAME + " not found in classpath. " +
                         "Run TopologyGraphGenerator during the build to produce this file " +
@@ -143,7 +143,7 @@ public class EncryptedTopologyProvider implements TopologyProvider {
 
     /**
      * Builds a reverse adjacency list from the given forward adjacency list.
-     * For every edge {@code src → dst} in the forward graph, an edge {@code dst → src}
+     * For every edge {@code src -> dst} in the forward graph, an edge {@code dst -> src}
      * is added to the reverse graph.
      *
      * @param forward the forward adjacency list to invert

@@ -41,14 +41,10 @@ public class StreamingDPMechanism {
     private final Map<String, BinaryAggregationTree> histogramForest = new HashMap<>();
     
     /**
-     * Set of keys that have been selected for release so far (from the beginning of the stream until now).
-     */
-    private final Set<String> selectedKeys = new HashSet<>();
-
-    /**
-     * Map that stores the current noisy sum for each key.
+     * Map that stores the latest released noisy sum for each key.
      * <p>
-     * These values are computed using Algorithm 2 and are used to produce the final histogram.
+     * Values are updated when a key is released and are carried forward across triggering times,
+     * ensuring that every snapshot emits the full histogram state (including unchanged keys).
      */
     private final Map<String, Double> currentSums = new HashMap<>();
 
@@ -61,11 +57,10 @@ public class StreamingDPMechanism {
     private final Map<String, Integer> predictedReleaseTimes = new HashMap<>();
 
     /**
-     * Map that links each key to the set of unique user IDs that have contributed to it so far in the entire stream
-     * (up to the current time step {@link #timeStep}).
+     * Map that links each key to the set of unique user IDs already counted in the current
+     * key-selection round (since the most recent release of that key).
      * <p>
-     * This is essential for ensuring that the sensitivity of the key selection process remains 1, as required by
-     * the DP mechanism.
+     * This keeps per-round key-selection sensitivity at 1 per user-key pair.
      */
     private final Map<String, Set<String>> observedUsersForKeySelection = new HashMap<>();
 
@@ -189,7 +184,7 @@ public class StreamingDPMechanism {
      * Proceeds by one time step (triggering time), processing all contributions in the current window.
      * <p>
      * This method performs the following steps:
-     * 1. Identifies all keys that need processing (current micro-batch, predicted releases, and already selected keys).
+     * 1. Identifies all keys that need processing (current micro-batch + predicted releases).
      * 2. Executes Algorithm 1 (Streaming Private Key Selection) for new or pending keys.
      * 3. Executes Algorithm 3 (Empty Key Release Prediction) for keys that were not selected.
      * 4. Executes Algorithm 2 (Hierarchical Perturbation) for all selected keys to update their noisy sums.
@@ -223,17 +218,14 @@ public class StreamingDPMechanism {
             return produceHistogram();
         }
 
-        // Clear the current sums map to ensure we only output keys processed in this time step
-        currentSums.clear();
-
         // 1. Identify all keys that need processing in this step
         // a) Unique set of keys in this stream window D_tr_i (Step 4 of Algo 1)
         // b) Keys predicted to be released at this specific timeStep (Algo 3 Case 2)
 
-        // Step 1 of Algo 3 - DeltaD_tr_j = D_tr_j − D_tr_(j-1) (data in current micro-batch)
+        // Step 1 of Algo 3 - DeltaD_tr_j = D_tr_j - D_tr_(j-1) (data in current micro-batch)
         // NOTE: currentWindowCounts represents DeltaD_tr_j (keys with contributions this window)
-        Set<String> s_i = new HashSet<>(currentWindowCounts.keySet());
-        log.info("[DP-MECHANISM] Keys with contributions this window: {}", s_i.size());
+        Set<String> keysToProcess = new HashSet<>(currentWindowCounts.keySet());
+        log.info("[DP-MECHANISM] Keys with contributions this window: {}", keysToProcess.size());
 
         // Algo 3 Case 2 - Load keys with predicted release time = current time step
         // "DP-SQLP loaded system states for key k at predicted time tr_p"
@@ -241,18 +233,17 @@ public class StreamingDPMechanism {
         while (predictionIt.hasNext()) {
             Map.Entry<String, Integer> entry = predictionIt.next();
             if (entry.getValue() == timeStep) {
-                s_i.add(entry.getKey());
+                keysToProcess.add(entry.getKey());
                 predictionIt.remove(); // remove prediction as we are processing it now
             }
         }
 
-        log.debug("[DP-MECHANISM] Keys with contributions this window: {}, predicted releases: {}, total selected keys: {}",
-                    currentWindowCounts.size(), predictedReleaseTimes.size(), selectedKeys.size());
+        log.debug("[DP-MECHANISM] Keys with contributions this window: {}, predicted releases: {}",
+                    currentWindowCounts.size(), predictedReleaseTimes.size());
 
         // 2. Process each key
-        for (String key : s_i) {
-            boolean alreadySelected = selectedKeys.contains(key);
-            boolean selectedThisStep = false;
+        for (String key : keysToProcess) {
+            boolean keyAppearedThisStep = currentWindowCounts.containsKey(key);
 
             // Get inputs for this window
             double countInput = currentWindowCounts.getOrDefault(key, 0.0);
@@ -260,79 +251,66 @@ public class StreamingDPMechanism {
             // Step 7 of Algo 2 - Aggregate contributions for this key since last release to compute DeltaV_key
             unreleasedHistogramBuffer.merge(key, countInput, Double::sum);
 
-            // If key already selected, skip Algorithm 1/3 to avoid double-counting unique users
-            if (!alreadySelected) {
-                // --- Key Selection Logic (Algo 1 & 3) ---
+            // --- Key Selection Logic (Algo 1 & 3) ---
 
-                // Algo 3 Case 1 - Key appears before predicted time (j < n < p)
-                // "The prior prediction result is discarded"
-                if (predictedReleaseTimes.containsKey(key)) {
-                    int predictedTime = predictedReleaseTimes.get(key);
-                    if (predictedTime > timeStep) {
-                        // Key appeared before prediction - discard stale prediction
-                        predictedReleaseTimes.remove(key);
-                    }
-                }
-
-                // Algo 1 step 5 - initialize or reuse tree; prefer reuse even if key went silent
-                BinaryAggregationTree t_key = keySelectionForest.get(key);
-                if (t_key == null) {
-                    t_key = new BinaryAggregationTree(maxTimeSteps, sigmaKey);
-                    keySelectionForest.put(key, t_key);
-                    // Reset user tracking for this key since we're starting fresh
-                    observedUsersForKeySelection.remove(key);
-                    log.debug("[DP-MECHANISM] Key {} initialized with new key-selection tree", key);
-                }
-
-                // Step 7 of Algo 1: Add count_key(D_tr_i) - count_key(D_tr_(i-1)) to the tree
-                //
-                // D_tr_i = cumulative sub-stream from time 0 to i -> need to track unique users across all time steps
-                Set<String> observedUsers = observedUsersForKeySelection.computeIfAbsent(key, k -> new HashSet<>());
-                Set<String> windowUsers = currentWindowUniqueUsers.getOrDefault(key, Collections.emptySet());
-
-                // Count NEW unique users in current window (users not seen before for this key)
-                int newUniqueUsers = 0;
-                for (String userId : windowUsers) {
-                    if (observedUsers.add(userId)) {
-                        newUniqueUsers++; // NOTE: this is count_key(D_tr_i) - count_key(D_tr_(i-1))
-                    }
-                }
-
-                // Add the delta to the tree
-                t_key.addToTree(timeStep, newUniqueUsers);
-
-                // Step 8 of Algo 1 - compute the noisy unique users for this key at time step i
-                double noisyUniqueUsers = t_key.getTotalSum(timeStep);
-
-                // Step 9 of Algo 1 - check key selection condition
-
-                // Compute the Honaker variance at this time step
-                double currentVariance = t_key.getHonakerVariance(timeStep);
-                // Compute tau for the current time step using the inverse CDF of the Gaussian distribution at beta - 1
-                double tau_tr_i = computeTau(currentVariance);
-                if (noisyUniqueUsers >= (double) mu + tau_tr_i) {
-                    // KEY SELECTED FOR RELEASE!
-                    selectedKeys.add(key);
-                    selectedThisStep = true;
-
-                    // Reset state for fresh selection in future time steps
-                    resetKeySelectionState(key);
-                    log.debug("[DP-MECHANISM] Key {} SELECTED (noisy users={} >= mu+tau={})",
-                            key, noisyUniqueUsers, mu + tau_tr_i);
-                } else {
-                    // NOT SELECTED
-
-                    // Step 2-3 of Algo 3 - For keys in S_tr_j not selected, run prediction
-                    // NOTE: S_tr_j = All key \in DeltaD_tr_j not selected via Algorithm 1
-
-                    // Predict if this key will be selected in future time steps due to noise
-                    runEmptyKeyPrediction(key, t_key);
+            // Algo 3 Case 1 - Key appears before predicted time (j < n < p)
+            // "The prior prediction result is discarded"
+            if (keyAppearedThisStep && predictedReleaseTimes.containsKey(key)) {
+                int predictedTime = predictedReleaseTimes.get(key);
+                if (predictedTime > timeStep) {
+                    // Key appeared before prediction - discard stale prediction
+                    predictedReleaseTimes.remove(key);
                 }
             }
 
-            // Hierarchical perturbation (Algo 2) for selected keys
-            if (alreadySelected || selectedThisStep) {
+            // Algo 1 step 5 - initialize or reuse tree; prefer reuse even if key went silent
+            BinaryAggregationTree t_key = keySelectionForest.get(key);
+            if (t_key == null) {
+                t_key = new BinaryAggregationTree(maxTimeSteps, sigmaKey);
+                keySelectionForest.put(key, t_key);
+                // Reset user tracking for this key since we're starting fresh round
+                observedUsersForKeySelection.remove(key);
+                log.debug("[DP-MECHANISM] Key {} initialized with new key-selection tree", key);
+            }
+
+            // Step 7 of Algo 1: Add count_key(D_tr_i) - count_key(D_tr_(i-1)) to the tree
+            Set<String> observedUsers = observedUsersForKeySelection.computeIfAbsent(key, k -> new HashSet<>());
+            Set<String> windowUsers = currentWindowUniqueUsers.getOrDefault(key, Collections.emptySet());
+
+            // Count NEW unique users in current round for this key
+            int newUniqueUsers = 0;
+            for (String userId : windowUsers) {
+                if (observedUsers.add(userId)) {
+                    newUniqueUsers++; // this is count_key(D_tr_i) - count_key(D_tr_(i-1)) for current round
+                }
+            }
+
+            // Add the delta to the key-selection tree
+            t_key.addToTree(timeStep, newUniqueUsers);
+
+            // Step 8 of Algo 1 - compute the noisy unique users for this key at time step i
+            double noisyUniqueUsers = t_key.getTotalSum(timeStep);
+
+            // Step 9 of Algo 1 - check key selection condition
+            double currentVariance = t_key.getHonakerVariance(timeStep);
+            double tau_tr_i = computeTau(currentVariance);
+            if (noisyUniqueUsers >= (double) mu + tau_tr_i) {
+                // KEY SELECTED FOR RELEASE!
+
+                // Run Algorithm 2 with accumulated unreleased buffer value
                 updateHistogramTree(key);
+
+                // Restart key selection round after release (Section 4.4)
+                resetKeySelectionState(key);
+                log.debug("[DP-MECHANISM] Key {} SELECTED (noisy users={} >= mu+tau={})",
+                        key, noisyUniqueUsers, mu + tau_tr_i);
+            } else {
+                // NOT SELECTED
+
+                // Step 2-3 of Algo 3 - For keys in S_tr_j (current micro-batch) not selected, run prediction
+                if (keyAppearedThisStep) {
+                    runEmptyKeyPrediction(key, t_key);
+                }
             }
         }
 
@@ -469,7 +447,6 @@ public class StreamingDPMechanism {
     private void trimExpiredState() {
         keySelectionForest.clear();
         histogramForest.clear();
-        selectedKeys.clear();
         observedUsersForKeySelection.clear();
         predictedReleaseTimes.clear();
         unreleasedHistogramBuffer.clear();

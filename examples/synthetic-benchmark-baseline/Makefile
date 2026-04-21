@@ -20,7 +20,7 @@ TOPOLOGY_ARGS ?=
 all: build
 
 help:
-	@echo "Make targets (Baseline — No SGX):"
+	@echo "Make targets (Baseline -- No SGX):"
 	@echo "  make [all|build]      - Build the baseline topology JAR"
 	@echo "  make clean            - Run 'mvn clean' for the project"
 	@echo "  make run-local        - Run locally in benchmark mode (parallelism=8)"

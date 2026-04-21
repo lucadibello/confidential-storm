@@ -51,7 +51,7 @@ public final class SealedPayload {
             this.encryptionKey = new SecretKeySpec(streamKey, scheme.getKeyAlgorithm());
         } else {
             this.encryptionKey = null;
-            logger.warn("SealedPayload initialized with NONE encryption scheme — " +
+            logger.warn("SealedPayload initialized with NONE encryption scheme -- " +
                     "no confidentiality or integrity protection is provided");
         }
     }

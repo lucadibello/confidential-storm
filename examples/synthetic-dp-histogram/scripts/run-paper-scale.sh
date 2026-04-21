@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# run-paper-scale.sh — Full paper-scale run (Section 5.1).
+# run-paper-scale.sh -- Full paper-scale run (Section 5.1).
 #
 # Usage:
 #   ./scripts/run-paper-scale.sh <max_time_steps> <run_id>

@@ -9,7 +9,7 @@ import java.util.Random;
  * <p>
  * Sources:
  * - <a href="https://en.wikipedia.org/wiki/Zipf%E2%80%93Mandelbrot_law">Zipf-Mandelbrot law</a>
- * - "Random sampling of the Zipf–Mandelbrot distribution as a representation of vocabulary growth" paper
+ * - "Random sampling of the Zipf-Mandelbrot distribution as a representation of vocabulary growth" paper
  * - <a href="https://en.wikipedia.org/wiki/Inverse_transform_sampling">Inverse Random Sampling</a>
  * - <a href="https://github.com/gkohri/discreteRNG">discreteRNG C++ implementation</a> - C++ implementation of Zipf-Mandelbrot distribution
  */

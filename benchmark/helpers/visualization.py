@@ -237,7 +237,7 @@ def parameter_breakdown(
             axes[r, c].set_visible(False)
 
         fig.suptitle(
-            f"{metric_title} — effect of {sweep_display}",
+            f"{metric_title} -- effect of {sweep_display}",
             fontsize=13, fontweight="bold",
         )
         save_or_show(fig, output_dir, f"{plot_name}-by-{sweep_col}", fmt, show)
@@ -282,14 +282,14 @@ def _parameter_breakdown_aggregated(
 
     ax.set_xlabel(sweep_display)
     ax.set_ylabel(ylabel)
-    ax.set_title(f"{metric_title} — effect of {sweep_display}")
+    ax.set_title(f"{metric_title} -- effect of {sweep_display}")
     ax.legend()
     ax.grid(True, alpha=0.3)
     save_or_show(fig, output_dir, plot_name, fmt, show)
 
 
 # ---------------------------------------------------------------------------
-# New plot functions — Overhead Analysis (Section A)
+# New plot functions -- Overhead Analysis (Section A)
 # ---------------------------------------------------------------------------
 
 def paired_bar_chart(
@@ -415,7 +415,7 @@ def duration_breakdown_stacked(
 
     fig, ax = plt.subplots(figsize=(12, max(4, n * 0.8)))
 
-    # Ecall segments to show (canonical names → display labels)
+    # Ecall segments to show (canonical names -> display labels)
     _ECALL_SEGMENTS = [
         ("addContribution", "addContribution"),
         ("mergePartial", "mergePartial"),
@@ -490,7 +490,7 @@ def duration_breakdown_stacked(
     ax.set_title(title)
     ax.grid(True, axis="x", alpha=0.3)
 
-    # Legend — only include segments that appear in at least one row
+    # Legend -- only include segments that appear in at least one row
     all_seg_names = ["Startup", "Barrier wait", "Snapshot"] + [d for _, d in _ECALL_SEGMENTS] + ["Other", "Idle (post-max)"]
     legend_patches = []
     for seg_name in all_seg_names:
@@ -648,7 +648,7 @@ def paired_box_plot(
 
 
 # ---------------------------------------------------------------------------
-# New plot functions — Parameter Sensitivity (Section B)
+# New plot functions -- Parameter Sensitivity (Section B)
 # ---------------------------------------------------------------------------
 
 def parameter_heatmap(
@@ -823,7 +823,7 @@ def sensitivity_line(
 
 
 # ---------------------------------------------------------------------------
-# New plot functions — Grid Overview (Section C)
+# New plot functions -- Grid Overview (Section C)
 # ---------------------------------------------------------------------------
 
 def completion_heatmap(
@@ -950,11 +950,11 @@ def styled_summary_table(
     try:
         styler = display_df.style
     except AttributeError:
-        # jinja2 not installed — fall back to plain DataFrame
+        # jinja2 not installed -- fall back to plain DataFrame
         return display_df
 
     if format_dict:
-        styler = styler.format(format_dict, na_rep="—")
+        styler = styler.format(format_dict, na_rep="--")
 
     # Color-code status column
     if status_col in display_df.columns:
@@ -979,7 +979,7 @@ def styled_summary_table(
 
 
 # ---------------------------------------------------------------------------
-# New plot functions — Single Run Deep-Dive (Section D)
+# New plot functions -- Single Run Deep-Dive (Section D)
 # ---------------------------------------------------------------------------
 
 def run_timeline_gantt(
@@ -1208,7 +1208,7 @@ def emission_timeline(
         ax_top.step(cum_dummy.index, cum_dummy.values, where="post",
                     color="#E74C3C", linewidth=1.5, label="Dummy (cumulative)")
     elif cum_real is not None:
-        # No dummy data — show a zero line so the absence is explicit
+        # No dummy data -- show a zero line so the absence is explicit
         ax_top.step(cum_real.index, np.zeros(len(cum_real)), where="post",
                     color="#E74C3C", linewidth=1.5, label="Dummy (cumulative)")
     ax_top.set_ylabel("Cumulative emissions\n(all tasks)")
@@ -1226,7 +1226,7 @@ def emission_timeline(
         if s_real is not None and not s_real.empty:
             ax_bot.step(s_real["elapsed_s"].values, s_real["total"].values, where="post",
                         color=color, linewidth=1.3, label=f"Task {task_id} real")
-        # Dummy emissions — plot zeros along real timeline if no dummy data
+        # Dummy emissions -- plot zeros along real timeline if no dummy data
         s_dummy = task_series[task_id].get("dummy_emissions")
         if s_dummy is not None and not s_dummy.empty:
             ax_bot.step(s_dummy["elapsed_s"].values, s_dummy["total"].values, where="post",
@@ -1261,8 +1261,8 @@ def dp_release_timeline(
     For each data-perturbation task, draws:
     - Snapshot blocks (red bars from SNAPSHOT_STARTED to SNAPSHOT_COMPLETED)
     - TICK_RECEIVED markers (grey triangles)
-    - EPOCH_ADVANCED markers (green diamonds — real partial emitted)
-    - DUMMY_RELEASED markers (orange circles — dummy partial emitted)
+    - EPOCH_ADVANCED markers (green diamonds -- real partial emitted)
+    - DUMMY_RELEASED markers (orange circles -- dummy partial emitted)
 
     The x-axis is elapsed time. Ideal tick-interval grid lines are overlaid.
     """
@@ -1381,7 +1381,7 @@ def tick_tuple_validation(
     """Analyze inter-tick-tuple timing irregularities per task over time.
 
     Top panel: scatter of per-task inter-tick deltas over elapsed time, with
-    the expected tick interval shown as a horizontal band (±20%).
+    the expected tick interval shown as a horizontal band (+20%).
     Bottom panel: rolling standard deviation of deltas (window=5) to show
     whether irregularities diminish over time.
     """
@@ -1446,7 +1446,7 @@ def tick_tuple_validation(
 
     # Top panel formatting
     ax_delta.axhspan(lo, hi, color="#27AE60", alpha=0.10, zorder=0,
-                     label=f"Expected ±{int(tol*100)}%")
+                     label=f"Expected +{int(tol*100)}%")
     ax_delta.axhline(tick_s, color="#27AE60", linestyle="--", linewidth=1, alpha=0.6)
     ax_delta.set_ylabel("Inter-tick delta (s)")
     ax_delta.set_title(title)
@@ -1455,7 +1455,7 @@ def tick_tuple_validation(
 
     # Bottom panel formatting
     ax_roll.axhline(0, color="#999999", linewidth=0.5)
-    ax_roll.set_ylabel("Rolling σ of delta (s)")
+    ax_roll.set_ylabel("Rolling sigma of delta (s)")
     ax_roll.set_xlabel("Elapsed time (s)")
     ax_roll.legend(fontsize=8, loc="upper right", ncol=min(n_tasks, 4))
     ax_roll.grid(True, alpha=0.15)
@@ -1464,7 +1464,7 @@ def tick_tuple_validation(
     pct = (all_violations / all_deltas * 100) if all_deltas else 0
     ax_delta.text(
         0.01, 0.97,
-        f"Violations: {all_violations}/{all_deltas} ({pct:.0f}%) — expected Δ = {tick_s:.0f}s",
+        f"Violations: {all_violations}/{all_deltas} ({pct:.0f}%) -- expected Δ = {tick_s:.0f}s",
         transform=ax_delta.transAxes, fontsize=9, va="top",
         bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
     )
@@ -1515,7 +1515,7 @@ def traffic_pattern_analysis(
     tasks = sorted(emission_events["taskId"].unique())
     n_tasks = len(tasks)
 
-    # Tolerance: allow ±20% of tick interval
+    # Tolerance: allow +20% of tick interval
     tolerance = tick_s * 0.20
     lo, hi = tick_s - tolerance, tick_s + tolerance
 
@@ -1571,7 +1571,7 @@ def traffic_pattern_analysis(
         total_violations += n_violations
 
         # Expected band
-        ax.axhspan(lo, hi, color="#27AE60", alpha=0.10, label=f"Expected ({lo:.0f}–{hi:.0f}s)")
+        ax.axhspan(lo, hi, color="#27AE60", alpha=0.10, label=f"Expected ({lo:.0f}-{hi:.0f}s)")
         ax.axhline(tick_s, color="#27AE60", linewidth=1, linestyle="--", alpha=0.5)
 
         # OK points
@@ -1599,7 +1599,7 @@ def traffic_pattern_analysis(
 
     # --- Print summary ---
     print(f"Traffic pattern validation: tick_interval={tick_s:.0f}s, "
-          f"tolerance=±{tolerance:.1f}s ({lo:.1f}–{hi:.1f}s)")
+          f"tolerance=+{tolerance:.1f}s ({lo:.1f}-{hi:.1f}s)")
     print(f"  Total emissions: {total_emissions}, Violations: {total_violations}")
     for task_id in tasks:
         td = task_deltas.get(task_id)
@@ -1613,7 +1613,7 @@ def traffic_pattern_analysis(
             for _, v in violations.iterrows():
                 direction = "short" if v["delta_s"] < lo else "long"
                 print(f"    t={v['elapsed_s']:.1f}s  Δ={v['delta_s']:.1f}s ({direction})  "
-                      f"{v['prev_event']}→{v['event']}  epoch={int(v['epoch'])}")
+                      f"{v['prev_event']}->{v['event']}  epoch={int(v['epoch'])}")
 
     save_or_show(fig, output_dir, plot_name, fmt, show)
     return fig
@@ -1633,7 +1633,7 @@ def traffic_compliance_strip(
     fmt: str = "png",
     show: bool = True,
 ) -> plt.Figure | None:
-    """Horizontal bar chart of per-run traffic compliance rate, sorted worst→best."""
+    """Horizontal bar chart of per-run traffic compliance rate, sorted worst->best."""
     col = "traffic_compliance_rate"
     if col not in df.columns or df[col].isna().all():
         print("Skipped traffic compliance strip: no data")
@@ -1877,7 +1877,7 @@ def tick_irregularity_overview(
     """Box + strip chart of normalized tick irregularity metrics across runs.
 
     Three panels: normalized mean delta, normalized std delta, and normalized
-    max deviation — each grouped by topology type.
+    max deviation -- each grouped by topology type.
     """
     needed = ["traffic_mean_delta_s", "traffic_std_delta_s",
               "traffic_tick_interval_s"]
@@ -2245,7 +2245,7 @@ def compliance_correlation_heatmap(
         return None
 
     if len(plot_df) < 5:
-        print(f"Warning: only {len(plot_df)} data points — correlations may be unreliable")
+        print(f"Warning: only {len(plot_df)} data points -- correlations may be unreliable")
 
     # Build correlation sub-matrix
     all_cols = [c for c, _ in y_cols] + [c for c, _ in x_cols]

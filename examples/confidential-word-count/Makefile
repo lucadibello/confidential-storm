@@ -125,7 +125,7 @@ run-profiled: build-profiled
 # Dataset sealing
 # ---------------------------------------------------------------------------
 
-# Generic target — uses ENCRYPTION_SCHEME variable
+# Generic target -- uses ENCRYPTION_SCHEME variable
 seal-dataset: dataset-with-users
 	@echo "Sealing dataset (scheme=$(ENCRYPTION_SCHEME))..."
 	@STREAM_KEY_HEX=$$(cat $(DATASET_DIR)/stream_key_hex) \

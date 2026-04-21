@@ -34,7 +34,7 @@ public final class BoltProfiler {
     private int ticksSinceLastReport = 0;
     private int tuplesSinceLastReport = 0;
 
-    /** Lazily opened CSV writer — appends one snapshot per reporting interval. */
+    /** Lazily opened CSV writer -- appends one snapshot per reporting interval. */
     private PrintWriter csvWriter;
 
     public BoltProfiler(String componentId, int taskId) {

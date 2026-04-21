@@ -101,8 +101,16 @@ public abstract class AbstractDataPerturbationServiceProvider
      * Constructs a new AbstractDataPerturbationServiceProvider and initializes the DP mechanism.
      */
     public AbstractDataPerturbationServiceProvider() {
-        // Calibrate noise for Key Selection (Sensitivity = 1)
-        double rhoK = DPUtil.cdpRho(getEpsilonK(), getDeltaK());
+        // Calibrate noise for Key Selection (Sensitivity = 1), using C-fold advanced composition.
+        // Section 4.4 of the paper states that a user may participate in at most C rounds
+        // of Algorithm 1, so we convert the total key-selection budget (epsilon_k, delta_k)
+        // into per-round (epsilon, delta) before computing sigma for one tree.
+        DPUtil.PerRoundBudget keyRoundBudget = DPUtil.keySelectionPerRoundBudget(
+                getEpsilonK(),
+                getDeltaK(),
+                getMaxUserContributions()
+        );
+        double rhoK = DPUtil.cdpRho(keyRoundBudget.epsilon(), keyRoundBudget.delta());
         double sigmaKey = DPUtil.calculateSigma(rhoK, getMaxTimeSteps(), 1.0);
 
         // Calibrate noise for Histogram (Sensitivity = C * L_m)
@@ -208,7 +216,7 @@ public abstract class AbstractDataPerturbationServiceProvider
     public EncryptedDataPerturbationSnapshot getEncryptedDummyPartial() throws EnclaveServiceException {
         try {
             // Does NOT call mechanism.snapshot(), does NOT increment epoch.
-            // The payload contains only the dummy marker — encrypted with the same
+            // The payload contains only the dummy marker -- encrypted with the same
             // AEAD scheme, AAD structure (producerId, epoch, seq), and key as real
             // partials, making it indistinguishable to any observer without the key.
             Map<String, Object> payload = new LinkedHashMap<>();

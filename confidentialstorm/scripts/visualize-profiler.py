@@ -128,7 +128,7 @@ def plot_ecall_latency_over_time(df: pd.DataFrame, output_dir, fmt, show):
             if n_rows == 1:
                 axes = [axes]
 
-            # --- Row 0: overview — avg latency for all tasks on the same axes ---
+            # --- Row 0: overview -- avg latency for all tasks on the same axes ---
             ax_overview = axes[0]
             for i, task in enumerate(tasks):
                 td = ed[ed["taskId"] == task].sort_values("elapsed_s")
@@ -152,7 +152,7 @@ def plot_ecall_latency_over_time(df: pd.DataFrame, output_dir, fmt, show):
                 ax.grid(True, alpha=0.3)
 
             _format_elapsed_axis(axes[-1])
-            fig.suptitle(f"{comp} — {ecall_name} latency over time", fontsize=13, fontweight="bold")
+            fig.suptitle(f"{comp} -- {ecall_name} latency over time", fontsize=13, fontweight="bold")
             save_or_show(fig, output_dir, f"latency-{comp}-{ecall_name}", fmt, show)
 
 
@@ -188,7 +188,7 @@ def plot_ecall_latency_boxplot(df: pd.DataFrame, output_dir, fmt, show):
             patch.set_facecolor(_color_for(i))
             patch.set_alpha(0.6)
         ax.set_ylabel("Avg latency (ms)")
-        ax.set_title(f"{comp} — ECALL latency distribution across windows")
+        ax.set_title(f"{comp} -- ECALL latency distribution across windows")
         ax.grid(True, axis="y", alpha=0.3)
         plt.xticks(rotation=45, ha="right")
         save_or_show(fig, output_dir, f"boxplot-{comp}", fmt, show)
@@ -216,7 +216,7 @@ def plot_throughput_over_time(df: pd.DataFrame, output_dir, fmt, show):
             ax.plot(grouped.index, grouped.values, label=en, color=_color_for(i), linewidth=1.5)
 
         ax.set_ylabel("Total invocations (per window)")
-        ax.set_title(f"{comp} — Throughput over time")
+        ax.set_title(f"{comp} -- Throughput over time")
         _format_elapsed_axis(ax)
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
@@ -255,7 +255,7 @@ def plot_counters_over_time(df: pd.DataFrame, output_dir, fmt, show):
             ax.legend(fontsize=7, ncol=min(len(tasks), 4))
             ax.grid(True, alpha=0.3)
 
-        axes[0, 0].set_title(f"{comp} — Counters over time")
+        axes[0, 0].set_title(f"{comp} -- Counters over time")
         _format_elapsed_axis(axes[-1, 0])
         save_or_show(fig, output_dir, f"counters-{comp}", fmt, show)
 
@@ -292,7 +292,7 @@ def plot_gauges_over_time(df: pd.DataFrame, output_dir, fmt, show):
             ax.legend(fontsize=7, ncol=min(len(tasks), 4))
             ax.grid(True, alpha=0.3)
 
-        axes[0, 0].set_title(f"{comp} — Gauges over time")
+        axes[0, 0].set_title(f"{comp} -- Gauges over time")
         _format_elapsed_axis(axes[-1, 0])
         save_or_show(fig, output_dir, f"gauges-{comp}", fmt, show)
 
@@ -356,7 +356,7 @@ def plot_task_imbalance(df: pd.DataFrame, output_dir, fmt, show):
                     ax2.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
                              f"{val:,.0f}", ha="center", va="bottom", fontsize=8)
 
-            fig.suptitle(f"{comp} — {en}: Task imbalance comparison", fontsize=13)
+            fig.suptitle(f"{comp} -- {en}: Task imbalance comparison", fontsize=13)
             save_or_show(fig, output_dir, f"imbalance-{comp}-{en}", fmt, show)
 
     # Counter imbalance (if multiple tasks)
@@ -390,7 +390,7 @@ def plot_task_imbalance(df: pd.DataFrame, output_dir, fmt, show):
         ax.set_xticks(x + bar_width * (len(tasks) - 1) / 2)
         ax.set_xticklabels(counter_names, rotation=45, ha="right")
         ax.set_ylabel("Counter value (cumulative)")
-        ax.set_title(f"{comp} — Counter values per task")
+        ax.set_title(f"{comp} -- Counter values per task")
         ax.legend(fontsize=8)
         ax.grid(True, axis="y", alpha=0.3)
         save_or_show(fig, output_dir, f"imbalance-counters-{comp}", fmt, show)
@@ -451,7 +451,7 @@ def plot_summary_dashboard(df: pd.DataFrame, output_dir, fmt, show):
         for j in range(len(summary.columns)):
             table[(i, j)].set_facecolor(color)
 
-    ax.set_title("Profiler Summary — All Components", fontsize=14, pad=20)
+    ax.set_title("Profiler Summary -- All Components", fontsize=14, pad=20)
     save_or_show(fig, output_dir, "summary-dashboard", fmt, show)
 
 

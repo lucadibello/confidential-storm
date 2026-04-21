@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 SOURCE_NAME = "_DATASET"  # ComponentConstants.DATASET
 DESTINATION_NAME = "random-joke-spout"  # ComponentConstants.RANDOM_JOKE_SPOUT
 
-# Supported encryption schemes — must match EncryptionScheme.java enum names
+# Supported encryption schemes -- must match EncryptionScheme.java enum names
 SUPPORTED_SCHEMES = ["CHACHA20_POLY1305", "AES_256_GCM", "NONE"]
 DEFAULT_SCHEME = "CHACHA20_POLY1305"
 
@@ -98,7 +98,7 @@ def main(dataset_path: str, output_path: str, scheme: str):
     logger.info(f"Using encryption scheme: {scheme}")
     if scheme == "NONE":
         logger.warning(
-            "NONE scheme selected — dataset will NOT be encrypted. "
+            "NONE scheme selected -- dataset will NOT be encrypted. "
             "Use only for benchmarking."
         )
 
