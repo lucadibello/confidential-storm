@@ -63,7 +63,7 @@ public final class BinaryAggregationTree {
         height = (int) FastMath.ceil(FastMath.log(n) / FastMath.log(2)); // H = ceil(log2(n))
         num_leaves = 1 << height; // L = 2^ceil(log2(n))
 
-        // store sigma for Honaker variance computation
+        // store sigma for Gaussian noise + Honaker variance computation
         this.sigma = sigma;
 
         // initialize tree with Gaussian noise
@@ -151,7 +151,7 @@ public final class BinaryAggregationTree {
                 } else {
                     leftSibling = nodeIndex; // node_i is a left child, so its left sibling is itself
                 }
-                
+
                 // Calculate kappa (subtree height) for the sibling (NOTE: currently at level j)
                 // - If j = height (leaf), kappa = 1 (only the leaf node)
                 // - If j = 0 (root), kappa = height + 1 (entire tree)
