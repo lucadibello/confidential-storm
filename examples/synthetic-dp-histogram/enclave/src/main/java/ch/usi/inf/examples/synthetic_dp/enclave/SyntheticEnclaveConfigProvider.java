@@ -1,6 +1,7 @@
 package ch.usi.inf.examples.synthetic_dp.enclave;
 
 import ch.usi.inf.confidentialstorm.enclave.EnclaveConfiguration;
+import ch.usi.inf.confidentialstorm.enclave.crypto.EncryptionScheme;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.LogLevel;
 import com.google.auto.service.AutoService;
 
@@ -35,5 +36,10 @@ public final class SyntheticEnclaveConfigProvider implements EnclaveConfiguratio
     @Override
     public boolean isReplayProtectionEnabled() {
         return false;
+    }
+
+    @Override
+    public EncryptionScheme getEncryptionScheme() {
+        return EncryptionScheme.AES_256_GCM;
     }
 }
