@@ -54,6 +54,8 @@
                                         <buildArg>-H:Path=svm-output</buildArg>
                                         <buildArg>-H:Path=${project.build.directory}/svm-output</buildArg>
                                         <buildArg>-o ${project.build.directory}/svm-output/lib_mock_svm_load</buildArg>
+                                        <buildArg>-H:NativeLinkerOption=${project.build.directory}/stubs/mock_tcs_stubs.o</buildArg>
+                                        <buildArg>-H:NativeLinkerOption=${project.build.directory}/stubs/rand_stubs.o</buildArg>
                                     </buildArgs>
                                 </configuration>
                                 <phase>package</phase>
@@ -88,6 +90,20 @@
                         <artifactId>exec-maven-plugin</artifactId>
                         <groupId>org.codehaus.mojo</groupId>
                         <executions>
+                            <execution>
+                                <id>CompileMockStubs</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>bash</executable>
+                                    <arguments>
+                                        <argument>-c</argument>
+                                        <argument>mkdir -p ${project.build.directory}/stubs &amp;&amp; gcc -c -fPIC -ffunction-sections -fdata-sections -fvisibility=hidden -o ${project.build.directory}/stubs/mock_tcs_stubs.o /opt/javaenclave/stubs/mock_tcs_stubs.c &amp;&amp; gcc -c -fPIC -ffunction-sections -fdata-sections -fvisibility=hidden -o ${project.build.directory}/stubs/rand_stubs.o /opt/javaenclave/stubs/rand_stubs.c</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
                             <execution>
                                 <id>ApplicationNativeCompile</id>
                                 <phase>package</phase>
