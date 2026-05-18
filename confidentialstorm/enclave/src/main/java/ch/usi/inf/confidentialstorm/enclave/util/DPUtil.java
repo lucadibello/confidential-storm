@@ -254,6 +254,148 @@ public class DPUtil {
   }
 
   /**
+   * Converts a total key-selection privacy budget into a per-round budget using
+   * the homogeneous closed form of the Kairouz-Oh-Viswanath optimal $k$-fold
+   * composition theorem (Theorem 3.5 of {@code kairouz2015composition}). This is
+   * the "empirically tighter variant of advanced composition" referenced in
+   * Section 4.4 of the DP-SQLP paper and gives a strictly smaller composition
+   * cost than {@link #keySelectionPerRoundBudget(double, double, long)} for the
+   * same target $(\varepsilon_k, \delta_k)$.
+   * <p>
+   * For $k$ independent $(\varepsilon, \delta)$-DP mechanisms and any slack
+   * $\widetilde{\delta} \in (0, 1)$, the composition satisfies
+   * $(\varepsilon_g, \delta_g)$-DP with
+   *
+   * <pre>
+   * eps_g = min{
+   *   k * eps,
+   *   (e^eps - 1) * k * eps / (e^eps + 1) + eps * sqrt(2k * ln(e + sqrt(k*eps^2)/dPrime)),
+   *   (e^eps - 1) * k * eps / (e^eps + 1) + eps * sqrt(2k * ln(1/dPrime))
+   * }
+   * delta_g = 1 - (1 - delta)^k * (1 - dPrime)
+   * </pre>
+   *
+   * As in {@link #keySelectionPerRoundBudget(double, double, long)} we search
+   * over the slack $\widetilde{\delta}$ and, for each candidate, solve the per-round
+   * $\varepsilon$ that saturates the bound. The score is the closed-form $\rho$
+   * proxy (smaller $\sigma$ for larger $\rho$), so the returned per-round budget
+   * is the one that minimizes the Gaussian-noise scale of Algorithm 1.
+   *
+   * @param epsilonTotal total epsilon budget allocated to key selection
+   *                     (epsilon_k)
+   * @param deltaTotal   total delta budget allocated to key selection (delta_k)
+   * @param C            maximum number of key-selection rounds per user (C)
+   * @return per-round budget for one Algorithm-1 execution
+   */
+  public static PerRoundBudget keySelectionPerRoundBudgetOptimal(
+      double epsilonTotal,
+      double deltaTotal,
+      long C) {
+    if (epsilonTotal < 0 || deltaTotal <= 0) {
+      throw new IllegalArgumentException(
+          "epsilonTotal must be non-negative and deltaTotal must be positive");
+    }
+    if (C <= 0) {
+      throw new IllegalArgumentException("rounds must be positive");
+    }
+    if (C == 1) {
+      return new PerRoundBudget(epsilonTotal, deltaTotal);
+    }
+    if (epsilonTotal == 0.0) {
+      return new PerRoundBudget(0.0, deltaTotal / C);
+    }
+
+    double bestEpsilonRound = 0.0;
+    double bestDeltaRound = deltaTotal / C;
+    double bestScore = -1.0;
+
+    for (int i = 1; i < KEY_SELECTION_BUDGET_SEARCH_STEPS; i++) {
+      // dPrime in (0, deltaTotal)
+      double fraction = (double) i / (double) KEY_SELECTION_BUDGET_SEARCH_STEPS;
+      double dPrime = deltaTotal * fraction;
+      if (dPrime <= 0.0 || dPrime >= 1.0) {
+        continue;
+      }
+
+      // Numerically stable inversion of delta_g = 1 - (1-delta)^k * (1-dPrime):
+      // log(1-delta_round) = (log1p(-deltaTotal) - log1p(-dPrime)) / k
+      // delta_round = -expm1((log1p(-deltaTotal) - log1p(-dPrime)) / k)
+      double logRatio = FastMath.log1p(-deltaTotal) - FastMath.log1p(-dPrime);
+      double deltaRound = -FastMath.expm1(logRatio / (double) C);
+      if (!Double.isFinite(deltaRound) || deltaRound <= 0.0) {
+        continue;
+      }
+
+      double epsilonRound = solveRoundEpsilonWithOptimalComposition(
+          epsilonTotal, C, dPrime);
+      if (epsilonRound <= 0.0) {
+        continue;
+      }
+
+      double score = rhoFromDpUpperBound(epsilonRound, deltaRound);
+      if (score > bestScore) {
+        bestScore = score;
+        bestEpsilonRound = epsilonRound;
+        bestDeltaRound = deltaRound;
+      }
+    }
+
+    return new PerRoundBudget(bestEpsilonRound, bestDeltaRound);
+  }
+
+  /**
+   * Homogeneous closed-form of the Kairouz-Oh-Viswanath composition bound
+   * (Theorem 3.5 of {@code kairouz2015composition}): epsilon under k-fold
+   * composition of an $(\varepsilon, \cdot)$-DP mechanism with slack
+   * $\widetilde{\delta} = $ {@code dPrime}. We take the minimum of the three
+   * upper bounds Kairouz et al. give (one is just sequential composition, the
+   * other two are tighter for moderate epsilon).
+   */
+  private static double optimalKFoldCompositionEpsilon(
+      double epsilonRound,
+      long k,
+      double dPrime) {
+    if (epsilonRound <= 0.0) {
+      return 0.0;
+    }
+    double expEps = FastMath.exp(epsilonRound);
+    double leading = (expEps - 1.0) * k * epsilonRound / (expEps + 1.0);
+    double kEpsSquared = k * epsilonRound * epsilonRound;
+
+    double boundA = k * epsilonRound;
+    double boundB = leading
+        + epsilonRound * FastMath.sqrt(
+            2.0 * k * FastMath.log(FastMath.E + FastMath.sqrt(kEpsSquared) / dPrime));
+    double boundC = leading
+        + epsilonRound * FastMath.sqrt(2.0 * k * FastMath.log(1.0 / dPrime));
+    return FastMath.min(boundA, FastMath.min(boundB, boundC));
+  }
+
+  /**
+   * Find the largest per-round epsilon such that the Kairouz-Oh-Viswanath
+   * composition cost over $C$ rounds is at most {@code epsilonTotal}.
+   */
+  private static double solveRoundEpsilonWithOptimalComposition(
+      double epsilonTotal,
+      long k,
+      double dPrime) {
+    double lower = 0.0;
+    double upper = epsilonTotal;
+    if (optimalKFoldCompositionEpsilon(upper, k, dPrime) <= epsilonTotal) {
+      return upper;
+    }
+    for (int i = 0; i < 200; i++) {
+      double mid = (lower + upper) / 2.0;
+      if (optimalKFoldCompositionEpsilon(mid, k, dPrime) <= epsilonTotal) {
+        lower = mid;
+      } else {
+        upper = mid;
+      }
+    }
+    return lower;
+  }
+
+  /**
    * Closed-form rho recovered from the standard zCDP -> (epsilon, delta)-DP
    * conversion:
    * rho = (sqrt(epsilon + log(1/delta)) - sqrt(log(1/delta)))^2
