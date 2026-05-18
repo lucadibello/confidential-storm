@@ -1,6 +1,7 @@
 package ch.usi.inf.confidentialstorm.enclave.dp;
 
 import ch.usi.inf.confidentialstorm.enclave.util.DPUtil;
+import org.apache.commons.math3.distribution.NormalDistribution;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -39,6 +40,16 @@ class StreamingDPMechanismTest {
     private static final double DELTA_K = DELTA * 2.0 / 3.0;
     private static final double DELTA_H = DELTA / 3.0;
 
+    /**
+     * Test-only threshold quantile Phi^{-1}(1 - 1e-5) \approx 4.27. The production
+     * code derives beta from the per-round budget via the pre-allocation approach
+     * (see {@code AbstractDataPerturbationServiceProvider}). These tests only
+     * check for algorithmic correctness and noise properties and NOT privacy.
+     * This is just for testing!
+     */
+    private static final double TEST_THRESHOLD_QUANTILE =
+            new NormalDistribution(0.0, 1.0).inverseCumulativeProbability(1.0 - 1e-5);
+
     /** Build a mechanism with real paper parameters (Section 4.4 per-round composition). */
     private StreamingDPMechanism buildMechanism(int maxTimeSteps, long mu) {
         DPUtil.PerRoundBudget keyRoundBudget = DPUtil.keySelectionPerRoundBudget(EPS_K, DELTA_K, C);
@@ -46,7 +57,8 @@ class StreamingDPMechanismTest {
         double sigmaKey = DPUtil.calculateSigma(rhoK, maxTimeSteps, 1.0);
         double rhoH     = DPUtil.cdpRho(EPS_H, DELTA_H);
         double sigmaHist= DPUtil.calculateSigma(rhoH, maxTimeSteps, DPUtil.l1Sensitivity(C, L));
-        return new StreamingDPMechanism(sigmaKey, sigmaHist, maxTimeSteps, mu, C);
+        return new StreamingDPMechanism(sigmaKey, sigmaHist, TEST_THRESHOLD_QUANTILE,
+                maxTimeSteps, mu, C);
     }
 
     /**
@@ -64,12 +76,13 @@ class StreamingDPMechanismTest {
      */
     private StreamingDPMechanism buildLowNoiseMechanism(int maxTimeSteps, long mu,
                                                         double sigmaKey, double sigmaHist) {
-        return new StreamingDPMechanism(sigmaKey, sigmaHist, maxTimeSteps, mu, C);
+        return new StreamingDPMechanism(sigmaKey, sigmaHist, TEST_THRESHOLD_QUANTILE,
+                maxTimeSteps, mu, C);
     }
 
     /** Build a zero-noise mechanism (sigma=0) for deterministic correctness checks. */
     private StreamingDPMechanism buildZeroNoiseMechanism(int maxTimeSteps, long mu) {
-        return new StreamingDPMechanism(0.0, 0.0, maxTimeSteps, mu, C);
+        return new StreamingDPMechanism(0.0, 0.0, TEST_THRESHOLD_QUANTILE, maxTimeSteps, mu, C);
     }
 
     // -------------------------------------------------------------------------
