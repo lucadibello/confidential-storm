@@ -2,7 +2,6 @@ package ch.usi.inf.confidentialstorm.enclave.dp;
 
 import java.util.*;
 
-import org.apache.commons.math3.distribution.NormalDistribution;
 import org.apache.commons.math3.util.FastMath;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
@@ -120,14 +119,16 @@ public class StreamingDPMechanism {
     private final long mu;
 
     /**
-     * Precomputed quantile Phi^{-1}(1 - beta) of the standard normal distribution,
-     * where beta = 1e-5 (confidence level from Appendix D of the paper).
+     * Quantile Phi^{-1}(1 - beta) of the standard normal distribution used to compute the
+     * time-dependent key-selection threshold tau_tr_i = sqrt(lambda^2_tr_i) * Phi^{-1}(1 - beta).
      * <p>
-     * Used in {@link #computeTau} to avoid allocating a {@link NormalDistribution}
-     * object on every call. Identity: N(0, sigma).inverseCDF(p) = sigma * N(0,1).inverseCDF(p).
+     * beta is the accuracy parameter of Algorithm 1 and must be derived from the per-round
+     * privacy budget (epsilon_k_round, delta_k_round) via the pre-allocation approach (see
+     * thesis background chapter on choosing beta): beta = alpha * delta_k_round / (e^eps + 1)
+     * where alpha in (0,1) is the share of the per-round delta budget reserved for the
+     * threshold-failure cost.
      */
-    private static final double PROBIT_1_MINUS_BETA =
-            new NormalDistribution(0, 1).inverseCumulativeProbability(1.0 - 1e-5);
+    private final double thresholdQuantile;
 
     /**
      * The current time step in the stream processing (tr_j).
@@ -138,13 +139,19 @@ public class StreamingDPMechanism {
      * Initializes the streaming DP mechanism with the provided noise scales and parameters.
      *
      * @param sigmaKey                Noise scale for key selection (Algorithm 1), based on sensitivity 1.
+     *                                Must be calibrated for ((eps_k_round, (1-alpha) * delta_k_round))-DP
+     *                                so that the threshold-failure term (e^eps + 1) * beta consumes the
+     *                                remaining alpha * delta_k_round share without inflating the budget.
      * @param sigmaHist               Noise scale for histogram release (Algorithm 2), calibrated for L1 sensitivity C*L_m.
+     * @param thresholdQuantile       Phi^{-1}(1 - beta) of the standard normal, with beta derived from the
+     *                                per-round budget as beta = alpha * delta_k_round / (e^eps + 1).
      * @param maxTimeSteps            Maximum number of triggering times (T) to process in the stream.
      * @param mu                      Base threshold for key selection (minimum unique users).
      * @param maxContributionsPerUser Maximum contributions per user (C) for bounding sensitivity.
      */
     public StreamingDPMechanism(double sigmaKey,
                                 double sigmaHist,
+                                double thresholdQuantile,
                                 int maxTimeSteps,
                                 long mu,
                                 long maxContributionsPerUser) {
@@ -155,8 +162,12 @@ public class StreamingDPMechanism {
         if (maxContributionsPerUser <= 0) {
             throw new IllegalArgumentException("maxContributionsPerUser must be positive");
         }
+        if (!Double.isFinite(thresholdQuantile) || thresholdQuantile <= 0) {
+            throw new IllegalArgumentException("thresholdQuantile must be a positive finite value");
+        }
         this.sigmaKey = sigmaKey;
         this.sigmaHist = sigmaHist;
+        this.thresholdQuantile = thresholdQuantile;
         this.maxTimeSteps = maxTimeSteps;
         this.mu = mu;
     }
@@ -404,16 +415,13 @@ public class StreamingDPMechanism {
     /**
      * Computes the tau value based on the Gaussian distribution.
      * <p>
-     * Uses the identity N(0, sigma).inverseCDF(p) = sigma * N(0,1).inverseCDF(p)
-     * with precomputed {@link #PROBIT_1_MINUS_BETA} to avoid per-call allocation.
-     * <p>
      * Refer to Appendix D of the "Differentially Private Stream Processing at Scale" paper.
      *
      * @param lambda_square The total Honaker variance at time step i.
      * @return The computed tau value.
      */
-    private static double computeTau(double lambda_square) {
-        return FastMath.sqrt(lambda_square) * PROBIT_1_MINUS_BETA;
+    private double computeTau(double lambda_square) {
+        return FastMath.sqrt(lambda_square) * thresholdQuantile;
     }
 
     /**
