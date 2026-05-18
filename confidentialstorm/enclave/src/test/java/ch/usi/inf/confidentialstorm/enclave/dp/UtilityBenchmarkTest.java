@@ -113,6 +113,7 @@ class UtilityBenchmarkTest {
     System.out.printf(Locale.ROOT,
         "%n=== UtilityBenchmark: T=%d, NUM_USERS=%d, NUM_KEYS=%d, NUM_RUNS=%d (fast=%s) ===%n",
         T, NUM_USERS, NUM_KEYS, NUM_RUNS, FAST_MODE);
+    logCalibration(T);
 
     double[][] perRun = new double[NUM_RUNS][];
     long totalNanos = 0L;
@@ -257,6 +258,38 @@ class UtilityBenchmarkTest {
     double sigmaHist = DPUtil.calculateSigma(rhoH, T, DPUtil.l1Sensitivity(C, L));
 
     return new StreamingDPMechanism(sigmaKey, sigmaHist, thresholdQuantile, T, MU, C);
+  }
+
+  private void logCalibration(int T) {
+    DPUtil.PerRoundBudget keyRoundBudget = DPUtil.keySelectionPerRoundBudget(EPS_K, DELTA_K, C);
+    double deltaGaussianShare = DPUtil.gaussianShareDelta(keyRoundBudget.delta(), ALPHA);
+    double rhoK = DPUtil.cdpRho(keyRoundBudget.epsilon(), deltaGaussianShare);
+    double sigmaKey = DPUtil.calculateSigma(rhoK, T, 1.0);
+
+    double beta = DPUtil.computeBeta(keyRoundBudget.epsilon(), keyRoundBudget.delta(), ALPHA);
+    double thresholdQuantile = new NormalDistribution(0.0, 1.0)
+        .inverseCumulativeProbability(1.0 - beta);
+
+    double rhoH = DPUtil.cdpRho(EPS_H, DELTA_H);
+    double sigmaHist = DPUtil.calculateSigma(rhoH, T, DPUtil.l1Sensitivity(C, L));
+
+    double kappa = FastMath.ceil(FastMath.log(T) / FastMath.log(2));
+    double honakerNodeVariance = sigmaKey * sigmaKey / (2.0 * (1.0 - FastMath.pow(2.0, -kappa)));
+    double tauAtLastStep = FastMath.sqrt(kappa * honakerNodeVariance) * thresholdQuantile;
+
+    System.out.printf(Locale.ROOT,
+        "calibration: eps_k_round=%.4f delta_k_round=%.3e (alpha=%.2f)%n"
+            + "             rho_k=%.4e sigma_k=%.3f%n"
+            + "             rho_h=%.4e sigma_h=%.3f  (L1=%.1f)%n"
+            + "             beta=%.3e Phi^-1(1-beta)=%.3f%n"
+            + "             kappa=ceil(log2 T)=%.0f%n"
+            + "             tau_T-1 ~= %.2f   (release threshold mu+tau = %.2f, mu=%d)%n",
+        keyRoundBudget.epsilon(), keyRoundBudget.delta(), ALPHA,
+        rhoK, sigmaKey,
+        rhoH, sigmaHist, DPUtil.l1Sensitivity(C, L),
+        beta, thresholdQuantile,
+        kappa,
+        tauAtLastStep, MU + tauAtLastStep, MU);
   }
 
   // -------------------------------------------------------------------------
