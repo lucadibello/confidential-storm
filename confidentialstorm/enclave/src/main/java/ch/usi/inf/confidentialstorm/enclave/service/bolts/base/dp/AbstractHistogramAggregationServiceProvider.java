@@ -176,7 +176,7 @@ public abstract class AbstractHistogramAggregationServiceProvider
             }
             state.contributors.add(senderId);
 
-            log.info(
+            log.debug(
                 "[AGGREGATION] Received partial from producer {} ({}/{} in epoch {})",
                 senderId,
                 state.contributors.size(),

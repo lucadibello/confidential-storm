@@ -223,7 +223,7 @@ public class StreamingDPMechanism {
         // if timeStep exceeds maxTimeSteps, return final histogram
         // NOTE: no further processing as we won't have DP guarantees in the next release
         if (timeStep >= maxTimeSteps) {
-            log.info("[DP-MECHANISM] timeStep >= maxTimeSteps, returning final histogram");
+            log.debug("[DP-MECHANISM] timeStep >= maxTimeSteps, returning final histogram");
             // Free all accumulated per-key state that will never be used again
             trimExpiredState();
             return produceHistogram();
@@ -236,7 +236,7 @@ public class StreamingDPMechanism {
         // Step 1 of Algo 3 - DeltaD_tr_j = D_tr_j - D_tr_(j-1) (data in current micro-batch)
         // NOTE: currentWindowCounts represents DeltaD_tr_j (keys with contributions this window)
         Set<String> keysToProcess = new HashSet<>(currentWindowCounts.keySet());
-        log.info("[DP-MECHANISM] Keys with contributions this window: {}", keysToProcess.size());
+        log.debug("[DP-MECHANISM] Keys with contributions this window: {}", keysToProcess.size());
 
         // Algo 3 Case 2 - Load keys with predicted release time = current time step
         // "DP-SQLP loaded system states for key k at predicted time tr_p"
@@ -332,7 +332,7 @@ public class StreamingDPMechanism {
 
         // Produce and return the noisy histogram
         Map<String, Long> result = produceHistogram();
-        log.info("[DP-MECHANISM] snapshot() COMPLETE - returning {} keys", result.size());
+        log.debug("[DP-MECHANISM] snapshot() COMPLETE - returning {} keys", result.size());
         return result;
     }
 
@@ -463,7 +463,7 @@ public class StreamingDPMechanism {
             stagingWindowCounts.clear();
             stagingWindowUniqueUsers.clear();
         }
-        log.info("[DP-MECHANISM] trimExpiredState: released all per-key state after maxTimeSteps={}", maxTimeSteps);
+        log.debug("[DP-MECHANISM] trimExpiredState: released all per-key state after maxTimeSteps={}", maxTimeSteps);
     }
 
     /**

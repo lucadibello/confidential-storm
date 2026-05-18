@@ -25,7 +25,7 @@ public class IsolateEnclaveExceptionStrategy implements IEnclaveExceptionStrateg
     @Override
     public void handleException(Throwable t) {
         // show general error without leaking details across the enclave boundary
-        log.debug("Ignoring exception due to exception isolation strategy", t);
+        log.warn("Ignoring exception due to exception isolation strategy", t);
         // NOTE: we don't throw any exceptions as attackers could infer information by
         // looking at CPU interrupts
     }
