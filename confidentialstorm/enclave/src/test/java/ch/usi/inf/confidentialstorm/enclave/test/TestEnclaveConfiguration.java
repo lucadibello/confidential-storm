@@ -13,7 +13,7 @@ public class TestEnclaveConfiguration implements EnclaveConfiguration {
 
     @Override
     public LogLevel getLogLevel() {
-        return LogLevel.DEBUG;
+        return LogLevel.INFO;
     }
 
     @Override
