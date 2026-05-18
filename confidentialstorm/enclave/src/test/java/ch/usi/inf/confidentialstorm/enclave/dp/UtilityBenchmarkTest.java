@@ -1,12 +1,8 @@
 package ch.usi.inf.confidentialstorm.enclave.dp;
 
 import ch.usi.inf.confidentialstorm.enclave.util.DPUtil;
-import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
-import ch.usi.inf.confidentialstorm.enclave.util.logger.LogLevel;
 import org.apache.commons.math3.distribution.NormalDistribution;
 import org.apache.commons.math3.util.FastMath;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
@@ -38,7 +34,7 @@ import java.util.Set;
  * IMPORTANT: this test is gated behind {@code -Dbenchmark=true} so it is
  * excluded from the regular {@code mvn test} run. Suggested usage for full
  * scale execution:
- * {@code mvn test -Dbenchmark=true -Dbenchmark.fast=false -Xmx8g}.
+ * {@code mvn clean test -Dbenchmark=true -Dbenchmark.fast=false}.
  * Fast mode (default when {@code -Dbenchmark=true}) uses smaller dataset sizes
  * and finishes within a couple of minutes.
  */

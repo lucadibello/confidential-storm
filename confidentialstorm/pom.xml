@@ -116,6 +116,7 @@
                         <trimStackTrace>false</trimStackTrace>
                         <reportFormat>plain</reportFormat>
                         <printSummary>true</printSummary>
+                        <argLine>-Xmx8g</argLine>
                     </configuration>
                 </plugin>
             </plugins>
