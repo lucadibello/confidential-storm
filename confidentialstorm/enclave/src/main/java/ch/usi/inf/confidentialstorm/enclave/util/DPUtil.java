@@ -276,7 +276,8 @@ public class DPUtil {
    * </pre>
    *
    * As in {@link #keySelectionPerRoundBudget(double, double, long)} we search
-   * over the slack $\widetilde{\delta}$ and, for each candidate, solve the per-round
+   * over the slack $\widetilde{\delta}$ and, for each candidate, solve the
+   * per-round
    * $\varepsilon$ that saturates the bound. The score is the closed-form $\rho$
    * proxy (smaller $\sigma$ for larger $\rho$), so the returned per-round budget
    * is the one that minimizes the Gaussian-noise scale of Algorithm 1.
@@ -345,7 +346,7 @@ public class DPUtil {
 
   /**
    * Homogeneous closed-form of the Kairouz-Oh-Viswanath composition bound
-   * (Theorem 3.5 of {@code kairouz2015composition}): epsilon under k-fold
+   * (Theorem 3.4 of {@code kairouz2015composition}): epsilon under k-fold
    * composition of an $(\varepsilon, \cdot)$-DP mechanism with slack
    * $\widetilde{\delta} = $ {@code dPrime}. We take the minimum of the three
    * upper bounds Kairouz et al. give (one is just sequential composition, the
@@ -355,19 +356,32 @@ public class DPUtil {
       double epsilonRound,
       long k,
       double dPrime) {
+    // sanity check bounds
     if (epsilonRound <= 0.0) {
       return 0.0;
     }
+
+    // precompute some repetitive terms
+
+    // ((e^eps - 1) k eps) / (e^eps + 1) -- leading term in second and third bounds
     double expEps = FastMath.exp(epsilonRound);
-    double leading = (expEps - 1.0) * k * epsilonRound / (expEps + 1.0);
+    double leading = (expEps - 1.0) * epsilonRound * k / (expEps + 1.0);
+    // k * eps ^2 -- term inside the second and third bound logarithm
     double kEpsSquared = k * epsilonRound * epsilonRound;
 
+    // Compute each bound
+    // A) Plain sequential composition: k * epsilonRound
     double boundA = k * epsilonRound;
+    // B) ((e^eps -1) k eps)/(e^eps+1) + eps * sqrt(2k log(e+(sqrt(k eps^2)/
+    // delta'))
     double boundB = leading
         + epsilonRound * FastMath.sqrt(
             2.0 * k * FastMath.log(FastMath.E + FastMath.sqrt(kEpsSquared) / dPrime));
+    // C) ((e^eps -1) k eps)/(e^eps+1) + eps * sqrt(2k log(1/ delta'))
     double boundC = leading
         + epsilonRound * FastMath.sqrt(2.0 * k * FastMath.log(1.0 / dPrime));
+
+    // select minimum of three bounds: min{A,B,C}
     return FastMath.min(boundA, FastMath.min(boundB, boundC));
   }
 
