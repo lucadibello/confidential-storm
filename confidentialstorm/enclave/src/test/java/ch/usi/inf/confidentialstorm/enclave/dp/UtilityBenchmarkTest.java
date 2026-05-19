@@ -9,7 +9,17 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -25,19 +35,20 @@ import java.util.Set;
  * Since we cannot replicate the same exact workload and computational
  * environment as the paper, we focus on measuring the utility metrics (l0,
  * l_inf, l1, l2) of our implementation under the same DP parameters and data
- * distribution assumptions, and on quantifying how each calibration choice
- * moves utility. The benchmark therefore runs several {@link BenchmarkConfig}
- * variants on every Monte Carlo seed and emits a single comparison table.
+ * distribution assumptions, and on quantifying how the privacy-tight
+ * pre-allocation parameter $\alpha$ moves utility. The benchmark therefore
+ * runs several {@link BenchmarkConfig} variants on every Monte Carlo seed and
+ * emits a CSV comparison table.
  * <p>
- * The configurations span three knobs (see {@link #defaultConfigs()} for the
- * exact set):
+ * The configurations span two knobs:
  * <ul>
- * <li>$\mu$ ($0$ matches Section 5.1; $50$ matches the Google Trends production
- * setting described in Section 6.2).</li>
- * <li>$\beta$ either privacy-tight from the pre-allocation approach (thesis
- * background, "Choosing the Accuracy Parameter $\beta$") or relaxed to a fixed
- * $10^{-5}$, which loosens the per-round guarantee but isolates the threshold
- * inflation caused by tiny $\beta$.</li>
+ * <li>$\alpha \in (0, 1)$, the share of the per-round delta budget reserved
+ * for the threshold-failure cost $(e^{\varepsilon_k^{(r)}}+1)\beta$ from
+ * Algorithm 1 (see thesis background, "Choosing the Accuracy Parameter
+ * $\beta$"). Default: $\alpha = 0.5$. Sweep mode runs $\alpha \in \{0.1, 0.2,
+ * \ldots, 0.9\}$; the exact bounds are excluded because $\alpha = 0$ gives
+ * $\beta = 0$ (infinite threshold quantile, empty histogram) and $\alpha = 1$
+ * gives a zero Gaussian-noise budget (undefined $\sigma_k$).</li>
  * <li>$C$-fold composition either the analytical
  * {@link DPUtil#keySelectionPerRoundBudget Dwork} bound (current production
  * default) or the {@link DPUtil#keySelectionPerRoundBudgetOptimal
@@ -45,10 +56,14 @@ import java.util.Set;
  * optimal composition referenced in Section 4.4 of the paper.</li>
  * </ul>
  * <p>
+ * $\mu$ is fixed at 50 to match the Google Trends production setting
+ * described in Section 6.2 of the paper.
+ * <p>
  * IMPORTANT: this test is gated behind {@code -Dbenchmark=true} so it is
  * excluded from the regular {@code mvn test} run. Suggested usage for
  * paper-scale execution:
  * {@code mvn clean test -Dbenchmark=true -Dbenchmark.fast=false}.
+ * To produce an alpha sweep, add {@code -Dbenchmark.alpha=true}.
  * Fast mode (default when {@code -Dbenchmark=true}) uses smaller dataset sizes
  * and finishes within a couple of minutes.
  */
@@ -71,30 +86,12 @@ class UtilityBenchmarkTest {
   private static final double L = 1.0;
 
   /**
-   * Fraction of the per-round key-selection delta budget reserved for the
-   * threshold-failure cost (e^{eps}+1) * beta of Algorithm 1. This is the
-   * pre-allocation approach described in the thesis background chapter
-   * (paragraph "Choosing the Accuracy Parameter beta"). Only used when
-   * {@link BetaMode#PRIVACY_TIGHT} is selected.
-   * NOTE: The DP-SQLP paper authors clarified (2026-05-19, via the thesis
-   * advisor) that the 2/3*delta budget allocated to key selection is meant
-   * to be split equally between the Gaussian-noise delta and the
-   * threshold-failure cost (e^eps+1)*beta of Algorithm 1. With our notation,
-   * this is equivalent to set alpha=0.5 in the pre-allocation formulas.
+   * Threshold offset $\mu$. Fixed at the Google Trends production setting
+   * (Section 6.2). The mu=0 variants from earlier revisions of this benchmark
+   * were only needed to isolate the effect of fixed-beta configurations,
+   * which have been removed.
    */
-  private static final double ALPHA_PRIVACY_TIGHT = 0.5;
-
-  /**
-   * Loose, fixed {@code beta} used in the {@link BetaMode#FIXED} configurations
-   * to approximate the (unstated) accuracy parameter implicitly used in the
-   * paper Section 5.1 measurements. The corresponding per-round guarantee is
-   * $(\varepsilon_k^{(r)}, \delta_k^{(r)} + (e^{\varepsilon_k^{(r)}}+1)\beta)$-DP
-   * --
-   * looser than the labeled $(\varepsilon_k, \delta_k)$ but the only way to
-   * shrink $\Phi^{-1}(1-\beta)$ enough to come close to the paper utility.
-   */
-  private static final double LOOSE_BETA = 1e-5;
-  private static final double LOOSER_BETA = 1e-2; // to test what happens if we relax beta even more
+  private static final long MU = 50L;
 
   // -------------------------------------------------------------------------
   // Data-generation parameters
@@ -105,6 +102,13 @@ class UtilityBenchmarkTest {
    * paper-scale.
    */
   private static final boolean FAST_MODE = Boolean.parseBoolean(System.getProperty("benchmark.fast", "true"));
+
+  /**
+   * Alpha-sweep toggle. When true, sweeps $\alpha \in \{0.1, 0.2, \ldots,
+   * 0.9\}$ to produce a utility-vs-alpha comparison plot. When false
+   * (default), runs only the paper-correct baseline at $\alpha = 0.5$.
+   */
+  private static final boolean ALPHA_SWEEP = Boolean.parseBoolean(System.getProperty("benchmark.alpha", "false"));
 
   private static final int NUM_USERS = FAST_MODE ? 500_000 : 10_000_000;
   private static final int NUM_KEYS = FAST_MODE ? 100_000 : 1_000_000;
@@ -122,6 +126,10 @@ class UtilityBenchmarkTest {
 
   private static final long BASE_SEED = 42L;
 
+  private static final String CSV_HEADER = "T,alpha,composition,mu,run,"
+      + "l0_mean,l_inf_mean,l1_mean,l2_mean,sec_per_run,"
+      + "eps_round,delta_round,sigma_key,sigma_hist,beta,threshold_quantile,tau_at_last_step";
+
   // -------------------------------------------------------------------------
   // Configuration model
   // -------------------------------------------------------------------------
@@ -138,36 +146,18 @@ class UtilityBenchmarkTest {
   }
 
   /**
-   * How $\beta$ (and thus $\Phi^{-1}(1-\beta)$) is chosen.
-   * {@code PRIVACY_TIGHT} uses the pre-allocation approach from the background
-   * chapter ($\beta = \alpha\,\delta_k^{(r)} / (e^{\varepsilon_k^{(r)}}+1)$) so
-   * the per-round cost is exactly $(\varepsilon_k^{(r)}, \delta_k^{(r)})$-DP.
-   * {@code FIXED} bypasses the split, calibrates $\sigma_k$ against the full
-   * $\delta_k^{(r)}$, and uses {@link #LOOSE_BETA}; the resulting per-round
-   * guarantee is strictly looser.
-   */
-  enum BetaMode {
-    PRIVACY_TIGHT,
-    FIXED
-  }
-
-  /**
-   * One row of the comparison table: a named combination of $\mu$, $\beta$
-   * mode, and $C$-fold composition. The configurations are intentionally
-   * benchmark-only and do not affect production calibration in
-   * {@code AbstractDataPerturbationServiceProvider}.
+   * One row of the comparison table: a named combination of $\alpha$ and the
+   * $C$-fold composition theorem.
    */
   record BenchmarkConfig(
       String name,
-      long mu,
-      BetaMode betaMode,
-      double betaFixed,
+      double alpha,
       CompositionMode composition) {
   }
 
   /**
    * Derived numbers from one calibration of a {@link BenchmarkConfig}. Captures
-   * everything {@link #buildMechanism} needs plus the diagnostic fields the
+   * everything {@link #runOnce} needs plus the diagnostic fields the
    * benchmark logs.
    */
   record Calibration(
@@ -202,49 +192,45 @@ class UtilityBenchmarkTest {
   // -------------------------------------------------------------------------
 
   /**
-   * The configurations exercised by Solution D of the thesis benchmark
-   * narrative. The order is meaningful: each row changes exactly one knob
-   * compared to a previous row so the table reads as an ablation -- mu,
-   * then beta, then composition.
+   * Builds the list of benchmark configurations to run.
+   *
+   * @return list of configurations, in the order they will be printed in the
+   *         final comparison table
    */
   private static List<BenchmarkConfig> defaultConfigs() {
-    List<BenchmarkConfig> configs = new ArrayList<>();
+    // Sweep stays strictly inside (0, 1): alpha=0 collapses beta to zero
+    // (infinite threshold quantile), alpha=1 collapses the Gaussian-noise
+    // budget to zero. Both endpoints produce degenerate metrics that would
+    // distort any utility-vs-alpha plot.
+    double[] alphas = ALPHA_SWEEP
+        ? new double[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9 }
+        : new double[] { 0.5 };
 
-    // textbook k-fold adaptive composition theorem with different beta mdoes
-    configs.add(new BenchmarkConfig(
-        "tight + mu=50 + Dwork",
-        50L, BetaMode.PRIVACY_TIGHT, Double.NaN, CompositionMode.DWORK_ANALYTICAL));
-    configs.add(new BenchmarkConfig(
-        "tight + mu=0  + Dwork",
-        0L, BetaMode.PRIVACY_TIGHT, Double.NaN, CompositionMode.DWORK_ANALYTICAL));
-    configs.add(new BenchmarkConfig(
-        "loose + mu=0  + Dwork",
-        0L, BetaMode.FIXED, LOOSE_BETA, CompositionMode.DWORK_ANALYTICAL));
-    configs.add(new BenchmarkConfig(
-        "looser + mu=0  + Dwork",
-        0L, BetaMode.FIXED, LOOSER_BETA, CompositionMode.DWORK_ANALYTICAL));
-
-    // optimal k-fold composition theorem with different beta modes for a clear
-    // comparison
-    configs.add(new BenchmarkConfig(
-        "tight + mu=0  + KOV",
-        0L, BetaMode.PRIVACY_TIGHT, Double.NaN, CompositionMode.OPTIMAL_KOV));
-    configs.add(new BenchmarkConfig(
-        "loose + mu=0  + KOV",
-        0L, BetaMode.FIXED, LOOSE_BETA, CompositionMode.OPTIMAL_KOV));
-    configs.add(new BenchmarkConfig(
-        "looser + mu=0  + KOV",
-        0L, BetaMode.FIXED, LOOSER_BETA, CompositionMode.OPTIMAL_KOV));
-
+    List<BenchmarkConfig> configs = new ArrayList<>(alphas.length * CompositionMode.values().length);
+    for (double alpha : alphas) {
+      for (CompositionMode comp : CompositionMode.values()) {
+        String name = String.format(Locale.ROOT, "alpha=%.2f + %s", alpha, comp);
+        configs.add(new BenchmarkConfig(name, alpha, comp));
+      }
+    }
     return configs;
   }
 
+  /**
+   * Runs the full benchmark for a given number of micro-batches $T$: generates
+   * the datasets, runs all configurations on all Monte Carlo seeds, prints
+   * the final comparison table, and writes per-run and summary metrics to a
+   * timestamped CSV file.
+   *
+   * @param T number of micro-batches (time steps) to stream through the mechanism
+   */
   private void runBenchmark(int T) {
     List<BenchmarkConfig> configs = defaultConfigs();
 
     System.out.printf(Locale.ROOT,
-        "%n=== UtilityBenchmark: T=%d, NUM_USERS=%d, NUM_KEYS=%d, NUM_RUNS=%d, configs=%d (fast=%s) ===%n",
-        T, NUM_USERS, NUM_KEYS, NUM_RUNS, configs.size(), FAST_MODE);
+        "%n=== UtilityBenchmark: T=%d, NUM_USERS=%d, NUM_KEYS=%d, NUM_RUNS=%d, configs=%d "
+            + "(fast=%s, alphaSweep=%s) ===%n",
+        T, NUM_USERS, NUM_KEYS, NUM_RUNS, configs.size(), FAST_MODE, ALPHA_SWEEP);
 
     // Calibration depends only on (config, T), not on the seed; compute once
     // and reuse across all Monte Carlo runs.
@@ -258,7 +244,7 @@ class UtilityBenchmarkTest {
     // once per seed and shared across configurations, so configurations only
     // differ in calibration/mechanism state.
     double[][][] perRunPerConfig = new double[configs.size()][NUM_RUNS][];
-    long[] totalNanosPerConfig = new long[configs.size()];
+    double[][] secPerRunPerConfig = new double[configs.size()][NUM_RUNS];
 
     for (int run = 0; run < NUM_RUNS; run++) {
       long seed = BASE_SEED + run;
@@ -270,32 +256,42 @@ class UtilityBenchmarkTest {
         Calibration cal = cals[c];
 
         long t0 = System.nanoTime();
-        double[] metrics = runOnce(batches, T, cal, cfg.mu());
-        long elapsed = System.nanoTime() - t0;
-        totalNanosPerConfig[c] += elapsed;
+        double[] metrics = runOnce(batches, T, cal, MU);
+        double elapsedSec = (System.nanoTime() - t0) / 1e9;
 
         perRunPerConfig[c][run] = metrics;
+        secPerRunPerConfig[c][run] = elapsedSec;
+
         System.out.printf(Locale.ROOT,
-            "  %-25s  l0=%-8.0f  l_inf=%-8.0f  l_1=%-12.0f  l_2=%-10.2f  (%.1fs)%n",
-            cfg.name(), metrics[0], metrics[1], metrics[2], metrics[3], elapsed / 1e9);
+            "  %-30s  l0=%-8.0f  l_inf=%-8.0f  l_1=%-12.0f  l_2=%-10.2f  (%.1fs)%n",
+            cfg.name(), metrics[0], metrics[1], metrics[2], metrics[3], elapsedSec);
       }
     }
 
-    // Aggregate into mean/stdev per config and print the final comparison table.
+    // Aggregate into mean/stdev per config, print the final comparison table,
+    // and gather CSV rows (one per run, plus a summary row per config).
     System.out.printf(Locale.ROOT,
         "%n=== T=%d micro-batches (avg over %d runs) ===%n", T, NUM_RUNS);
-    System.out.printf(Locale.ROOT, "%-28s | %-14s | %-14s | %-18s | %-14s | %-10s%n",
+    System.out.printf(Locale.ROOT, "%-30s | %-14s | %-14s | %-18s | %-14s | %-10s%n",
         "Configuration", "Keys", "l_inf", "l_1", "l_2", "sec/run");
-    System.out.printf(Locale.ROOT, "%s%n", "-".repeat(28 + 14 * 3 + 18 + 10 + 5 * 3));
+    System.out.printf(Locale.ROOT, "%s%n", "-".repeat(30 + 14 * 3 + 18 + 10 + 5 * 3));
+
+    List<String> csvRows = new ArrayList<>(configs.size() * (NUM_RUNS + 1));
     for (int c = 0; c < configs.size(); c++) {
+      BenchmarkConfig cfg = configs.get(c);
+      Calibration cal = cals[c];
+
       double[] mean = new double[4];
       double[] std = new double[4];
+      double meanSec = 0.0;
       for (int r = 0; r < NUM_RUNS; r++) {
         for (int i = 0; i < 4; i++)
           mean[i] += perRunPerConfig[c][r][i];
+        meanSec += secPerRunPerConfig[c][r];
       }
       for (int i = 0; i < 4; i++)
         mean[i] /= NUM_RUNS;
+      meanSec /= NUM_RUNS;
       for (int r = 0; r < NUM_RUNS; r++) {
         for (int i = 0; i < 4; i++) {
           double d = perRunPerConfig[c][r][i] - mean[i];
@@ -305,22 +301,72 @@ class UtilityBenchmarkTest {
       for (int i = 0; i < 4; i++)
         std[i] = FastMath.sqrt(std[i] / NUM_RUNS);
 
-      double avgSec = totalNanosPerConfig[c] / 1e9 / NUM_RUNS;
       System.out.printf(Locale.ROOT,
-          "%-28s | %6.0f +- %-3.0f | %6.0f +- %-3.0f | %8.0f +- %-7.0f | %6.0f +- %-3.0f | %10.1f%n",
-          configs.get(c).name(),
+          "%-30s | %6.0f +- %-3.0f | %6.0f +- %-3.0f | %8.0f +- %-7.0f | %6.0f +- %-3.0f | %10.1f%n",
+          cfg.name(),
           mean[0], std[0],
           mean[1], std[1],
           mean[2], std[2],
           mean[3], std[3],
-          avgSec);
+          meanSec);
+
+      for (int r = 0; r < NUM_RUNS; r++) {
+        csvRows.add(formatCsvRow(T, cfg, cal, r, perRunPerConfig[c][r], secPerRunPerConfig[c][r]));
+      }
+      csvRows.add(formatCsvRow(T, cfg, cal, -1, mean, meanSec));
     }
+
+    writeCsv(T, csvRows);
+  }
+
+  private static String formatCsvRow(int T, BenchmarkConfig cfg, Calibration cal, int run,
+      double[] metrics, double secPerRun) {
+    return String.format(Locale.ROOT,
+        "%d,%.4f,%s,%d,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6e,%.6e,%.6f,%.6f,%.6e,%.6f,%.6f",
+        T, cfg.alpha(), cfg.composition(), MU, run,
+        metrics[0], metrics[1], metrics[2], metrics[3], secPerRun,
+        cal.epsRound(), cal.deltaRound(), cal.sigmaKey(), cal.sigmaHist(),
+        cal.beta(), cal.thresholdQuantile(), cal.tauAtLastStep());
+  }
+
+  private static void writeCsv(int T, List<String> rows) {
+    String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(new Date());
+    Path dir = Paths.get("target");
+    try {
+      Files.createDirectories(dir);
+    } catch (IOException e) {
+      dir = Paths.get(".");
+    }
+    Path csvPath = dir.resolve(String.format(Locale.ROOT, "benchmark_T%d_%s.csv", T, timestamp));
+    boolean newFile = !Files.exists(csvPath);
+    try (BufferedWriter w = Files.newBufferedWriter(csvPath, StandardCharsets.UTF_8,
+        StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
+      if (newFile) {
+        w.write(CSV_HEADER);
+        w.newLine();
+      }
+      for (String row : rows) {
+        w.write(row);
+        w.newLine();
+      }
+    } catch (IOException e) {
+      throw new UncheckedIOException("Failed to write CSV: " + csvPath, e);
+    }
+    System.out.printf(Locale.ROOT, "%nWrote %d rows to %s%n", rows.size(), csvPath.toAbsolutePath());
   }
 
   /**
-   * Generates the full batched dataset for a single Monte Carlo seed. The
-   * dataset is reused across all benchmark configurations on the same seed so
-   * the comparison isolates calibration differences rather than sampling noise.
+   * Generates the full batched dataset for a single Monte Carlo seed.
+   * <p>
+   * The dataset is reused across all benchmark configurations on the same seed
+   * in order to compare the utility impct of different calibrations on the same
+   * underlying data.
+   *
+   * @param T    number of micro-batches (time steps) to stream through the
+   *             mechanism
+   * @param seed random seed for reproducibility
+   * @return array of length T, where each element is a list of (userId, key)
+   *         pairs representing the contributions assigned to that batch.
    */
   @SuppressWarnings("unchecked")
   private List<int[]>[] generateBatches(int T, long seed) {
@@ -332,11 +378,14 @@ class UtilityBenchmarkTest {
     for (int t = 0; t < T; t++)
       batches[t] = new ArrayList<>();
 
+    // for each user, sample a budget and emit that many contributions with random
+    // keys into random batches.
     for (int u = 0; u < NUM_USERS; u++) {
       long budget = Math.min((long) userDist.sample(), C);
       for (long c = 0; c < budget; c++) {
-        int batchIdx = rng.nextInt(T);
-        int keyRank = keyDist.sample();
+        int batchIdx = rng.nextInt(T); // randomly assign contribution to a batch
+        int keyRank = keyDist.sample(); // sample key
+        // store (userId, key)
         batches[batchIdx].add(new int[] { u, keyRank });
       }
     }
@@ -346,7 +395,17 @@ class UtilityBenchmarkTest {
   /**
    * One Monte Carlo trial under a given calibration: streams all T batches
    * through a fresh mechanism and returns the final-step (l0, l_inf, l1, l2)
-   * metrics versus the unnoised ground-truth histogram.
+   * metrics versus the ground-truth histogram (no DP).
+   *
+   * @param batches the full dataset, pre-batched by time step, as generated by
+   *                {@link #generateBatches}
+   * @param T       number of micro-batches (time steps) to stream through the
+   *                mechanism
+   * @param cal     calibration parameters for the mechanism, as derived by
+   *                {@link #calibrate}
+   * @param mu      the threshold offset to use in the mechanism
+   * @return array of (l0, l_inf, l1, l2) metrics comparing the final released
+   *         histogram
    */
   private double[] runOnce(List<int[]>[] batches, int T, Calibration cal, long mu) {
     StreamingDPMechanism mechanism = new StreamingDPMechanism(
@@ -369,8 +428,16 @@ class UtilityBenchmarkTest {
 
   /**
    * Computes (l0, l_inf, l1, l2) over the union of the released histogram and
-   * the ground-truth histogram keys. Missing keys on either side are treated as
-   * 0.
+   * the ground-truth histogram keys.
+   * <p>
+   * Missing keys on either side are treated as 0.
+   *
+   * @param dp    the released histogram from the mechanism, as a map from key to
+   *              noisy coun
+   * @param truth the ground-truth histogram, as a map from
+   *              key to true count *
+   * @return array of (l0, l_inf, l1, l2) metrics comparing the DP histogram to
+   *         the ground truth
    */
   private double[] computeMetrics(Map<String, Long> dp, Map<String, Long> truth) {
     Set<String> allKeys = new HashSet<>(dp.size() + truth.size());
@@ -393,10 +460,11 @@ class UtilityBenchmarkTest {
 
   /**
    * Translates a {@link BenchmarkConfig} into the concrete $\sigma_k$,
-   * $\sigma_h$, and threshold quantile used by {@link StreamingDPMechanism}.
-   * {@link BetaMode#PRIVACY_TIGHT} mirrors the production calibration in
-   * {@code AbstractDataPerturbationServiceProvider}; {@link BetaMode#FIXED}
-   * skips the $(1-\alpha)/\alpha$ split and uses {@link #LOOSE_BETA} directly.
+   * $\sigma_h$, and threshold $\tau$ used by {@link StreamingDPMechanism}.
+   * Uses the privacy-tight pre-allocation: $\delta_k^{(r)}$ is split as
+   * $(1-\alpha)\delta_k^{(r)}$ for the Gaussian-noise share and
+   * $\alpha\delta_k^{(r)}$ for the threshold-failure cost
+   * $(e^{\varepsilon_k^{(r)}}+1)\beta$ from Algorithm 1.
    */
   private Calibration calibrate(BenchmarkConfig cfg, int T) {
     DPUtil.PerRoundBudget keyRoundBudget = switch (cfg.composition()) {
@@ -404,19 +472,8 @@ class UtilityBenchmarkTest {
       case OPTIMAL_KOV -> DPUtil.keySelectionPerRoundBudgetOptimal(EPS_K, DELTA_K, C);
     };
 
-    double deltaForGaussian;
-    double beta;
-    switch (cfg.betaMode()) {
-      case PRIVACY_TIGHT -> {
-        deltaForGaussian = DPUtil.gaussianShareDelta(keyRoundBudget.delta(), ALPHA_PRIVACY_TIGHT);
-        beta = DPUtil.computeBeta(keyRoundBudget.epsilon(), keyRoundBudget.delta(), ALPHA_PRIVACY_TIGHT);
-      }
-      case FIXED -> {
-        deltaForGaussian = keyRoundBudget.delta();
-        beta = cfg.betaFixed();
-      }
-      default -> throw new IllegalStateException("Unhandled beta mode: " + cfg.betaMode());
-    }
+    double deltaForGaussian = DPUtil.gaussianShareDelta(keyRoundBudget.delta(), cfg.alpha());
+    double beta = DPUtil.computeBeta(keyRoundBudget.epsilon(), keyRoundBudget.delta(), cfg.alpha());
 
     double rhoK = DPUtil.cdpRho(keyRoundBudget.epsilon(), deltaForGaussian);
     double sigmaKey = DPUtil.calculateSigma(rhoK, T, 1.0);
@@ -440,26 +497,21 @@ class UtilityBenchmarkTest {
   }
 
   private void logCalibration(BenchmarkConfig cfg, Calibration cal) {
-    // if tight mote, show the actual alpha value in the label for clarity
-    String betaModeLabel = cfg.betaMode() == BetaMode.PRIVACY_TIGHT
-        ? String.format(Locale.ROOT, "PRIVACY_TIGHT (alpha=%.2f)", ALPHA_PRIVACY_TIGHT)
-        : cfg.betaMode().toString();
-
     System.out.printf(Locale.ROOT,
         "calibration [%s]:%n"
-            + "  eps_k_round=%.4f  delta_k_round=%.3e   composition=%s  beta_mode=%s%n"
+            + "  eps_k_round=%.4f  delta_k_round=%.3e   composition=%s  alpha=%.2f%n"
             + "  rho_k=%.4e   sigma_k=%.3f%n"
             + "  rho_h=%.4e   sigma_h=%.3f  (L1=%.1f)%n"
             + "  beta=%.3e   Phi^-1(1-beta)=%.3f%n"
             + "  kappa=ceil(log2 T)=%.0f%n"
             + "  tau_T-1 ~= %.2f   release threshold mu+tau = %.2f   (mu=%d)%n",
         cfg.name(),
-        cal.epsRound(), cal.deltaRound(), cfg.composition(), betaModeLabel,
+        cal.epsRound(), cal.deltaRound(), cfg.composition(), cfg.alpha(),
         cal.rhoK(), cal.sigmaKey(),
         cal.rhoH(), cal.sigmaHist(), DPUtil.l1Sensitivity(C, L),
         cal.beta(), cal.thresholdQuantile(),
         cal.kappa(),
-        cal.tauAtLastStep(), cfg.mu() + cal.tauAtLastStep(), cfg.mu());
+        cal.tauAtLastStep(), MU + cal.tauAtLastStep(), MU);
   }
 
   // -------------------------------------------------------------------------
