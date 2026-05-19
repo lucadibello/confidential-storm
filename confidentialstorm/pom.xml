@@ -116,7 +116,8 @@
                         <trimStackTrace>false</trimStackTrace>
                         <reportFormat>plain</reportFormat>
                         <printSummary>true</printSummary>
-                        <argLine>-Xmx8g</argLine>
+                        <!-- Increase the memory limit for utility benchmark -->
+                        <argLine>-Xmx64g</argLine>
                     </configuration>
                 </plugin>
             </plugins>
