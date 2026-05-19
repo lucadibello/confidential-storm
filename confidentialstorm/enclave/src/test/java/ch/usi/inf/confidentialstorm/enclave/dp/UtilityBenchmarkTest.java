@@ -40,7 +40,8 @@ import java.util.Set;
  * inflation caused by tiny $\beta$.</li>
  * <li>$C$-fold composition either the analytical
  * {@link DPUtil#keySelectionPerRoundBudget Dwork} bound (current production
- * default) or the {@link DPUtil#keySelectionPerRoundBudgetOptimal Kairouz-Oh-Viswanath}
+ * default) or the {@link DPUtil#keySelectionPerRoundBudgetOptimal
+ * Kairouz-Oh-Viswanath}
  * optimal composition referenced in Section 4.4 of the paper.</li>
  * </ul>
  * <p>
@@ -75,14 +76,17 @@ class UtilityBenchmarkTest {
    * pre-allocation approach described in the thesis background chapter
    * (paragraph "Choosing the Accuracy Parameter beta"). Only used when
    * {@link BetaMode#PRIVACY_TIGHT} is selected.
+   * NOTE: from the authors: they split evenly between key selection and threshold
+   * failure (\alpha=0.e-5)
    */
-  private static final double ALPHA_PRIVACY_TIGHT = 0.1;
+  private static final double ALPHA_PRIVACY_TIGHT = 0.5;
 
   /**
    * Loose, fixed {@code beta} used in the {@link BetaMode#FIXED} configurations
    * to approximate the (unstated) accuracy parameter implicitly used in the
    * paper Section 5.1 measurements. The corresponding per-round guarantee is
-   * $(\varepsilon_k^{(r)}, \delta_k^{(r)} + (e^{\varepsilon_k^{(r)}}+1)\beta)$-DP --
+   * $(\varepsilon_k^{(r)}, \delta_k^{(r)} + (e^{\varepsilon_k^{(r)}}+1)\beta)$-DP
+   * --
    * looser than the labeled $(\varepsilon_k, \delta_k)$ but the only way to
    * shrink $\Phi^{-1}(1-\beta)$ enough to come close to the paper utility.
    */
@@ -100,7 +104,7 @@ class UtilityBenchmarkTest {
 
   private static final int NUM_USERS = FAST_MODE ? 500_000 : 10_000_000;
   private static final int NUM_KEYS = FAST_MODE ? 100_000 : 1_000_000;
-  private static final int NUM_RUNS = FAST_MODE ? 5 : 20;
+  private static final int NUM_RUNS = FAST_MODE ? 1 : 3;
 
   private static final int MAX_TIME_STEP_SMALL = 100;
   private static final int MAX_TIME_STEP_LARGE = 1000;
