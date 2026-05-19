@@ -117,14 +117,18 @@ public abstract class AbstractDataPerturbationServiceProvider
    * the Accuracy Parameter beta"). The remaining (1 - alpha) share calibrates the
    * DP-Tree Gaussian noise.
    * <p>
-   * After analyzing the tradeoff between the Gaussian noise and threshold failure
-   * terms, the thesis recommends alpha in [1e-2, 1e-1]. Override this for
-   * stricter privacy budgets.
+   * The default value 0.5 mirrors the DP-SQLP paper's calibration: the authors
+   * clarified (May 2026) that the 2*delta/3 budget allocated to key selection is
+   * split equally between the Gaussian-noise share and the threshold-failure
+   * share, which corresponds to alpha=0.5.
+   * <p>
+   * Refer to the thesis background chapter for a detailed discussion of the
+   * trade-offs in chosing alpha.
    *
    * @return alpha in (0, 1)
    */
   public double getThresholdFailureFraction() {
-    return 0.1;
+    return 0.5;
   }
 
   /**
@@ -197,9 +201,10 @@ public abstract class AbstractDataPerturbationServiceProvider
     );
 
     // Pre-allocation approach (thesis background: "Choosing the Accuracy Parameter
-    // beta"): calibrate sigma_k against the Gaussian share (1-alpha)*delta_round,
-    // and let
-    // the threshold-failure term consume the remaining alpha*delta_round via beta.
+    // beta"):
+    // calibrate sigma_k against the Gaussian share (1-alpha)*delta_round,
+    // and let the threshold-failure term consume the remaining alpha*delta_round
+    // via beta.
     final double deltaGaussianShare = DPUtil.gaussianShareDelta(keyRoundBudget.delta(), alpha);
     final double rhoK = DPUtil.cdpRho(keyRoundBudget.epsilon(), deltaGaussianShare);
     final double sigmaKey = DPUtil.calculateSigma(rhoK, T, 1.0);
