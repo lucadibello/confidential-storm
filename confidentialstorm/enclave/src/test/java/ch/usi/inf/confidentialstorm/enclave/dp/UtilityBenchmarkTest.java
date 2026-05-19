@@ -50,10 +50,10 @@ import java.util.Set;
  * $\beta = 0$ (infinite threshold quantile, empty histogram) and $\alpha = 1$
  * gives a zero Gaussian-noise budget (undefined $\sigma_k$).</li>
  * <li>$C$-fold composition either the analytical
- * {@link DPUtil#keySelectionPerRoundBudget Dwork} bound (current production
- * default) or the {@link DPUtil#keySelectionPerRoundBudgetOptimal
- * Kairouz-Oh-Viswanath}
- * optimal composition referenced in Section 4.4 of the paper.</li>
+ * {@link DPUtil#keySelectionPerRoundBudget Dwork} bound or the
+ * {@link DPUtil#keySelectionPerRoundBudgetOptimal Kairouz-Oh-Viswanath}
+ * optimal composition referenced in Section 4.4 of the paper (the current
+ * production default).</li>
  * </ul>
  * <p>
  * $\mu$ is fixed at 50 to match the Google Trends production setting
