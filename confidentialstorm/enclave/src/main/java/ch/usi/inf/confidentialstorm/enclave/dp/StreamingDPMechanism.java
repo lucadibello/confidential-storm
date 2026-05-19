@@ -174,7 +174,10 @@ public class StreamingDPMechanism {
 
     /**
      * Records a contribution from a user for a specific key in the current time window.
-     * Enforces per-user contribution bounding (C) as required by Section 3.2.
+     * <p>
+     * Assumes contributions have already been bounded by the upstream user-contribution-bounding
+     * stage so that each {@code userId} appears in at most {@code C} records across the stream
+     * (per Section 3.2 of the DP-SQLP paper). This method does NOT enforce the C bound internally.
      * <p>
      * This method is thread-safe and can be called concurrently by multiple executor threads.
      *
@@ -346,16 +349,12 @@ public class StreamingDPMechanism {
         // Get or create histogram tree, catching up if new
         BinaryAggregationTree histTree = histogramForest.get(key);
         if (histTree == null) {
-            // Create new tree
+            // Create new tree. Leaves [0, timeStep) are implicitly zero
+            // NOTE: BinaryAggregationTree pre-seeds every node with calibrated Gaussian 
+            // noise at construction
             histTree = new BinaryAggregationTree(maxTimeSteps, sigmaHist);
-
-            // Execute Algorithm 4 for steps 0 to (timeStep-1) with zeros
-            for (int t = 0; t < timeStep; t++) {
-                histTree.addToTree(t, 0.0);
-            }
-
             histogramForest.put(key, histTree);
-            log.debug("[DP-MECHANISM] Created new histogram tree for key {} and caught up to timeStep {}", key, timeStep);
+            log.debug("[DP-MECHANISM] Created new histogram tree for key {} at timeStep {}", key, timeStep);
         }
 
         // Step 7 of Algo 2 - get the DeltaV_key (aggregated value since last release)
