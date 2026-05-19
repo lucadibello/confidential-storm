@@ -140,8 +140,13 @@ public abstract class AbstractDataPerturbationServiceProvider
    *
    * <li>
    * Compose (epsilon_k, delta_k) over C rounds via
-   * {@link DPUtil#keySelectionPerRoundBudget}
-   * to obtain the per-round budget (epsilon_k_round, delta_k_round).
+   * {@link DPUtil#keySelectionPerRoundBudgetOptimal}
+   * to obtain the per-round budget (epsilon_k_round, delta_k_round). We use the
+   * Kairouz-Oh-Viswanath optimal k-fold composition (the "empirically tighter
+   * variant of advanced composition" referenced in Section 4.4 of the DP-SQLP
+   * paper) rather than the Dwork analytical bound, since it yields a strictly
+   * larger per-round epsilon for the same total budget and therefore lower
+   * Gaussian noise.
    * </li>
    *
    * <li>
@@ -191,10 +196,12 @@ public abstract class AbstractDataPerturbationServiceProvider
       throw new IllegalArgumentException("maxTimeSteps (T) must be positive; got " + T);
     }
 
-    // Compute the per-round budget for the key selection step using C-Fold adaptive
-    // NOTE: From Section 4.4 of the DP-SQLPd paper: a user may partecipate in at
-    // composition theorem. most C rounds of Algorithm 1
-    DPUtil.PerRoundBudget keyRoundBudget = DPUtil.keySelectionPerRoundBudget(
+    // Compute the per-round budget for key selection using the Kairouz-Oh-Viswanath
+    // optimal k-fold composition theorem (the "empirically tighter variant of advanced
+    // composition" referenced in Section 4.4 of the DP-SQLP paper). A user may
+    // participate in at most C rounds of Algorithm 1, so we compose (epsilon_k, delta_k)
+    // over C rounds.
+    DPUtil.PerRoundBudget keyRoundBudget = DPUtil.keySelectionPerRoundBudgetOptimal(
         getEpsilonK(), // total epsilon_k budget for key selection
         getDeltaK(), // total delta_k budget for key selection
         C // number of rounds (max user contributions)
