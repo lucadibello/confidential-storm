@@ -76,8 +76,11 @@ class UtilityBenchmarkTest {
    * pre-allocation approach described in the thesis background chapter
    * (paragraph "Choosing the Accuracy Parameter beta"). Only used when
    * {@link BetaMode#PRIVACY_TIGHT} is selected.
-   * NOTE: from the authors: they split evenly between key selection and threshold
-   * failure (\alpha=0.e-5)
+   * NOTE: The DP-SQLP paper authors clarified (2026-05-19, via the thesis
+   * advisor) that the 2/3*delta budget allocated to key selection is meant
+   * to be split equally between the Gaussian-noise delta and the
+   * threshold-failure cost (e^eps+1)*beta of Algorithm 1. With our notation,
+   * this is equivalent to set alpha=0.5 in the pre-allocation formulas.
    */
   private static final double ALPHA_PRIVACY_TIGHT = 0.5;
 
@@ -91,6 +94,7 @@ class UtilityBenchmarkTest {
    * shrink $\Phi^{-1}(1-\beta)$ enough to come close to the paper utility.
    */
   private static final double LOOSE_BETA = 1e-5;
+  private static final double LOOSER_BETA = 1e-2; // to test what happens if we relax beta even more
 
   // -------------------------------------------------------------------------
   // Data-generation parameters
@@ -205,6 +209,8 @@ class UtilityBenchmarkTest {
    */
   private static List<BenchmarkConfig> defaultConfigs() {
     List<BenchmarkConfig> configs = new ArrayList<>();
+
+    // textbook k-fold adaptive composition theorem with different beta mdoes
     configs.add(new BenchmarkConfig(
         "tight + mu=50 + Dwork",
         50L, BetaMode.PRIVACY_TIGHT, Double.NaN, CompositionMode.DWORK_ANALYTICAL));
@@ -215,11 +221,21 @@ class UtilityBenchmarkTest {
         "loose + mu=0  + Dwork",
         0L, BetaMode.FIXED, LOOSE_BETA, CompositionMode.DWORK_ANALYTICAL));
     configs.add(new BenchmarkConfig(
+        "looser + mu=0  + Dwork",
+        0L, BetaMode.FIXED, LOOSER_BETA, CompositionMode.DWORK_ANALYTICAL));
+
+    // optimal k-fold composition theorem with different beta modes for a clear
+    // comparison
+    configs.add(new BenchmarkConfig(
         "tight + mu=0  + KOV",
         0L, BetaMode.PRIVACY_TIGHT, Double.NaN, CompositionMode.OPTIMAL_KOV));
     configs.add(new BenchmarkConfig(
         "loose + mu=0  + KOV",
         0L, BetaMode.FIXED, LOOSE_BETA, CompositionMode.OPTIMAL_KOV));
+    configs.add(new BenchmarkConfig(
+        "looser + mu=0  + KOV",
+        0L, BetaMode.FIXED, LOOSER_BETA, CompositionMode.OPTIMAL_KOV));
+
     return configs;
   }
 
@@ -424,6 +440,11 @@ class UtilityBenchmarkTest {
   }
 
   private void logCalibration(BenchmarkConfig cfg, Calibration cal) {
+    // if tight mote, show the actual alpha value in the label for clarity
+    String betaModeLabel = cfg.betaMode() == BetaMode.PRIVACY_TIGHT
+        ? String.format(Locale.ROOT, "PRIVACY_TIGHT (alpha=%.2f)", ALPHA_PRIVACY_TIGHT)
+        : cfg.betaMode().toString();
+
     System.out.printf(Locale.ROOT,
         "calibration [%s]:%n"
             + "  eps_k_round=%.4f  delta_k_round=%.3e   composition=%s  beta_mode=%s%n"
@@ -433,7 +454,7 @@ class UtilityBenchmarkTest {
             + "  kappa=ceil(log2 T)=%.0f%n"
             + "  tau_T-1 ~= %.2f   release threshold mu+tau = %.2f   (mu=%d)%n",
         cfg.name(),
-        cal.epsRound(), cal.deltaRound(), cfg.composition(), cfg.betaMode(),
+        cal.epsRound(), cal.deltaRound(), cfg.composition(), betaModeLabel,
         cal.rhoK(), cal.sigmaKey(),
         cal.rhoH(), cal.sigmaHist(), DPUtil.l1Sensitivity(C, L),
         cal.beta(), cal.thresholdQuantile(),
