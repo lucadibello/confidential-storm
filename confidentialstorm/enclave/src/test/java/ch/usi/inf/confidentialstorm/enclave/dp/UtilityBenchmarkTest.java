@@ -49,11 +49,15 @@ import java.util.Set;
  * \ldots, 0.9\}$; the exact bounds are excluded because $\alpha = 0$ gives
  * $\beta = 0$ (infinite threshold quantile, empty histogram) and $\alpha = 1$
  * gives a zero Gaussian-noise budget (undefined $\sigma_k$).</li>
- * <li>$C$-fold composition either the analytical
- * {@link DPUtil#keySelectionPerRoundBudget Dwork} bound or the
+ * <li>$C$-fold composition: one of the analytical
+ * {@link DPUtil#keySelectionPerRoundBudget Dwork} bound, the
  * {@link DPUtil#keySelectionPerRoundBudgetOptimal Kairouz-Oh-Viswanath}
- * optimal composition referenced in Section 4.4 of the paper (the current
- * production default).</li>
+ * optimal composition referenced in Section 4.4 of the paper, or
+ * {@code ZCDP_LINEAR} which skips $(\varepsilon, \delta)$-DP composition
+ * entirely and splits the budget linearly in $\rho$-zCDP
+ * ($\rho_k^{(r)} = \rho_k / C$). The latter is strictly tighter because the
+ * $(\varepsilon, \delta) \to \rho$ conversion at the Gaussian-calibration
+ * step is lossy.</li>
  * </ul>
  * <p>
  * $\mu$ is fixed at 50 to match the Google Trends production setting
@@ -86,12 +90,9 @@ class UtilityBenchmarkTest {
   private static final double L = 1.0;
 
   /**
-   * Threshold offset $\mu$. Fixed at the Google Trends production setting
-   * (Section 6.2). The mu=0 variants from earlier revisions of this benchmark
-   * were only needed to isolate the effect of fixed-beta configurations,
-   * which have been removed.
+   * Threshold offset $\mu$.
    */
-  private static final long MU = 50L;
+  private static final long MU = 0L;
 
   // -------------------------------------------------------------------------
   // Data-generation parameters
@@ -136,13 +137,27 @@ class UtilityBenchmarkTest {
 
   /**
    * Which $C$-fold composition theorem to use when deriving the per-round
-   * key-selection budget. {@code DWORK_ANALYTICAL} matches the production
-   * default; {@code OPTIMAL_KOV} matches the "empirically tighter variant of
-   * advanced composition" referenced in Section 4.4 of the paper.
+   * key-selection budget.
+   * <ul>
+   * <li>{@code DWORK_ANALYTICAL}: advanced-composition bound from
+   * Dwork-Rothblum-Vadhan, applied to $(\varepsilon_k, \delta_k)$-DP per round.
+   * Goes through $(\varepsilon, \delta)$-DP throughout and converts to $\rho$
+   * only at the Gaussian-calibration step.
+   * </li>
+   * <li>{@code OPTIMAL_KOV}: Kairouz-Oh-Viswanath optimal $k$-fold composition.
+   * Same shape as DWORK_ANALYTICAL but with a tighter per-round $\varepsilon$.
+   * </li>
+   * <li>{@code ZCDP_LINEAR}: skip the $(\varepsilon, \delta)$-DP composition
+   * entirely. Convert the total $(\varepsilon_k, \delta_k)$ directly to
+   * $\rho_k$-zCDP and split linearly across the $C$ rounds:
+   * $\rho_k^{(r)} = \rho_k / C$.
+   * </li>
+   * </ul>
    */
   enum CompositionMode {
     DWORK_ANALYTICAL,
-    OPTIMAL_KOV
+    OPTIMAL_KOV,
+    ZCDP_LINEAR
   }
 
   /**
@@ -461,22 +476,59 @@ class UtilityBenchmarkTest {
   /**
    * Translates a {@link BenchmarkConfig} into the concrete $\sigma_k$,
    * $\sigma_h$, and threshold $\tau$ used by {@link StreamingDPMechanism}.
-   * Uses the privacy-tight pre-allocation: $\delta_k^{(r)}$ is split as
-   * $(1-\alpha)\delta_k^{(r)}$ for the Gaussian-noise share and
-   * $\alpha\delta_k^{(r)}$ for the threshold-failure cost
-   * $(e^{\varepsilon_k^{(r)}}+1)\beta$ from Algorithm 1.
+   * <p>
+   * In all three composition modes, $\delta_k^{(r)}$ is split via the
+   * privacy-tight pre-allocation: $(1-\alpha)\delta_k^{(r)}$ for the
+   * Gaussian-noise share and $\alpha\delta_k^{(r)}$ for the threshold-failure
+   * cost $(e^{\varepsilon_k^{(r)}}+1)\beta$ from Algorithm 1. The modes differ
+   * only in how the per-round $\rho$ used to calibrate $\sigma_k$ is obtained:
+   * DWORK/KOV go via per-round $(\varepsilon, \delta)$-DP composition and
+   * convert to $\rho$ at the last step, while ZCDP_LINEAR converts to
+   * $\rho_k$-zCDP once and splits linearly across rounds.
    */
   private Calibration calibrate(BenchmarkConfig cfg, int T) {
-    DPUtil.PerRoundBudget keyRoundBudget = switch (cfg.composition()) {
-      case DWORK_ANALYTICAL -> DPUtil.keySelectionPerRoundBudget(EPS_K, DELTA_K, C);
-      case OPTIMAL_KOV -> DPUtil.keySelectionPerRoundBudgetOptimal(EPS_K, DELTA_K, C);
-    };
+    // Derive per-round (epsilon, delta) and rho_k_round depending on composition.
+    //
+    // ZCDP_LINEAR doesn't use the (eps, delta)-DP composition entirely as we
+    // directly use the sequential composition theorem for rho-zCDP
+    // (rho_round = rho_k / C), and recover an (eps_round, delta_round) only for the
+    // beta accounting.
+    //
+    // DWORK / KOV first compose in (eps, delta)-DP to obtain (eps_round,
+    // delta_round), then re-convert to rho_round via the closed-form zCDP -> DP
+    // bound.
+    double epsRound;
+    double deltaRound;
+    double rhoKRound;
+    switch (cfg.composition()) {
+      case DWORK_ANALYTICAL -> {
+        DPUtil.PerRoundBudget b = DPUtil.keySelectionPerRoundBudget(EPS_K, DELTA_K, C);
+        epsRound = b.epsilon();
+        deltaRound = b.delta();
+        rhoKRound = DPUtil.cdpRho(epsRound, DPUtil.gaussianShareDelta(deltaRound, cfg.alpha()));
+      }
+      case OPTIMAL_KOV -> {
+        DPUtil.PerRoundBudget b = DPUtil.keySelectionPerRoundBudgetOptimal(EPS_K, DELTA_K, C);
+        epsRound = b.epsilon();
+        deltaRound = b.delta();
+        rhoKRound = DPUtil.cdpRho(epsRound, DPUtil.gaussianShareDelta(deltaRound, cfg.alpha()));
+      }
+      case ZCDP_LINEAR -> {
+        // Convert (eps_k, delta_k) directly to rho_k via the closed-form zCDP -> DP
+        // bound, then split linearly across C rounds. delta_k is also partitioned
+        // linearly across rounds so we have a per-round delta for the beta accounting,
+        // and eps_round is recovered from rho_round via eps = rho +
+        // 2*sqrt(rho*ln(1/delta)).
+        double rhoKTotal = DPUtil.cdpRho(EPS_K, DELTA_K);
+        rhoKRound = rhoKTotal / C;
+        deltaRound = DELTA_K / C;
+        epsRound = rhoKRound + 2.0 * FastMath.sqrt(rhoKRound * FastMath.log(1.0 / deltaRound));
+      }
+      default -> throw new IllegalStateException("Unknown composition mode: " + cfg.composition());
+    }
 
-    double deltaForGaussian = DPUtil.gaussianShareDelta(keyRoundBudget.delta(), cfg.alpha());
-    double beta = DPUtil.computeBeta(keyRoundBudget.epsilon(), keyRoundBudget.delta(), cfg.alpha());
-
-    double rhoK = DPUtil.cdpRho(keyRoundBudget.epsilon(), deltaForGaussian);
-    double sigmaKey = DPUtil.calculateSigma(rhoK, T, 1.0);
+    double beta = DPUtil.computeBeta(epsRound, deltaRound, cfg.alpha());
+    double sigmaKey = DPUtil.calculateSigma(rhoKRound, T, 1.0);
 
     double thresholdQuantile = new NormalDistribution(0.0, 1.0)
         .inverseCumulativeProbability(1.0 - beta);
@@ -489,8 +541,8 @@ class UtilityBenchmarkTest {
     double tauAtLastStep = FastMath.sqrt(kappa * honakerNodeVariance) * thresholdQuantile;
 
     return new Calibration(
-        keyRoundBudget.epsilon(), keyRoundBudget.delta(),
-        rhoK, sigmaKey,
+        epsRound, deltaRound,
+        rhoKRound, sigmaKey,
         rhoH, sigmaHist,
         beta, thresholdQuantile,
         tauAtLastStep, kappa);
