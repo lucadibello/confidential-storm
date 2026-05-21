@@ -117,7 +117,7 @@
                         <reportFormat>plain</reportFormat>
                         <printSummary>true</printSummary>
                         <!-- Increase the memory limit for utility benchmark -->
-                        <argLine>-Xmx64g</argLine>
+                        <argLine>-Xmx256g</argLine>
                     </configuration>
                 </plugin>
             </plugins>

@@ -60,8 +60,9 @@ import java.util.Set;
  * step is lossy.</li>
  * </ul>
  * <p>
- * $\mu$ is fixed at 50 to match the Google Trends production setting
- * described in Section 6.2 of the paper.
+ * $\mu$ is fixed at 0 to match the §5.1 synthetic experiment (the paper does
+ * not state $\mu$ for §5.1; 0 is the natural "pure-threshold" choice and is
+ * the value that reproduces Table 1 within ~5%).
  * <p>
  * IMPORTANT: this test is gated behind {@code -Dbenchmark=true} so it is
  * excluded from the regular {@code mvn test} run. Suggested usage for
@@ -113,7 +114,7 @@ class UtilityBenchmarkTest {
 
   private static final int NUM_USERS = FAST_MODE ? 500_000 : 10_000_000;
   private static final int NUM_KEYS = FAST_MODE ? 100_000 : 1_000_000;
-  private static final int NUM_RUNS = FAST_MODE ? 1 : 3;
+  private static final int NUM_RUNS = FAST_MODE ? 1 : 10;
 
   private static final int MAX_TIME_STEP_SMALL = 100;
   private static final int MAX_TIME_STEP_LARGE = 1000;
@@ -520,8 +521,15 @@ class UtilityBenchmarkTest {
         // and eps_round is recovered from rho_round via eps = rho +
         // 2*sqrt(rho*ln(1/delta)).
         double rhoKTotal = DPUtil.cdpRho(EPS_K, DELTA_K);
+
+        // sequential composition for rho-zCDP (split evenly across rounds)
         rhoKRound = rhoKTotal / C;
+        // in a similar fashion to the approximate-DP case, delta is split evenly across
+        // rounds
         deltaRound = DELTA_K / C;
+
+        // recover eps_round from rho_round using Preposition 1.3 of the zCDP paper:
+        // rho-CDP => (rho + 2*sqrt(rho*ln(1/delta)), delta)-DP for all delta > 0. This
         epsRound = rhoKRound + 2.0 * FastMath.sqrt(rhoKRound * FastMath.log(1.0 / deltaRound));
       }
       default -> throw new IllegalStateException("Unknown composition mode: " + cfg.composition());
