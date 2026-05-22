@@ -1,0 +1,5 @@
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends cpuid \
+    && rm -rf /var/lib/apt/lists/*
+CMD ["sh", "-c", "cpuid | grep -i sgx"]
