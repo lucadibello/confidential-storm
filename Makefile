@@ -38,7 +38,7 @@ help:
 	@echo "                            - Run one method via ConsoleLauncher (raw logs)."
 	@echo ""
 	@echo "SGX targets:"
-	@echo "  make check-sgx2           - Check if this machine supports SGX2"
+	@echo "  make check-sgx2           - Pre-flight check: SGX2 CPU, kernel devices, SDK, PSW/DCAP, AESMD, Docker"
 	@echo ""
 	@echo "Variables:"
 	@echo "  MVN=<path>                Override Maven binary (default: mvn)"
