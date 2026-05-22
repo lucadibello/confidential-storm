@@ -5,7 +5,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Collects ground truth histogram counts for utility measurement.
- * (copied from synthetic-dp-histogram/host).
+ * (copied from synthetic-benchmark-confidential/host).
  */
 public final class GroundTruthCollector {
     private static final Map<String, Long> COUNTS = new ConcurrentHashMap<>();

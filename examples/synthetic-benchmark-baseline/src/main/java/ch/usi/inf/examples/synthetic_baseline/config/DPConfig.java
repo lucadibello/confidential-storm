@@ -2,7 +2,7 @@ package ch.usi.inf.examples.synthetic_baseline.config;
 
 /**
  * Differential privacy parameters and contribution bounding settings for the synthetic benchmark.
- * (copy of synthetic-dp-histogram/common)
+ * (copy of synthetic-benchmark-confidential/common)
  */
 public final class DPConfig {
     private DPConfig() {}

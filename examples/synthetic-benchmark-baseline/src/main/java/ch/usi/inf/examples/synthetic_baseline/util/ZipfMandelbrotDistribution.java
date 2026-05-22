@@ -6,7 +6,7 @@ import java.util.Random;
 
 /**
  * Zipf-Mandelbrot distribution implementation.
- * (copied from synthetic-dp-histogram/host/util)
+ * (copied from synthetic-benchmark-confidential/host/util)
  */
 public class ZipfMandelbrotDistribution {
 
