@@ -8,7 +8,6 @@
       "REMOTE_UID": "1010",
       "REMOTE_GID": "1010",
       "NODE_VERSION": "16.20.2",
-      "NEOVIM_VERSION": "0.11.4",
       "STORM_VERSION": "2.8.3",
       "GIT_EMAIL": "lucadibello@proton.me",
       "GIT_NAME": "Luca Di Bello"
@@ -27,8 +26,6 @@
     "storm-net",
     "--publish",
     "127.0.0.1:2222:2222",
-    "--publish",
-    "127.0.0.1:6666:6666"
   ],
   "overrideCommand": false,
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
@@ -38,8 +35,7 @@
     "source=${localWorkspaceFolder}/conf/storm.yaml,target=/home/dev/.storm/storm.yaml,type=bind,readonly"
   ],
   "containerEnv": {
-    "SSH_AUTH_SOCK": "/ssh-agent",
-    "NVIM_LISTEN_ADDRESS": "0.0.0.0:6666"
+    "SSH_AUTH_SOCK": "/ssh-agent"
   },
   "postCreateCommand": "sudo passwd dev"
 }

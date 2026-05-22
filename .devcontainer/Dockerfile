@@ -16,15 +16,13 @@ ARG GIT_NAME="Luca Di Bello"
 ARG GRAALVM_VERSION=22.2.0
 ARG GRAALVM_ARCH=amd64
 ARG OPENJDK_VERSION=17
-ARG NEOVIM_VERSION=0.11.4
 ARG NODE_VERSION=22.20.0
 ARG NODE_ARCH=x64
 ARG STORM_VERSION=2.8.2
-ARG APACHE_MIRROR=https://dlcdn.apache.org/storm
+ARG APACHE_MIRROR=https://archive.apache.org/dist/storm
 ARG MAVEN_VERSION=3.9.12
 
 ENV DEBIAN_FRONTEND=noninteractive \
-  NVIM_LISTEN_ADDRESS=127.0.0.1:6666 \
   DEVCONTAINER_USER=${REMOTE_USER} \
   REMOTE_USER=${REMOTE_USER} \
   REMOTE_HOME=${REMOTE_HOME} \
@@ -34,7 +32,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
   GRAALVM_HOME=/root/tools/graalvm-ce-java17-${GRAALVM_VERSION} \
   JAVA_HOME=/root/tools/graalvm-ce-java17-${GRAALVM_VERSION}
 
-RUN apt-get update \
+RUN rm -f /etc/apt/sources.list.d/*sgx* /etc/apt/sources.list.d/*intel* \
+  && apt-get update \
   && apt-get install -y --no-install-recommends software-properties-common \
   && add-apt-repository universe \
   && apt-get update \
@@ -108,11 +107,6 @@ RUN mkdir -p /var/run/sshd \
   && grep -qxF 'AllowTcpForwarding yes' /etc/ssh/sshd_config || echo 'AllowTcpForwarding yes' >> /etc/ssh/sshd_config \
   && grep -qxF 'X11Forwarding yes' /etc/ssh/sshd_config || echo 'X11Forwarding yes' >> /etc/ssh/sshd_config
 
-# Install ripgrep
-RUN curl -fsSL https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep_14.1.1-1_amd64.deb -o /tmp/ripgrep.deb \
-  && dpkg -i /tmp/ripgrep.deb \
-  && rm /tmp/ripgrep.deb
-
 # Install newer GraalVM version (Java 17) for native-image support.
 RUN set -eux; \
   url="https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-${GRAALVM_VERSION}/graalvm-ce-java17-linux-${GRAALVM_ARCH}-${GRAALVM_VERSION}.tar.gz"; \
@@ -132,7 +126,7 @@ RUN update-alternatives --set java /usr/lib/jvm/java-17-openjdk-*/bin/java \
 
 # Install newer Maven version (to support Java 17)
 RUN set -eux; \
-  url="https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"; \
+  url="https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"; \
   curl -fsSL "$url" -o /tmp/maven.tar.gz; \
   tar -xzf /tmp/maven.tar.gz -C /opt; \
   ln -s /opt/apache-maven-${MAVEN_VERSION}/bin/mvn /usr/local/bin/mvn; \
@@ -159,15 +153,7 @@ RUN set -eux; \
   rm -rf /tmp/node-v${NODE_VERSION}-linux-${NODE_ARCH}*; \
   echo "Node.js installed successfully."
 
-# Install Neovim 0.11 (nightly channel)
-RUN set -eux; \
-  curl -fsSL "https://github.com/neovim/neovim-releases/releases/download/v${NEOVIM_VERSION}/nvim-linux-x86_64.tar.gz" -o /tmp/nvim.tar.gz; \
-  tar -xf /tmp/nvim.tar.gz -C /opt; \
-  rm /tmp/nvim.tar.gz; \
-  mv /opt/nvim-linux-x86_64 /opt/nvim; \
-  ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim
-
-# Provide entrypoint that keeps the headless Neovim server alive
+# Provide entrypoint
 COPY .devcontainer/devcontainer-entrypoint.sh /usr/local/bin/devcontainer-entrypoint
 RUN chmod +x /usr/local/bin/devcontainer-entrypoint
 
@@ -185,12 +171,7 @@ RUN mkdir -p /home/${REMOTE_USER}/.storm
 # Install Oh My Zsh for the remote user (non-interactive)
 RUN su - "${REMOTE_USER}" -c 'export RUNZSH=no CHSH=no; sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"'
 
-# Ensure cache directory exists for headless Neovim logs
-RUN TARGET_GROUP="$(cat /etc/devcontainer-group 2>/dev/null || echo "${REMOTE_GROUP}")" \
-  && mkdir -p "${REMOTE_HOME}"/.cache \
-  && chown "${REMOTE_USER}:${TARGET_GROUP}" "${REMOTE_HOME}"/.cache
-
-EXPOSE 2222 6666
+EXPOSE 2222
 
 ENTRYPOINT ["/usr/local/bin/devcontainer-entrypoint"]
 CMD ["/usr/sbin/sshd", "-D", "-e"]
