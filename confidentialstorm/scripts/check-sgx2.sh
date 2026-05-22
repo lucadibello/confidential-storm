@@ -13,7 +13,7 @@ echo "[check-sgx2] Cloning SGX-hardware repository..."
 git clone --depth 1 "$SGX_REPO_URL" "$REPO_DIR"
 
 echo "[check-sgx2] Compiling..."
-gcc "$REPO_DIR/test-sgx.c" -o "$BIN"
+gcc "$REPO_DIR"/*.c -o "$BIN"
 
 echo "[check-sgx2] Running..."
 OUTPUT=$("$BIN" 2>&1)
