@@ -1,0 +1,67 @@
+# Rendered by examples/scripts/grid_search/config_render.py
+# Master-role compose: ZooKeeper + Nimbus + Storm UI + Logviewer.
+# All services use network_mode: host so they share the host's network
+# namespace -- slaves reach Nimbus/ZK by the master's real IP.
+
+x-storm-common: &storm-common
+  image: "$storm_image"
+  restart: unless-stopped
+  network_mode: host
+  environment:
+    STORM_CONF_DIR: /conf
+  volumes:
+    - $local_conf_path:/conf/storm.yaml
+    - storm-data:/data
+
+services:
+  zookeeper:
+    image: "zookeeper:$zookeeper_version"
+    container_name: storm-zookeeper
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      ZOO_TICK_TIME: 2000
+      ZOO_MAX_CLIENT_CNXNS: 60
+      ZOO_4LW_COMMANDS_WHITELIST: "srvr,ruok"
+      ZOO_CLIENT_PORT: $zk_port
+    volumes:
+      - zk-data:/data
+      - zk-datalog:/datalog
+
+  nimbus:
+    <<: *storm-common
+    container_name: storm-nimbus
+    command: ["storm", "nimbus"]
+    depends_on:
+      - zookeeper
+    volumes:
+      - $local_conf_path:/conf/storm.yaml
+      - storm-data:/data
+      - $local_logs_path/nimbus:/logs/storm
+
+  ui:
+    <<: *storm-common
+    container_name: storm-ui
+    command: ["storm", "ui"]
+    depends_on:
+      - nimbus
+    volumes:
+      - $local_conf_path:/conf/storm.yaml
+      - storm-data:/data
+      - $local_logs_path/ui:/logs/storm
+
+  logviewer:
+    <<: *storm-common
+    container_name: storm-logviewer
+    command: ["storm", "logviewer"]
+    depends_on:
+      - nimbus
+    volumes:
+      - $local_conf_path:/conf/storm.yaml
+      - storm-data:/data
+      - $local_logs_path/supervisor:/logs/storm
+
+volumes:
+  storm-data:
+  zk-data:
+  zk-datalog:

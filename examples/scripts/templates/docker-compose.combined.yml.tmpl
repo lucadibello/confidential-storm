@@ -1,0 +1,82 @@
+# Rendered by examples/scripts/grid_search/config_render.py
+# Combined compose: all Storm services on a single host (N=1 degenerate).
+# Uses host networking so behaviour matches multi-host mode.
+
+x-storm-common: &storm-common
+  image: "$storm_image"
+  restart: unless-stopped
+  network_mode: host
+  environment:
+    STORM_CONF_DIR: /conf
+  volumes:
+    - $local_conf_path:/conf/storm.yaml
+    - storm-data:/data
+
+services:
+  zookeeper:
+    image: "zookeeper:$zookeeper_version"
+    container_name: storm-zookeeper
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      ZOO_TICK_TIME: 2000
+      ZOO_MAX_CLIENT_CNXNS: 60
+      ZOO_4LW_COMMANDS_WHITELIST: "srvr,ruok"
+      ZOO_CLIENT_PORT: $zk_port
+    volumes:
+      - zk-data:/data
+      - zk-datalog:/datalog
+
+  nimbus:
+    <<: *storm-common
+    container_name: storm-nimbus
+    command: ["storm", "nimbus"]
+    depends_on:
+      - zookeeper
+    volumes:
+      - $local_conf_path:/conf/storm.yaml
+      - storm-data:/data
+      - $local_logs_path/nimbus:/logs/storm
+
+  ui:
+    <<: *storm-common
+    container_name: storm-ui
+    command: ["storm", "ui"]
+    depends_on:
+      - nimbus
+    volumes:
+      - $local_conf_path:/conf/storm.yaml
+      - storm-data:/data
+      - $local_logs_path/ui:/logs/storm
+
+  supervisor:
+    <<: *storm-common
+    container_name: storm-supervisor
+    command: ["storm", "supervisor"]
+    depends_on:
+      - nimbus
+    devices:
+      - /dev/sgx_enclave:/dev/sgx/enclave
+      - /dev/sgx_provision:/dev/sgx/provision
+    volumes:
+      - $local_conf_path:/conf/storm.yaml
+      - storm-data:/data
+      - /var/run/aesmd/aesm.socket:/var/run/aesmd/aesm.socket
+      - $local_logs_path/supervisor:/logs/storm
+      - $local_logs_path/supervisor/profiler:/logs/storm/profiler
+
+  logviewer:
+    <<: *storm-common
+    container_name: storm-logviewer
+    command: ["storm", "logviewer"]
+    depends_on:
+      - supervisor
+    volumes:
+      - $local_conf_path:/conf/storm.yaml
+      - storm-data:/data
+      - $local_logs_path/supervisor:/logs/storm
+
+volumes:
+  storm-data:
+  zk-data:
+  zk-datalog:

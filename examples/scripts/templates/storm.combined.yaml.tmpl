@@ -1,0 +1,21 @@
+# Rendered by examples/scripts/grid_search/config_render.py
+# Combined role: all services (ZooKeeper, Nimbus, UI, Supervisor, Logviewer)
+# on a single host.  Used for the degenerate N=1 single-host workflow.
+
+storm.zookeeper.servers:
+  - "$master_host"
+storm.zookeeper.port: $zk_port
+
+nimbus.seeds: ["$master_host"]
+nimbus.thrift.port: $nimbus_thrift_port
+
+storm.local.dir: "/data"
+storm.log.dir: "/logs/storm"
+
+storm.local.hostname: "$master_host"
+
+ui.port: $ui_port
+logviewer.port: $logviewer_port
+
+supervisor.slots.ports:
+$slot_ports_yaml

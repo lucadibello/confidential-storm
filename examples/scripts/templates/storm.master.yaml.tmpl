@@ -1,0 +1,21 @@
+# Rendered by examples/scripts/grid_search/config_render.py
+# Master role: Nimbus + ZooKeeper + Storm UI + Logviewer.
+# Master does NOT run a Supervisor in multi-host mode.
+
+storm.zookeeper.servers:
+  - "$master_host"
+storm.zookeeper.port: $zk_port
+
+nimbus.seeds: ["$master_host"]
+nimbus.thrift.port: $nimbus_thrift_port
+
+storm.local.dir: "/data"
+storm.log.dir: "/logs/storm"
+
+# Critical for multi-host: tells Storm which address other nodes should use
+# to reach this host.  Without this, Storm advertises the container's
+# internal hostname and inter-node netty transport fails.
+storm.local.hostname: "$master_host"
+
+ui.port: $ui_port
+logviewer.port: $logviewer_port

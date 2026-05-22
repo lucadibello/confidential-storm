@@ -1,0 +1,43 @@
+# Rendered by examples/scripts/grid_search/config_render.py
+# Slave-role compose: Supervisor + Logviewer.  Uses host networking so the
+# supervisor binds the host's real IP for worker slot ports.
+#
+# The "$storm_image" tag must already exist on this slave (built locally,
+# loaded via `docker load`, or pulled from a registry).
+
+services:
+  supervisor:
+    image: "$storm_image"
+    container_name: storm-supervisor
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      STORM_CONF_DIR: /conf
+    command: ["storm", "supervisor"]
+    devices:
+      - /dev/sgx_enclave:/dev/sgx/enclave
+      - /dev/sgx_provision:/dev/sgx/provision
+    volumes:
+      - $remote_conf_path:/conf/storm.yaml
+      - storm-data:/data
+      - /var/run/aesmd/aesm.socket:/var/run/aesmd/aesm.socket
+      - $remote_logs_path/supervisor:/logs/storm
+      - $remote_logs_path/supervisor/profiler:/logs/storm/profiler
+
+  logviewer:
+    image: "$storm_image"
+    container_name: storm-logviewer
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      STORM_CONF_DIR: /conf
+    command: ["storm", "logviewer"]
+    depends_on:
+      - supervisor
+    volumes:
+      - $remote_conf_path:/conf/storm.yaml
+      - storm-data:/data
+      - $remote_logs_path/supervisor:/logs/storm
+
+volumes:
+  storm-data:
