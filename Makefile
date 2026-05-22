@@ -2,6 +2,7 @@
 WORKDIR := confidentialstorm
 ROOT_POM := $(WORKDIR)/pom.xml
 RUNNER_SCRIPT := $(WORKDIR)/run-local.sh
+SGX_CHECK_SCRIPT := $(WORKDIR)/scripts/check-sgx2.sh
 
 MVN ?= mvn
 MAVEN_GOALS ?= install
@@ -11,7 +12,8 @@ ENCLAVE_PROFILE ?= -Pnative
 
 .PHONY: all build help clean common enclave host \
         test test-enclave test-common test-host \
-        test-debug test-method test-method-debug
+        test-debug test-method test-method-debug \
+        check-sgx2
 
 all: build
 
@@ -34,6 +36,9 @@ help:
 	@echo "                            - Run one method via Surefire (uses -Dtest=FQCN#METHOD)."
 	@echo "  make test-method-debug MODULE=<m> CLASS=<FQCN> METHOD=<name>"
 	@echo "                            - Run one method via ConsoleLauncher (raw logs)."
+	@echo ""
+	@echo "SGX targets:"
+	@echo "  make check-sgx2           - Check if this machine supports SGX2"
 	@echo ""
 	@echo "Variables:"
 	@echo "  MVN=<path>                Override Maven binary (default: mvn)"
@@ -113,3 +118,9 @@ test-method-debug:
 		--select-method="$(CLASS)#$(METHOD)" \
 		--disable-banner \
 		--details=testfeed
+
+# ------------------------------------------------------------------
+# SGX targets
+# ------------------------------------------------------------------
+check-sgx2:
+	@bash $(SGX_CHECK_SCRIPT)
