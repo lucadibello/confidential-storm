@@ -16,8 +16,8 @@ fi
 
 # setup git config for the dev user
 if [ -n "${GIT_NAME:-}" ] && [ -n "${GIT_EMAIL:-}" ]; then
-  sudo -u "$REMOTE_USER" git config --global user.name "$GIT_NAME"
-  sudo -u "$REMOTE_USER" git config --global user.email "$GIT_EMAIL"
+  sudo -H -u "$REMOTE_USER" git config --global user.name "$GIT_NAME"
+  sudo -H -u "$REMOTE_USER" git config --global user.email "$GIT_EMAIL"
 fi
 
 # Bootstrap headless Neovim watchdog script
