@@ -1,7 +1,5 @@
 version: "3"
 
-dotenv: [".env"]
-
 vars:
   WORKSPACE: .
   SESSION: dev
@@ -37,6 +35,8 @@ tasks:
   devcontainer-build:
     desc: Build the devcontainer image for this workspace
     preconditions:
+      - sh: test -f .env
+        msg: ".env file not found — copy .env.example and fill in your secrets"
       - sh: test -S "$SSH_AUTH_SOCK"
         msg: "SSH_AUTH_SOCK is not set or does not point to a valid socket"
     cmds:
@@ -46,6 +46,8 @@ tasks:
     desc: Start (or reuse) the devcontainer for this workspace
     deps: [ensure-network]
     preconditions:
+      - sh: test -f .env
+        msg: ".env file not found — copy .env.example and fill in your secrets"
       - sh: test -S "$SSH_AUTH_SOCK"
         msg: "SSH_AUTH_SOCK is not set or does not point to a valid socket"
     cmds:
