@@ -7,9 +7,9 @@ MAVEN_GOALS ?= package
 MAVEN_FLAGS ?= -DskipTests
 ENCLAVE_PROFILE ?= -Pnative
 
-TOPOLOGY_JAR   := host/target/synthetic-dp-histogram-host-1.0-SNAPSHOT.jar
+TOPOLOGY_JAR   := host/target/synthetic-benchmark-confidential-host-1.0-SNAPSHOT.jar
 TOPOLOGY_CLASS := ch.usi.inf.examples.synthetic_dp.host.SyntheticTopology
-TOPOLOGY_NAME  ?= SyntheticDP1
+TOPOLOGY_NAME  ?= SyntheticDP
 
 # Topology arguments passed to the topology main class (e.g. --num-users 100000 --parallelism 2)
 TOPOLOGY_ARGS ?=

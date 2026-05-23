@@ -5,13 +5,13 @@
 
     <parent>
         <groupId>ch.usi.inf.examples</groupId>
-        <artifactId>synthetic-dp-histogram</artifactId>
+        <artifactId>synthetic-benchmark-confidential</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>synthetic-dp-histogram-enclave</artifactId>
+    <artifactId>synthetic-benchmark-confidential-enclave</artifactId>
     <packaging>jar</packaging>
-    <name>Synthetic DP Histogram - Enclave</name>
+    <name>Synthetic Benchmark (Confidential) - Enclave</name>
 
     <properties>
         <svm.maven.version>0.11.2</svm.maven.version>
@@ -165,7 +165,7 @@
     <dependencies>
         <dependency>
             <groupId>ch.usi.inf.examples</groupId>
-            <artifactId>synthetic-dp-histogram-common</artifactId>
+            <artifactId>synthetic-benchmark-confidential-common</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
         <dependency>

@@ -28,17 +28,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-JAR="$PROJECT_DIR/host/target/synthetic-dp-histogram-host-1.0-SNAPSHOT.jar"
+JAR="$PROJECT_DIR/host/target/synthetic-benchmark-confidential-host-1.0-SNAPSHOT.jar"
 TOPOLOGY_CLASS="ch.usi.inf.examples.synthetic_dp.host.SyntheticTopology"
 
 # --- Required arguments ---
 if [ $# -lt 2 ]; then
-    echo "Usage: $0 <max_time_steps> <run_id> [options]"
-    echo ""
-    echo "Example: $0 100 1"
-    echo "Example: NUM_USERS=100000 PARALLELISM=1 $0 100 1"
-    echo "Example: MODE=cluster $0 100 1"
-    exit 1
+  echo "Usage: $0 <max_time_steps> <run_id> [options]"
+  echo ""
+  echo "Example: $0 100 1"
+  echo "Example: NUM_USERS=100000 PARALLELISM=1 $0 100 1"
+  echo "Example: MODE=cluster $0 100 1"
+  exit 1
 fi
 
 MAX_TIME_STEPS="$1"
@@ -48,8 +48,8 @@ shift 2
 # --- Execution mode ---
 MODE="${MODE:-local}"
 if [ "$MODE" != "local" ] && [ "$MODE" != "cluster" ]; then
-    echo "ERROR: MODE must be 'local' or 'cluster' (got: '$MODE')"
-    exit 1
+  echo "ERROR: MODE must be 'local' or 'cluster' (got: '$MODE')"
+  exit 1
 fi
 
 # --- Configurable parameters (with defaults) ---
@@ -64,9 +64,9 @@ EXTRA_FLAGS="${EXTRA_FLAGS:-}"
 
 # --- Verify JAR exists ---
 if [ ! -f "$JAR" ]; then
-    echo "ERROR: JAR not found at $JAR"
-    echo "Run 'make build' first."
-    exit 1
+  echo "ERROR: JAR not found at $JAR"
+  echo "Run 'make build' first."
+  exit 1
 fi
 
 # --- Print configuration ---
@@ -83,45 +83,45 @@ echo " Seed:            $SEED"
 echo " Mu:              $MU"
 echo " Output:          data/synthetic-report-run${RUN_ID}.txt"
 if [ -n "$EXTRA_FLAGS" ]; then
-echo " Extra flags:     $EXTRA_FLAGS"
+  echo " Extra flags:     $EXTRA_FLAGS"
 fi
 echo "=============================================="
 echo ""
 
 # --- Build topology arguments ---
 TOPO_ARGS=(
-    --num-users "$NUM_USERS"
-    --num-keys "$NUM_KEYS"
-    --runtime-seconds "$RUNTIME_SECONDS"
-    --run-id "$RUN_ID"
-    --seed "$SEED"
-    --mu "$MU"
-    --max-time-steps "$MAX_TIME_STEPS"
-    --parallelism "$PARALLELISM"
-    --ground-truth "$GROUND_TRUTH"
+  --num-users "$NUM_USERS"
+  --num-keys "$NUM_KEYS"
+  --runtime-seconds "$RUNTIME_SECONDS"
+  --run-id "$RUN_ID"
+  --seed "$SEED"
+  --mu "$MU"
+  --max-time-steps "$MAX_TIME_STEPS"
+  --parallelism "$PARALLELISM"
+  --ground-truth "$GROUND_TRUTH"
 )
 
 # --- Run ---
 cd "$PROJECT_DIR"
 
 if [ "$MODE" = "local" ]; then
-    LOCAL_TTL=$(( RUNTIME_SECONDS + 30 ))
-    sudo storm local \
-        --local-ttl "$LOCAL_TTL" \
-        "$JAR" \
-        "$TOPOLOGY_CLASS" \
-        -- \
-        "${TOPO_ARGS[@]}" \
-        $EXTRA_FLAGS
+  LOCAL_TTL=$((RUNTIME_SECONDS + 30))
+  sudo storm local \
+    --local-ttl "$LOCAL_TTL" \
+    "$JAR" \
+    "$TOPOLOGY_CLASS" \
+    -- \
+    "${TOPO_ARGS[@]}" \
+    $EXTRA_FLAGS
 else
-    storm jar "$JAR" "$TOPOLOGY_CLASS" \
-        "${TOPO_ARGS[@]}" \
-        $EXTRA_FLAGS
+  storm jar "$JAR" "$TOPOLOGY_CLASS" \
+    "${TOPO_ARGS[@]}" \
+    $EXTRA_FLAGS
 fi
 
 echo ""
 if [ "$MODE" = "local" ]; then
-    echo "Run $RUN_ID complete. Results: data/synthetic-report-run${RUN_ID}.txt"
+  echo "Run $RUN_ID complete. Results: data/synthetic-report-run${RUN_ID}.txt"
 else
-    echo "Run $RUN_ID submitted to cluster. Monitor with: make cluster-status"
+  echo "Run $RUN_ID submitted to cluster. Monitor with: make cluster-status"
 fi

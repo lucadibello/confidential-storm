@@ -73,12 +73,12 @@ FRAMEWORK_ROOT = EXAMPLES_DIR.parent
 TEMPLATES_DIR = SCRIPT_DIR / "templates"
 
 BASELINE_PROJECT = EXAMPLES_DIR / "synthetic-benchmark-baseline"
-ENCLAVE_PROJECT = EXAMPLES_DIR / "synthetic-dp-histogram"
+ENCLAVE_PROJECT = EXAMPLES_DIR / "synthetic-benchmark-confidential"
 
 BASELINE_JAR = BASELINE_PROJECT / "target" / "synthetic-benchmark-baseline-1.0-SNAPSHOT.jar"
 BASELINE_CLASS = "ch.usi.inf.examples.synthetic_baseline.SyntheticBaselineTopology"
 
-ENCLAVE_JAR = ENCLAVE_PROJECT / "host" / "target" / "synthetic-dp-histogram-host-1.0-SNAPSHOT.jar"
+ENCLAVE_JAR = ENCLAVE_PROJECT / "host" / "target" / "synthetic-benchmark-confidential-host-1.0-SNAPSHOT.jar"
 ENCLAVE_CLASS = "ch.usi.inf.examples.synthetic_dp.host.SyntheticTopology"
 
 

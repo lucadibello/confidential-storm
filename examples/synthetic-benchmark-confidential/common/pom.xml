@@ -5,13 +5,13 @@
 
     <parent>
         <groupId>ch.usi.inf.examples</groupId>
-        <artifactId>synthetic-dp-histogram</artifactId>
+        <artifactId>synthetic-benchmark-confidential</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>synthetic-dp-histogram-common</artifactId>
+    <artifactId>synthetic-benchmark-confidential-common</artifactId>
     <packaging>jar</packaging>
-    <name>Synthetic DP Histogram - Common</name>
+    <name>Synthetic Benchmark (Confidential) - Common</name>
 
     <dependencies>
         <dependency>
