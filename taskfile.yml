@@ -9,11 +9,11 @@ vars:
   TUNNEL_SRV: sws01
   TUNNEL_USER: luca
   SSH_TUNNEL_REMOTE_PORT: 2222
-  NVIM_TUNNEL_REMOTE_PORT: 6666
   SSH_TUNNEL_LOCAL_PORT: 8022
-  NVIM_TUNNEL_LOCAL_PORT: 8066
   STORM_UI_REMOTE_PORT: 9090
   STORM_UI_LOCAL_PORT: 9090
+  STORM_NETWORK: storm-net
+
 tasks:
   devcontainer:
     desc: Build, start, and attach to the devcontainer
@@ -28,6 +28,12 @@ tasks:
       - task: devcontainer-down
       - task: devcontainer
 
+  ensure-network:
+    desc: Create the Docker network required by the devcontainer (idempotent)
+    internal: true
+    cmds:
+      - docker network create {{.STORM_NETWORK}} 2>/dev/null || true
+
   devcontainer-build:
     desc: Build the devcontainer image for this workspace
     preconditions:
@@ -38,6 +44,7 @@ tasks:
 
   devcontainer-up:
     desc: Start (or reuse) the devcontainer for this workspace
+    deps: [ensure-network]
     preconditions:
       - sh: test -S "$SSH_AUTH_SOCK"
         msg: "SSH_AUTH_SOCK is not set or does not point to a valid socket"
@@ -60,7 +67,6 @@ tasks:
     cmds:
       - devcontainer exec --workspace-folder {{.WORKSPACE}} tmux new-session -A -s {{.SESSION}}
 
-
   devcontainer-down:
     desc: Stop and remove the devcontainer for this workspace
     cmds:
@@ -71,11 +77,6 @@ tasks:
     desc: Expose the devcontainer’s SSH port locally so you can connect via SSH without extra steps
     cmds:
       - ssh -N -L {{.SSH_TUNNEL_LOCAL_PORT}}:127.0.0.1:{{.SSH_TUNNEL_REMOTE_PORT}} {{.TUNNEL_USER}}@{{.TUNNEL_SRV}}
-
-  tunnel-nvim:
-    desc: Forward the devcontainer’s Neovim headless server port to your machine for remote-UI access
-    cmds:
-      - ssh -N -L {{.NVIM_TUNNEL_LOCAL_PORT}}:127.0.0.1:{{.NVIM_TUNNEL_REMOTE_PORT}} {{.TUNNEL_USER}}@{{.TUNNEL_SRV}}
 
   tunnel-storm-ui:
     desc: Forward the Storm web UI port from the remote server to your local machine
