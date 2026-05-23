@@ -20,6 +20,8 @@
     "--device=/dev/sgx_enclave:/dev/sgx/enclave",
     "--device=/dev/sgx_provision:/dev/sgx/provision",
     "--device=/dev/sgx_vepc:/dev/sgx/vepc",
+    "--env-file",
+    ".env",
     "--network",
     "storm-net",
     "--publish",
