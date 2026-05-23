@@ -93,9 +93,6 @@ RUN GROUP_NAME="${REMOTE_GROUP}" \
   && chmod 0440 /etc/sudoers.d/90-"${REMOTE_USER}" \
   && echo "${GROUP_NAME}" > /etc/devcontainer-group
 
-# Update owner of image built-in toolings
-RUN chown -R "${REMOTE_USER}:${GROUP_NAME}" /root
-
 # SSH server configuration
 RUN mkdir -p /var/run/sshd \
   && ssh-keygen -A \
@@ -164,6 +161,9 @@ RUN set -eux; \
   rm -f storm.tgz; \
   ln -s "/opt/apache-storm-${STORM_VERSION}" "${STORM_HOME}"; \
   ln -s "${STORM_HOME}/bin/storm" /usr/local/bin/storm
+
+# Hand ownership of /root (tools installed there by root) to the dev user
+RUN chown -R "${REMOTE_USER}:" /root
 
 # Create Storm client config directory (storm.yaml is bind-mounted at runtime via devcontainer.json)
 RUN mkdir -p /home/${REMOTE_USER}/.storm
