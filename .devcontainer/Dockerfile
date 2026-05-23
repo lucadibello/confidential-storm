@@ -162,7 +162,29 @@ RUN set -eux; \
   ln -s "/opt/apache-storm-${STORM_VERSION}" "${STORM_HOME}"; \
   ln -s "${STORM_HOME}/bin/storm" /usr/local/bin/storm
 
-# Hand ownership of /root (tools installed there by root) to the dev user
+# Remove the SDK bundled in the base image and rebuild from the fork
+RUN set -eux; \
+  rm -rf /opt/javaenclave; \
+  git clone https://github.com/lucadibello/teaclave-java-tee-sdk.git /tmp/teaclave-sdk; \
+  cd /tmp/teaclave-sdk; \
+  mvn install:install-file \
+    -DgroupId=org.graalvm.compiler \
+    -DartifactId=graal-processor \
+    -Dversion=${GRAALVM_VERSION} \
+    -Dpackaging=jar \
+    -Dfile="${GRAALVM_HOME}/lib/graal/graal-processor.jar"; \
+  export JAVA_HOME="${GRAALVM_HOME}"; \
+  mkdir -p /opt/javaenclave; \
+  mvn -f third-party-libs/bouncycastle-native/pom.xml clean install -DskipTests; \
+  mvn -f sdk/pom.xml clean install -DskipTests; \
+  cp -r sdk/native/bin     /opt/javaenclave/; \
+  cp -r sdk/native/config  /opt/javaenclave/; \
+  cp -r sdk/native/stubs   /opt/javaenclave/; \
+  cp -r sdk/native/script/build_app /opt/javaenclave/; \
+  rm -rf /tmp/teaclave-sdk; \
+  echo "TeaClave SDK build complete."
+
+# Hand ownership of /root (tools + Maven cache installed there by root) to the dev user
 RUN chown -R "${REMOTE_USER}:" /root
 
 # Create Storm client config directory (storm.yaml is bind-mounted at runtime via devcontainer.json)
