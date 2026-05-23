@@ -5,8 +5,8 @@
     "context": "..",
     "args": {
       "REMOTE_USER": "dev",
-      "REMOTE_UID": "1010",
-      "REMOTE_GID": "1010",
+      "REMOTE_UID": "${localEnv:REMOTE_UID}",
+      "REMOTE_GID": "${localEnv:REMOTE_GID}",
       "NODE_VERSION": "16.20.2",
       "STORM_VERSION": "2.8.3",
       "GIT_EMAIL": "lucadibello@proton.me",
