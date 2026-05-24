@@ -11,6 +11,8 @@ for SLAVE in 10.233.26.41 10.233.26.42 10.233.26.43; do
           sort -u -o /home/dev/.ssh/authorized_keys 
 /home/dev/.ssh/authorized_keys && \
           chmod 600 /home/dev/.ssh/authorized_keys'"
+  # Copy the master's public key to the slave's SSH server (runs on master)
+  ssh-copy-id -i ~/.ssh/id_ed25519.pub -p 22 luca@"$SLAVE"
 
   # Verify the two-hop auth (all three commands run locally on the master)
   ssh -N -L 12222:127.0.0.1:2222 luca@"$SLAVE" &
