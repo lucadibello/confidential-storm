@@ -62,12 +62,15 @@ class ConfigRenderer(object):
 
     # ---- Multi-host rendering ----------------------------------------------
 
-    def render_multi_host(self, topology, local_logs_dir):
+    def render_multi_host(self, topology, host_logs_dir):
         # type: (ClusterTopology, Path) -> ClusterRender
         """Render master compose + per-slave compose for a multi-host cluster.
 
-        local_logs_dir: directory on the master where Storm logs land
-            (./data/storm-logs/{nimbus,ui,supervisor}/).
+        host_logs_dir: storm-logs directory as the **host** Docker daemon sees
+            it (e.g. /home/luca/confidential-storm/data/storm-logs).  This is
+            used for bind-mount paths in docker-compose.yml files so that the
+            host daemon can resolve them correctly when docker compose runs
+            inside the devcontainer with Docker-outside-of-Docker.
         """
         out = ClusterRender()
         master_dir = self.output_dir / "master"
@@ -85,15 +88,25 @@ class ConfigRenderer(object):
         ))
         out.master_storm_yaml = RenderedFile(master_yaml_path)
 
-        # Master compose
+        # Master compose — volumes use the host-side path so the host Docker
+        # daemon can resolve them when docker compose runs inside the devcontainer.
         master_compose_path = master_dir / "docker-compose.yml"
+        master_host_logs = (
+            "{}/data/storm-logs".format(topology.master.host_project_dir)
+            if topology.master.host_project_dir
+            else str(host_logs_dir.resolve()))
+        master_host_conf = (
+            str(Path(topology.master.host_project_dir) / "data" / "cluster"
+                / master_yaml_path.relative_to(self.output_dir.parent))
+            if topology.master.host_project_dir
+            else str(master_yaml_path.resolve()))
         master_compose_path.write_text(_read_template(
             self.templates_dir, "docker-compose.master.yml.tmpl").substitute(
                 storm_image=self.storm_image,
                 zookeeper_version=self.zookeeper_version,
                 zk_port=topology.master.zk_port,
-                local_conf_path=str(master_yaml_path.resolve()),
-                local_logs_path=str(local_logs_dir.resolve()),
+                local_conf_path=master_host_conf,
+                local_logs_path=master_host_logs,
         ))
         out.master_compose = RenderedFile(master_compose_path)
 
@@ -112,17 +125,23 @@ class ConfigRenderer(object):
                     logviewer_port=topology.master.logviewer_port,
                     slot_ports_yaml=_slot_ports_yaml(slave.slot_ports),
             ))
+            # SCP target uses the devcontainer path (remote_data_dir).
             out.slave_storm_yamls[slave.hostname] = RenderedFile(
                 slave_yaml_local,
                 remote_path="{}/conf/storm.yaml".format(slave.remote_data_dir))
 
+            # Volume paths in the compose file must be HOST paths so the host
+            # Docker daemon resolves them correctly (DooD).  Fall back to
+            # remote_data_dir if host_project_dir was not discovered yet.
+            host_base = slave.host_project_dir or slave.remote_data_dir
             slave_compose_local = sdir / "docker-compose.yml"
             slave_compose_local.write_text(_read_template(
                 self.templates_dir, "docker-compose.slave.yml.tmpl").substitute(
                     storm_image=self.storm_image,
-                    remote_conf_path="{}/conf/storm.yaml".format(slave.remote_data_dir),
-                    remote_logs_path="{}/data/storm-logs".format(slave.remote_data_dir),
+                    remote_conf_path="{}/conf/storm.yaml".format(host_base),
+                    remote_logs_path="{}/data/storm-logs".format(host_base),
             ))
+            # SCP target uses the devcontainer path (same physical file via bind-mount).
             out.slave_composes[slave.hostname] = RenderedFile(
                 slave_compose_local,
                 remote_path="{}/docker-compose.yml".format(slave.remote_data_dir))

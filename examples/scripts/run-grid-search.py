@@ -223,7 +223,10 @@ def parse_args():
                    help="SSH port the devcontainer listens on (on the outer host's "
                         "127.0.0.1, default: 2222).")
     p.add_argument("--remote-data-dir", type=str,
-                   default=env_str("REMOTE_DATA_DIR", "/opt/confidential-storm"))
+                   default=env_str("REMOTE_DATA_DIR", "/workspaces/confidential-storm"),
+                   help="Path inside the slave devcontainer used for SCP/rsync. "
+                        "The host-side path for docker volume mounts is discovered "
+                        "automatically via docker inspect.")
     p.add_argument("--slot-ports", type=str,
                    default=env_str("SLOT_PORTS", "6700,6701,6702,6703"))
     p.add_argument("--rsync-bwlimit", type=int,
@@ -430,10 +433,27 @@ def main():
     cluster_root.mkdir(parents=True, exist_ok=True)
     staging_root.mkdir(parents=True, exist_ok=True)
 
-    # Storm logs dir on master (the legacy ./data/storm-logs/{nimbus,ui,supervisor}/)
+    # Storm logs dir — devcontainer-side path used for reading/archiving.
     local_logs_dir = FRAMEWORK_ROOT / "data" / "storm-logs"
     for sub in ("nimbus", "ui", "supervisor", "supervisor/profiler", "logviewer"):
         (local_logs_dir / sub).mkdir(parents=True, exist_ok=True)
+
+    # Discover the master's host-side project root so docker-compose volume
+    # paths in the rendered master compose use the path the host daemon sees,
+    # not the /workspaces/... path that only exists inside the devcontainer.
+    try:
+        master.discover_host_project_dir()
+        print("[grid-search] Master host project dir: {}".format(master.host_project_dir))
+    except RuntimeError as exc:
+        print("[grid-search] WARNING: {}".format(exc))
+        print("[grid-search]          Falling back to devcontainer path for "
+              "master compose volumes — Storm containers may not start.")
+
+    # host_logs_dir is the path the host Docker daemon will bind-mount for logs.
+    host_logs_dir = (
+        Path(master.host_project_dir) / "data" / "storm-logs"
+        if master.host_project_dir
+        else local_logs_dir)
 
     # ---- Open SSH tunnels for all remote slaves upfront ----
     if is_multi_host:
@@ -446,8 +466,8 @@ def main():
                   "devcontainer is running on each slave.".format(exc))
             sys.exit(1)
         for s in remote_slaves:
-            print("[grid-search]   {} -> localhost:{}".format(
-                s.hostname, s._local_forward_port))
+            print("[grid-search]   {} -> localhost:{} (host dir: {})".format(
+                s.hostname, s._local_forward_port, s.host_project_dir))
         print()
 
     # ---- Scale sweep ----
@@ -494,10 +514,10 @@ def main():
             zookeeper_version=args.zookeeper_version,
         )
         if combined_mode:
-            render = renderer.render_combined(topology, local_logs_dir, active_slaves[0])
+            render = renderer.render_combined(topology, host_logs_dir, active_slaves[0])
             storm_conf_dir = render.combined_storm_yaml.local_path.parent
         else:
-            render = renderer.render_multi_host(topology, local_logs_dir)
+            render = renderer.render_multi_host(topology, host_logs_dir)
             storm_conf_dir = render.master_storm_yaml.local_path.parent
 
         # Per-N staging

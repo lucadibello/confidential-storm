@@ -108,9 +108,43 @@ class SupervisorHost(object):
         self.rsync_bwlimit = rsync_bwlimit
         self.is_local = _is_local(hostname)
 
+        # Populated by discover_host_project_dir() after the tunnel opens.
+        # Used for docker-compose volume paths (host daemon resolves these as
+        # HOST filesystem paths, not devcontainer paths).
+        self.host_project_dir = None  # type: str
+
         # Tunnel state — populated by open_tunnel()
         self._local_forward_port = None  # type: int
         self._tunnel_proc = None  # type: subprocess.Popen
+
+    # ---- Host path discovery -----------------------------------------------
+
+    def discover_host_project_dir(self):
+        # type: () -> str
+        """Return the host-side project root by reading the devcontainer label.
+
+        The devcontainer is started by VS Code with:
+          -l devcontainer.local_folder=<host-path>
+        Running ``docker inspect`` on the devcontainer from inside it (via the
+        DooD socket) gives us the HOST filesystem path, which is what the host
+        Docker daemon needs for volume mounts in generated compose files.
+
+        Sets ``self.host_project_dir`` as a side-effect and returns the path.
+        Raises RuntimeError on failure.
+        """
+        proc = self.run(
+            "docker", "inspect", "confidential-storm-devcontainer",
+            "--format", "{{ index .Config.Labels \"devcontainer.local_folder\" }}",
+            capture_output=True,
+        )
+        path = (proc.stdout or "").strip()
+        if not path:
+            raise RuntimeError(
+                "Could not discover host project dir on {} "
+                "(docker inspect returned empty; is the devcontainer running "
+                "and the docker socket mounted?)".format(self.hostname))
+        self.host_project_dir = path
+        return path
 
     # ---- Tunnel lifecycle -------------------------------------------------
 
@@ -328,6 +362,23 @@ class MasterHost(object):
         self.zk_port = zk_port
         self.ui_port = ui_port
         self.logviewer_port = logviewer_port
+        self.host_project_dir = None  # type: str
+
+    def discover_host_project_dir(self):
+        # type: () -> str
+        """Return the host-side project root by reading the local devcontainer label."""
+        proc = subprocess.run(
+            ["docker", "inspect", "confidential-storm-devcontainer",
+             "--format", "{{ index .Config.Labels \"devcontainer.local_folder\" }}"],
+            capture_output=True, text=True)
+        path = (proc.stdout or "").strip()
+        if not path:
+            raise RuntimeError(
+                "Could not discover host project dir on master "
+                "(docker inspect returned empty; is the docker socket mounted "
+                "in this devcontainer?)")
+        self.host_project_dir = path
+        return path
 
 
 class ClusterTopology(object):
@@ -348,7 +399,7 @@ class ClusterTopology(object):
 
     def open_tunnels(self, wait_timeout=20):
         # type: (int) -> None
-        """Open SSH tunnels for every non-local slave in parallel."""
+        """Open SSH tunnels and discover host project dirs for every non-local slave."""
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         remote = [s for s in self.slaves if not s.is_local]
@@ -357,6 +408,7 @@ class ClusterTopology(object):
 
         def _open(slave):
             slave.open_tunnel(wait_timeout=wait_timeout)
+            slave.discover_host_project_dir()
             return slave.hostname
 
         with ThreadPoolExecutor(max_workers=len(remote)) as ex:
