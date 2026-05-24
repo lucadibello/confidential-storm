@@ -145,11 +145,14 @@ class SupervisorHost(object):
         )
         path = (proc.stdout or "").strip()
         if not path:
+            detail = (proc.stderr or "").strip()
             raise RuntimeError(
                 "Could not discover host project dir on {} "
                 "(no bind-mount for /workspaces/confidential-storm found; "
                 "is confidential-storm-devcontainer running with the workspace "
-                "mount and the docker socket accessible?)".format(self.hostname))
+                "mount and the docker socket accessible?){}"
+                .format(self.hostname,
+                        "\n  docker stderr: " + detail if detail else ""))
         self.host_project_dir = path
         return path
 
@@ -392,11 +395,13 @@ class MasterHost(object):
             universal_newlines=True)
         path = (proc.stdout or "").strip()
         if not path:
+            detail = (proc.stderr or "").strip()
             raise RuntimeError(
                 "Could not discover host project dir on master "
                 "(no bind-mount for /workspaces/confidential-storm found; "
                 "is confidential-storm-devcontainer running with the workspace "
-                "mount and /var/run/docker.sock accessible?)")
+                "mount and /var/run/docker.sock accessible?){}"
+                .format("\n  docker stderr: " + detail if detail else ""))
         self.host_project_dir = path
         return path
 
