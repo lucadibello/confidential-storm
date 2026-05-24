@@ -184,6 +184,20 @@ RUN set -eux; \
   rm -rf /tmp/teaclave-sdk; \
   echo "TeaClave SDK build complete."
 
+# Install Docker CLI + Compose v2 plugin (DooD: socket bind-mounted at runtime via devcontainer.json).
+# Only the CLI is needed here; the daemon runs on the outer host.
+ARG DOCKER_COMPOSE_VERSION=2.29.7
+RUN set -eux; \
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -; \
+  add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu bionic stable"; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends docker-ce-cli; \
+  rm -rf /var/lib/apt/lists/*; \
+  mkdir -p /usr/local/lib/docker/cli-plugins; \
+  curl -fsSL "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose; \
+  chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
 # Hand ownership of /root (tools + Maven cache installed there by root) to the dev user
 RUN chown -R "${REMOTE_USER}:" /root
 
