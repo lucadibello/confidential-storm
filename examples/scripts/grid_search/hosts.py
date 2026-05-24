@@ -136,7 +136,7 @@ class SupervisorHost(object):
             "docker", "inspect", "confidential-storm-devcontainer",
             "--format", "{{ index .Config.Labels \"devcontainer.local_folder\" }}",
             capture_output=True,
-        )
+        )  # capture_output forwarded to self.run which handles the 3.6 compat
         path = (proc.stdout or "").strip()
         if not path:
             raise RuntimeError(
@@ -250,8 +250,10 @@ class SupervisorHost(object):
         capture_output = bool(kwargs.pop("capture_output", False))
         timeout = kwargs.pop("timeout", None)
         argv = self.ssh_cmd(*cmd)
-        return subprocess.run(argv, check=check, capture_output=capture_output,
-                              timeout=timeout, text=True)
+        pipe = subprocess.PIPE if capture_output else None
+        return subprocess.run(argv, check=check,
+                              stdout=pipe, stderr=pipe,
+                              timeout=timeout, universal_newlines=True)
 
     # ---- File transfer -----------------------------------------------------
 
@@ -312,7 +314,8 @@ class SupervisorHost(object):
         cmd.extend([src, str(local_dir) + "/"])
 
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  universal_newlines=True, timeout=120)
         except subprocess.TimeoutExpired:
             stats.failed_hosts.append(self.hostname)
             return stats
@@ -341,7 +344,8 @@ class SupervisorHost(object):
         """True iff the tunnel is open, SSH into the devcontainer works, and docker responds."""
         if self.is_local:
             return subprocess.run(["docker", "version"],
-                                  capture_output=True).returncode == 0
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE).returncode == 0
         if self._local_forward_port is None:
             return False
         try:
@@ -370,7 +374,8 @@ class MasterHost(object):
         proc = subprocess.run(
             ["docker", "inspect", "confidential-storm-devcontainer",
              "--format", "{{ index .Config.Labels \"devcontainer.local_folder\" }}"],
-            capture_output=True, text=True)
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            universal_newlines=True)
         path = (proc.stdout or "").strip()
         if not path:
             raise RuntimeError(
