@@ -38,5 +38,6 @@
   "containerEnv": {
     "SSH_AUTH_SOCK": "/ssh-agent"
   },
-  "postCreateCommand": "sudo passwd dev"
+  "postCreateCommand": "sudo passwd dev",
+  "postStartCommand": "sudo chmod 666 /var/run/docker.sock || true"
 }
