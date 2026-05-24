@@ -185,14 +185,13 @@ RUN set -eux; \
   echo "TeaClave SDK build complete."
 
 # Install Docker CLI + Compose v2 plugin (DooD: socket bind-mounted at runtime via devcontainer.json).
-# Only the CLI is needed here; the daemon runs on the outer host.
+# Static binaries are used instead of the apt repo because Ubuntu 18.04 only
+# has Docker 24 (API 1.43) which is too old for Docker 25+ daemons (min API 1.44).
+ARG DOCKER_VERSION=27.5.1
 ARG DOCKER_COMPOSE_VERSION=2.29.7
 RUN set -eux; \
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -; \
-  add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu bionic stable"; \
-  apt-get update; \
-  apt-get install -y --no-install-recommends docker-ce-cli; \
-  rm -rf /var/lib/apt/lists/*; \
+  curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz" \
+    | tar -xz --strip-components=1 -C /usr/local/bin docker/docker; \
   mkdir -p /usr/local/lib/docker/cli-plugins; \
   curl -fsSL "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64" \
     -o /usr/local/lib/docker/cli-plugins/docker-compose; \
