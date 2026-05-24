@@ -369,13 +369,17 @@ class MasterHost(object):
     """The orchestrator node.  Runs Nimbus + ZooKeeper + Storm UI."""
 
     def __init__(self, hostname, nimbus_thrift_port=6627, zk_port=2181,
-                 ui_port=8080, logviewer_port=8000):
-        # type: (str, int, int, int, int) -> None
+                 ui_port=8080, logviewer_port=8000,
+                 container_project_dir="/workspaces/confidential-storm"):
+        # type: (str, int, int, int, int, str) -> None
         self.hostname = hostname
         self.nimbus_thrift_port = nimbus_thrift_port
         self.zk_port = zk_port
         self.ui_port = ui_port
         self.logviewer_port = logviewer_port
+        # Path as seen inside the master devcontainer (used as Docker Compose
+        # build context — the CLI tarballs it from the devcontainer filesystem).
+        self.container_project_dir = container_project_dir
         self.host_project_dir = None  # type: str
 
     def discover_host_project_dir(self):

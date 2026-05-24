@@ -265,6 +265,7 @@ def build_master(args):
         zk_port=2181,
         ui_port=8080,
         logviewer_port=8000,
+        container_project_dir=args.remote_data_dir,
     )
 
 

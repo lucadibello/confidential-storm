@@ -105,7 +105,7 @@ class ConfigRenderer(object):
             self.templates_dir, "docker-compose.master.yml.tmpl").substitute(
                 storm_image=self.storm_image,
                 storm_version=self.storm_version,
-                host_project_dir=topology.master.host_project_dir or str(self.output_dir.parent),
+                build_context=topology.master.container_project_dir,
                 zookeeper_version=self.zookeeper_version,
                 zk_port=topology.master.zk_port,
                 local_conf_path=master_host_conf,
@@ -142,7 +142,7 @@ class ConfigRenderer(object):
                 self.templates_dir, "docker-compose.slave.yml.tmpl").substitute(
                     storm_image=self.storm_image,
                     storm_version=self.storm_version,
-                    host_project_dir=host_base,
+                    build_context=slave.remote_data_dir,
                     remote_conf_path="{}/conf/storm.yaml".format(host_base),
                     remote_logs_path="{}/data/storm-logs".format(host_base),
             ))
@@ -182,7 +182,7 @@ class ConfigRenderer(object):
             self.templates_dir, "docker-compose.combined.yml.tmpl").substitute(
                 storm_image=self.storm_image,
                 storm_version=self.storm_version,
-                host_project_dir=topology.master.host_project_dir or str(self.output_dir.parent),
+                build_context=topology.master.container_project_dir,
                 zookeeper_version=self.zookeeper_version,
                 zk_port=topology.master.zk_port,
                 local_conf_path=str(yaml_path.resolve()),

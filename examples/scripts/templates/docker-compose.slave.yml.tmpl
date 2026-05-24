@@ -9,7 +9,7 @@ services:
   supervisor:
     image: "$storm_image"
     build:
-      context: $host_project_dir
+      context: $build_context
       dockerfile: docker/Dockerfile.storm
       args:
         STORM_VERSION: "$storm_version"
@@ -32,7 +32,7 @@ services:
   logviewer:
     image: "$storm_image"
     build:
-      context: $host_project_dir
+      context: $build_context
       dockerfile: docker/Dockerfile.storm
       args:
         STORM_VERSION: "$storm_version"
