@@ -46,7 +46,7 @@ RUN rm -f /etc/apt/sources.list.d/*sgx* /etc/apt/sources.list.d/*intel* \
   \
   # Networking & crypto
   ca-certificates curl openssh-client openssh-server \
-  openssl \
+  openssl rsync \
   \
   # Archiving & compression
   tar unzip xz-utils \
