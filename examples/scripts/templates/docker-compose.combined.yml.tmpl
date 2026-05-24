@@ -9,6 +9,7 @@ x-storm-common: &storm-common
     dockerfile: docker/Dockerfile.storm
     args:
       STORM_VERSION: "$storm_version"
+  pull_policy: build
   restart: unless-stopped
   network_mode: host
   environment:

@@ -83,7 +83,11 @@ class ClusterManager(object):
         def push_one(slave):
             yaml_file = self.render.slave_storm_yamls[slave.hostname]
             compose_file = self.render.slave_composes[slave.hostname]
-            # Create remote data dirs.
+            # Remove any stale conf/storm.yaml that Docker may have auto-created
+            # as a directory on a previous failed run, then recreate directories.
+            slave.run("rm", "-rf",
+                      "{}/conf/storm.yaml".format(slave.remote_data_dir),
+                      check=True)
             slave.run("mkdir", "-p",
                       "{}/conf".format(slave.remote_data_dir),
                       "{}/data/storm-logs/supervisor/profiler".format(slave.remote_data_dir),
