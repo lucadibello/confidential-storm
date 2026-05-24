@@ -98,7 +98,7 @@ RUN mkdir -p /var/run/sshd \
   && ssh-keygen -A \
   && sed -i 's/^#\?Port .*/Port 2222/' /etc/ssh/sshd_config \
   && sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
-  && sed -i 's/^#\?PubkeyAuthentication .*/PubkeyAuthentication no/' /etc/ssh/sshd_config \
+  && sed -i 's/^#\?PubkeyAuthentication .*/PubkeyAuthentication yes/' /etc/ssh/sshd_config \
   && sed -i 's/^#\?PermitRootLogin .*/PermitRootLogin no/' /etc/ssh/sshd_config \
   && sed -i 's/^#\?UsePAM .*/UsePAM yes/' /etc/ssh/sshd_config \
   && grep -qxF 'AllowTcpForwarding yes' /etc/ssh/sshd_config || echo 'AllowTcpForwarding yes' >> /etc/ssh/sshd_config \
