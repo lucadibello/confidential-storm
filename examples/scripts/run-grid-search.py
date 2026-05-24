@@ -227,6 +227,19 @@ def parse_args():
                    help="Path inside the slave devcontainer used for SCP/rsync. "
                         "The host-side path for docker volume mounts is discovered "
                         "automatically via docker inspect.")
+    p.add_argument("--nimbus-thrift-port", type=int,
+                   default=env_int("NIMBUS_THRIFT_PORT", 6627),
+                   help="Nimbus thrift port (default: 6627).")
+    p.add_argument("--zk-port", type=int,
+                   default=env_int("ZK_PORT", 2181),
+                   help="ZooKeeper client port (default: 2181).")
+    p.add_argument("--ui-port", type=int,
+                   default=env_int("UI_PORT", 8080),
+                   help="Storm UI HTTP port (default: 8080). "
+                        "Change if another service (e.g. cAdvisor) already holds 8080.")
+    p.add_argument("--logviewer-port", type=int,
+                   default=env_int("LOGVIEWER_PORT", 8000),
+                   help="Storm Logviewer port (default: 8000).")
     p.add_argument("--slot-ports", type=str,
                    default=env_str("SLOT_PORTS", "6700,6701,6702,6703"))
     p.add_argument("--rsync-bwlimit", type=int,
@@ -261,10 +274,10 @@ def build_master(args):
     # type: (argparse.Namespace) -> MasterHost
     return MasterHost(
         hostname=args.master_host,
-        nimbus_thrift_port=6627,
-        zk_port=2181,
-        ui_port=8080,
-        logviewer_port=8000,
+        nimbus_thrift_port=args.nimbus_thrift_port,
+        zk_port=args.zk_port,
+        ui_port=args.ui_port,
+        logviewer_port=args.logviewer_port,
         container_project_dir=args.remote_data_dir,
     )
 
@@ -406,7 +419,9 @@ def main():
     print(" Start run ID:        {}".format(args.start_run_id))
     if args.resume_from_run > 0:
         print(" Resume from run:     {} (skipping earlier runs)".format(args.resume_from_run))
-    print(" Master host:         {}".format(master.hostname))
+    print(" Master host:         {}  nimbus={} zk={} ui={} logviewer={}".format(
+        master.hostname, master.nimbus_thrift_port, master.zk_port,
+        master.ui_port, master.logviewer_port))
     if is_multi_host:
         print(" Supervisor hosts:    {}".format(", ".join(s.hostname for s in remote_slaves)))
         print(" Scale values:        {}".format(", ".join(str(n) for n in scale_values)))
