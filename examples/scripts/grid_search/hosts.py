@@ -121,28 +121,35 @@ class SupervisorHost(object):
 
     def discover_host_project_dir(self):
         # type: () -> str
-        """Return the host-side project root by reading the devcontainer label.
+        """Return the host-side project root by inspecting the devcontainer's mounts.
 
-        The devcontainer is started by VS Code with:
-          -l devcontainer.local_folder=<host-path>
-        Running ``docker inspect`` on the devcontainer from inside it (via the
-        DooD socket) gives us the HOST filesystem path, which is what the host
-        Docker daemon needs for volume mounts in generated compose files.
+        Queries the bind-mount source for ``/workspaces/confidential-storm``
+        inside the running devcontainer via the DooD socket.  This is more
+        reliable than reading the ``devcontainer.local_folder`` label, which is
+        only set when VS Code starts the container.
 
         Sets ``self.host_project_dir`` as a side-effect and returns the path.
         Raises RuntimeError on failure.
         """
+        fmt = (
+            "{{ range .Mounts }}"
+            "{{ if eq .Destination \"/workspaces/confidential-storm\" }}"
+            "{{ .Source }}"
+            "{{ end }}"
+            "{{ end }}"
+        )
         proc = self.run(
             "docker", "inspect", "confidential-storm-devcontainer",
-            "--format", "{{ index .Config.Labels \"devcontainer.local_folder\" }}",
+            "--format", fmt,
             capture_output=True,
-        )  # capture_output forwarded to self.run which handles the 3.6 compat
+        )
         path = (proc.stdout or "").strip()
         if not path:
             raise RuntimeError(
                 "Could not discover host project dir on {} "
-                "(docker inspect returned empty; is the devcontainer running "
-                "and the docker socket mounted?)".format(self.hostname))
+                "(no bind-mount for /workspaces/confidential-storm found; "
+                "is confidential-storm-devcontainer running with the workspace "
+                "mount and the docker socket accessible?)".format(self.hostname))
         self.host_project_dir = path
         return path
 
@@ -370,18 +377,26 @@ class MasterHost(object):
 
     def discover_host_project_dir(self):
         # type: () -> str
-        """Return the host-side project root by reading the local devcontainer label."""
+        """Return the host-side project root by inspecting the devcontainer's mounts."""
+        fmt = (
+            "{{ range .Mounts }}"
+            "{{ if eq .Destination \"/workspaces/confidential-storm\" }}"
+            "{{ .Source }}"
+            "{{ end }}"
+            "{{ end }}"
+        )
         proc = subprocess.run(
             ["docker", "inspect", "confidential-storm-devcontainer",
-             "--format", "{{ index .Config.Labels \"devcontainer.local_folder\" }}"],
+             "--format", fmt],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             universal_newlines=True)
         path = (proc.stdout or "").strip()
         if not path:
             raise RuntimeError(
                 "Could not discover host project dir on master "
-                "(docker inspect returned empty; is the docker socket mounted "
-                "in this devcontainer?)")
+                "(no bind-mount for /workspaces/confidential-storm found; "
+                "is confidential-storm-devcontainer running with the workspace "
+                "mount and /var/run/docker.sock accessible?)")
         self.host_project_dir = path
         return path
 
