@@ -85,9 +85,19 @@ class RunParams(object):
 
 def run_storm(storm_conf_dir, *args):
     # type: (Path, *str) -> int
-    """Invoke `storm` with STORM_CONF_DIR set so it talks to the right Nimbus."""
+    """Invoke `storm` with STORM_CONF_DIR set so it talks to the right Nimbus.
+
+    HOME is redirected to storm_conf_dir so that Storm does not find
+    ~/.storm/storm.yaml.  Storm merges user config (~/.storm/storm.yaml) with
+    higher priority than the cluster config in STORM_CONF_DIR, so legacy
+    values like nimbus.seeds: ["nimbus"] from the devcontainer's bind-mounted
+    conf/storm.yaml would otherwise override the rendered multi-host config.
+    storm_conf_dir is an existing directory with no .storm/ subtree, so Storm
+    finds no user config and falls back entirely to STORM_CONF_DIR.
+    """
     env = os.environ.copy()
     env["STORM_CONF_DIR"] = str(storm_conf_dir)
+    env["HOME"] = str(storm_conf_dir)
     return subprocess.call(["storm"] + list(args), env=env)
 
 
@@ -417,10 +427,9 @@ def cleanup_failed_run(topo_type, run_id, run_dir, tick, epochs, par, mu,
     topo_name = "{}{}".format(topo_type.topo_prefix, run_id)
     print("[run {}] ERROR: Run failed: {}. Attempting cleanup...".format(run_id, exc))
 
-    env = os.environ.copy()
-    env["STORM_CONF_DIR"] = str(storm_conf_dir)
     subprocess.call(["storm", "kill", topo_name, "-w", "5"],
-                    env=env,
+                    env=dict(os.environ, STORM_CONF_DIR=str(storm_conf_dir),
+                             HOME=str(storm_conf_dir)),
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(post_kill_sleep)
 

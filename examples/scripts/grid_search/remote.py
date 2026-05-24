@@ -156,15 +156,20 @@ class RemoteCollector(object):
 
     def clean_remote_dirs(self, topo_name):
         # type: (str) -> None
-        """Wipe per-topology artifacts from every slave (called pre-submit)."""
+        """Wipe per-topology artifacts from every slave (called pre-submit).
+
+        sudo is required because the Storm supervisor container runs as root,
+        so the files it writes to the bind-mounted volume are owned by root.
+        The dev user has NOPASSWD:ALL in the devcontainer sudoers.
+        """
         for slave in self.topology.slaves:
             slave.run("sh", "-c",
-                      "rm -f {0}/data/storm-logs/supervisor/profiler/*.csv "
+                      "sudo rm -f {0}/data/storm-logs/supervisor/profiler/*.csv "
                       "{0}/data/storm-logs/supervisor/profiler/*.txt".format(
                           slave.remote_data_dir),
                       check=False)
             slave.run("sh", "-c",
-                      "rm -rf {0}/data/storm-logs/supervisor/workers-artifacts/{1}-*".format(
+                      "sudo rm -rf {0}/data/storm-logs/supervisor/workers-artifacts/{1}-*".format(
                           slave.remote_data_dir, topo_name),
                       check=False)
 
