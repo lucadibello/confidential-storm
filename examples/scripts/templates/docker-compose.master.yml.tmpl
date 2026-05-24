@@ -5,6 +5,11 @@
 
 x-storm-common: &storm-common
   image: "$storm_image"
+  build:
+    context: $host_project_dir
+    dockerfile: docker/Dockerfile.storm
+    args:
+      STORM_VERSION: "$storm_version"
   restart: unless-stopped
   network_mode: host
   environment:
@@ -16,6 +21,7 @@ x-storm-common: &storm-common
 services:
   zookeeper:
     image: "zookeeper:$zookeeper_version"
+    pull_policy: if_not_present
     container_name: storm-zookeeper
     restart: unless-stopped
     network_mode: host

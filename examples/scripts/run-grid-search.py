@@ -245,6 +245,8 @@ def parse_args():
                    default=env_bool("NO_SGX_CHECK", False))
     p.add_argument("--storm-image", type=str,
                    default=env_str("STORM_IMAGE", "confidential-storm:latest"))
+    p.add_argument("--storm-version", type=str,
+                   default=env_str("STORM_VERSION", "2.8.3"))
     p.add_argument("--zookeeper-version", type=str,
                    default=env_str("ZOOKEEPER_VERSION", "3.9"))
 
@@ -511,6 +513,7 @@ def main():
             templates_dir=TEMPLATES_DIR,
             output_dir=n_cluster_dir,
             storm_image=args.storm_image,
+            storm_version=args.storm_version,
             zookeeper_version=args.zookeeper_version,
         )
         if combined_mode:

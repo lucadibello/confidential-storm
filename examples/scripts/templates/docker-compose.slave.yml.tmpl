@@ -8,6 +8,11 @@
 services:
   supervisor:
     image: "$storm_image"
+    build:
+      context: $host_project_dir
+      dockerfile: docker/Dockerfile.storm
+      args:
+        STORM_VERSION: "$storm_version"
     container_name: storm-supervisor
     restart: unless-stopped
     network_mode: host
@@ -26,6 +31,11 @@ services:
 
   logviewer:
     image: "$storm_image"
+    build:
+      context: $host_project_dir
+      dockerfile: docker/Dockerfile.storm
+      args:
+        STORM_VERSION: "$storm_version"
     container_name: storm-logviewer
     restart: unless-stopped
     network_mode: host

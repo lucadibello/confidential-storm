@@ -53,11 +53,12 @@ class ConfigRenderer(object):
     """Renders storm.yaml + docker-compose.yml for master + each slave."""
 
     def __init__(self, templates_dir, output_dir, storm_image="confidential-storm:latest",
-                 zookeeper_version="3.9"):
-        # type: (Path, Path, str, str) -> None
+                 storm_version="2.8.3", zookeeper_version="3.9"):
+        # type: (Path, Path, str, str, str) -> None
         self.templates_dir = Path(templates_dir)
         self.output_dir = Path(output_dir)
         self.storm_image = storm_image
+        self.storm_version = storm_version
         self.zookeeper_version = zookeeper_version
 
     # ---- Multi-host rendering ----------------------------------------------
@@ -103,6 +104,8 @@ class ConfigRenderer(object):
         master_compose_path.write_text(_read_template(
             self.templates_dir, "docker-compose.master.yml.tmpl").substitute(
                 storm_image=self.storm_image,
+                storm_version=self.storm_version,
+                host_project_dir=topology.master.host_project_dir or str(self.output_dir.parent),
                 zookeeper_version=self.zookeeper_version,
                 zk_port=topology.master.zk_port,
                 local_conf_path=master_host_conf,
@@ -138,6 +141,8 @@ class ConfigRenderer(object):
             slave_compose_local.write_text(_read_template(
                 self.templates_dir, "docker-compose.slave.yml.tmpl").substitute(
                     storm_image=self.storm_image,
+                    storm_version=self.storm_version,
+                    host_project_dir=host_base,
                     remote_conf_path="{}/conf/storm.yaml".format(host_base),
                     remote_logs_path="{}/data/storm-logs".format(host_base),
             ))
@@ -176,6 +181,8 @@ class ConfigRenderer(object):
         compose_path.write_text(_read_template(
             self.templates_dir, "docker-compose.combined.yml.tmpl").substitute(
                 storm_image=self.storm_image,
+                storm_version=self.storm_version,
+                host_project_dir=topology.master.host_project_dir or str(self.output_dir.parent),
                 zookeeper_version=self.zookeeper_version,
                 zk_port=topology.master.zk_port,
                 local_conf_path=str(yaml_path.resolve()),
