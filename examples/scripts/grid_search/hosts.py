@@ -310,6 +310,8 @@ class SupervisorHost(object):
 
         if self.is_local:
             src = remote_path
+            # Storm workers run as root; use sudo so rsync can read root-owned files.
+            cmd = ["sudo"] + cmd
         else:
             if self._local_forward_port is None:
                 stats.failed_hosts.append(self.hostname)
@@ -319,6 +321,10 @@ class SupervisorHost(object):
             if self.outer_key:
                 ssh_e.extend(["-i", str(self.outer_key)])
             cmd.extend(["-e", " ".join(shlex.quote(p) for p in ssh_e)])
+            # Storm workers run as root inside the container; --rsync-path runs
+            # the remote rsync as root (dev has NOPASSWD:ALL) so it can read
+            # root-owned workers-artifacts files.
+            cmd.extend(["--rsync-path", "sudo rsync"])
             src = "{}@127.0.0.1:{}".format(self.container_user, remote_path)
 
         cmd.extend([src, str(local_dir) + "/"])
@@ -327,10 +333,17 @@ class SupervisorHost(object):
             proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                   universal_newlines=True, timeout=120)
         except subprocess.TimeoutExpired:
+            print("[rsync] {} timed out after 120s pulling {}".format(
+                self.hostname, remote_path))
             stats.failed_hosts.append(self.hostname)
             return stats
 
         if proc.returncode not in (0, 24):
+            err = (proc.stderr or "").strip()
+            print("[rsync] {} failed (rc={}){}: {}".format(
+                self.hostname, proc.returncode,
+                " pulling {}".format(remote_path) if remote_path else "",
+                err[:300] if err else "(no stderr)"))
             stats.failed_hosts.append(self.hostname)
             return stats
 

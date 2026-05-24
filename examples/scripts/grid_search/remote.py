@@ -161,6 +161,10 @@ class RemoteCollector(object):
         sudo is required because the Storm supervisor container runs as root,
         so the files it writes to the bind-mounted volume are owned by root.
         The dev user has NOPASSWD:ALL in the devcontainer sudoers.
+
+        workers-artifacts is wiped entirely (not just the current topo name) so
+        that root-owned directories from any previous run don't cause rsync
+        permission errors in the next run.
         """
         for slave in self.topology.slaves:
             slave.run("sh", "-c",
@@ -169,8 +173,9 @@ class RemoteCollector(object):
                           slave.remote_data_dir),
                       check=False)
             slave.run("sh", "-c",
-                      "sudo rm -rf {0}/data/storm-logs/supervisor/workers-artifacts/{1}-*".format(
-                          slave.remote_data_dir, topo_name),
+                      "sudo rm -rf {0}/data/storm-logs/supervisor/workers-artifacts"
+                      " && mkdir -p {0}/data/storm-logs/supervisor/workers-artifacts".format(
+                          slave.remote_data_dir),
                       check=False)
 
     def clean_local_staging(self):
