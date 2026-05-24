@@ -1,18 +1,37 @@
 """Host abstractions for the multi-node Storm cluster.
 
-A SupervisorHost wraps SSH/SCP/rsync calls to a slave machine.  A
-MasterHost holds the addresses the slaves use to reach Nimbus / ZooKeeper /
-the Storm UI.  ClusterTopology bundles them for a given scale step.
+Each remote slave runs a devcontainer that exposes SSH on port 2222 bound to
+127.0.0.1 on the outer host.  The outer host itself is reachable over a normal
+SSH port (default 22).  Because the firewall only forwards port 22, reaching
+the devcontainer requires a two-hop setup:
 
-When ``hostname`` resolves to the local machine (loopback or empty), the
-SupervisorHost short-circuits SSH and runs the commands locally instead.
-This preserves the degenerate N=1 single-host workflow used today.
+  1. ``open_tunnel()`` opens ``ssh -N -L <local_port>:127.0.0.1:<container_port>
+     outer_user@outer_host`` as a background process.
+  2. All subsequent ``run()`` / ``scp_to()`` / ``rsync_from()`` calls go to
+     ``127.0.0.1:<local_port>`` as ``container_user`` (default: ``dev``).
+
+For the degenerate single-host case (hostname resolves to localhost) the tunnel
+is skipped and commands run directly in the local shell.
+
+Architecture diagram (per slave):
+
+  master devcontainer
+     |  ssh -L 15xxx:127.0.0.1:2222  outer_user@slave_real_ip (port 22)
+     ↓
+  slave outer host (port 22 open, 2222 firewall-blocked from outside)
+     |  forwards 127.0.0.1:2222 → devcontainer sshd
+     ↓
+  slave devcontainer  (ssh dev@127.0.0.1 -p 15xxx from master)
+     |  uses /var/run/docker.sock (DooD mount)
+     ↓
+  host docker daemon  → Storm containers (supervisor etc.)
 """
 
 import os
 import shlex
-import socket
+import socket as _socket
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -26,13 +45,21 @@ def _is_local(hostname):
     if hostname in _LOCAL_NAMES:
         return True
     try:
-        if hostname == socket.gethostname():
+        if hostname == _socket.gethostname():
             return True
-        if hostname == socket.getfqdn():
+        if hostname == _socket.getfqdn():
             return True
     except OSError:
         pass
     return False
+
+
+def _find_free_port():
+    # type: () -> int
+    """Ask the OS for a free ephemeral port number."""
+    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
 
 class SyncStats(object):
@@ -51,50 +78,140 @@ class SyncStats(object):
 
 
 class SupervisorHost(object):
-    """A remote (or local) Storm Supervisor machine."""
+    """A remote (or local) Storm Supervisor machine reached via SSH tunnel.
 
-    def __init__(self, hostname, ssh_user, ssh_key=None, ssh_port=22,
+    For remote slaves the tunnel must be opened with ``open_tunnel()`` before
+    any ``run()`` / ``scp_to()`` / ``rsync_from()`` call.  Tunnels are closed
+    with ``close_tunnel()`` (or automatically when the process exits if the
+    caller registers ``close_tunnel()`` in an atexit handler).
+    """
+
+    def __init__(self,
+                 hostname,
+                 outer_user,
+                 outer_key=None,
+                 outer_port=22,
+                 container_user="dev",
+                 container_port=2222,
                  remote_data_dir="/opt/confidential-storm",
-                 slot_ports=None, rsync_bwlimit=0):
-        # type: (str, str, Path, int, str, list[int], int) -> None
+                 slot_ports=None,
+                 rsync_bwlimit=0):
+        # type: (str, str, object, int, str, int, str, list, int) -> None
         self.hostname = hostname
-        self.ssh_user = ssh_user
-        self.ssh_key = Path(ssh_key) if ssh_key else None
-        self.ssh_port = ssh_port
+        self.outer_user = outer_user
+        self.outer_key = Path(outer_key) if outer_key else None
+        self.outer_port = outer_port
+        self.container_user = container_user
+        self.container_port = container_port
         self.remote_data_dir = remote_data_dir
         self.slot_ports = list(slot_ports) if slot_ports else [6700, 6701, 6702, 6703]
         self.rsync_bwlimit = rsync_bwlimit
         self.is_local = _is_local(hostname)
 
+        # Tunnel state — populated by open_tunnel()
+        self._local_forward_port = None  # type: int
+        self._tunnel_proc = None  # type: subprocess.Popen
+
+    # ---- Tunnel lifecycle -------------------------------------------------
+
+    def open_tunnel(self, wait_timeout=20):
+        # type: (int) -> None
+        """Establish the SSH port-forward and wait for it to accept connections.
+
+        Raises RuntimeError if the tunnel is not ready within ``wait_timeout``
+        seconds.  No-op for local hosts.
+        """
+        if self.is_local:
+            return
+        if self._tunnel_proc is not None:
+            return  # already open
+
+        port = _find_free_port()
+        cmd = [
+            "ssh",
+            "-N",
+            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", "BatchMode=yes",
+            "-o", "ExitOnForwardFailure=yes",
+            "-o", "ServerAliveInterval=30",
+            "-o", "ServerAliveCountMax=3",
+            "-p", str(self.outer_port),
+            "-L", "127.0.0.1:{}:127.0.0.1:{}".format(port, self.container_port),
+        ]
+        if self.outer_key:
+            cmd.extend(["-i", str(self.outer_key)])
+        cmd.append("{}@{}".format(self.outer_user, self.hostname))
+
+        self._tunnel_proc = subprocess.Popen(cmd,
+                                             stdout=subprocess.DEVNULL,
+                                             stderr=subprocess.DEVNULL)
+        self._local_forward_port = port
+
+        # Poll until the forwarded port accepts connections.
+        deadline = time.time() + wait_timeout
+        while time.time() < deadline:
+            if self._tunnel_proc.poll() is not None:
+                raise RuntimeError(
+                    "SSH tunnel process to {} exited early (rc={})".format(
+                        self.hostname, self._tunnel_proc.returncode))
+            try:
+                with _socket.create_connection(("127.0.0.1", port), timeout=1):
+                    return
+            except (OSError, _socket.timeout):
+                time.sleep(0.5)
+
+        self.close_tunnel()
+        raise RuntimeError(
+            "SSH tunnel to {} (port {}) did not open within {}s".format(
+                self.hostname, self.container_port, wait_timeout))
+
+    def close_tunnel(self):
+        # type: () -> None
+        """Terminate the SSH tunnel process.  No-op for local hosts or if not open."""
+        if self._tunnel_proc is None:
+            return
+        self._tunnel_proc.terminate()
+        try:
+            self._tunnel_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self._tunnel_proc.kill()
+        self._tunnel_proc = None
+        self._local_forward_port = None
+
     # ---- SSH ---------------------------------------------------------------
 
-    def _ssh_base(self):
+    def _ssh_opts(self):
         # type: () -> list[str]
-        cmd = ["ssh",
-               "-o", "StrictHostKeyChecking=accept-new",
-               "-o", "BatchMode=yes",
-               "-o", "ConnectTimeout=10",
-               "-p", str(self.ssh_port)]
-        if self.ssh_key:
-            cmd.extend(["-i", str(self.ssh_key)])
-        cmd.append("{}@{}".format(self.ssh_user, self.hostname))
+        """Common SSH options (no -p / -i / destination)."""
+        return [
+            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=10",
+        ]
+
+    def _container_ssh_base(self):
+        # type: () -> list[str]
+        """SSH argv prefix that reaches the devcontainer through the open tunnel."""
+        if self._local_forward_port is None:
+            raise RuntimeError(
+                "Tunnel to {} is not open. Call open_tunnel() first.".format(self.hostname))
+        cmd = ["ssh"] + self._ssh_opts() + ["-p", str(self._local_forward_port)]
+        if self.outer_key:
+            cmd.extend(["-i", str(self.outer_key)])
+        cmd.append("{}@127.0.0.1".format(self.container_user))
         return cmd
 
     def ssh_cmd(self, *cmd):
         # type: (*str) -> list[str]
-        """Build an argv that runs ``cmd`` on the remote host."""
+        """Build an argv that runs ``cmd`` on the host (or locally)."""
         if self.is_local:
             return list(cmd)
-        # Quote so the remote shell sees the same arguments.
         remote = " ".join(shlex.quote(c) for c in cmd)
-        return self._ssh_base() + [remote]
+        return self._container_ssh_base() + [remote]
 
     def run(self, *cmd, **kwargs):
         # type: (*str, **object) -> subprocess.CompletedProcess
-        """Run ``cmd`` on the host, returning the CompletedProcess.
-
-        kwargs: check (default False), capture_output (default False), input.
-        """
+        """Run ``cmd`` on the host, returning the CompletedProcess."""
         check = bool(kwargs.pop("check", False))
         capture_output = bool(kwargs.pop("capture_output", False))
         timeout = kwargs.pop("timeout", None)
@@ -106,39 +223,33 @@ class SupervisorHost(object):
 
     def scp_to(self, local_path, remote_path):
         # type: (Path, str) -> None
-        """Copy a single local file to the remote path."""
+        """Copy a single local file to ``remote_path`` inside the devcontainer."""
         if self.is_local:
             Path(remote_path).parent.mkdir(parents=True, exist_ok=True)
             subprocess.run(["cp", "-f", str(local_path), remote_path], check=True)
             return
-        # Ensure parent dir exists remotely.
         parent = os.path.dirname(remote_path) or "."
         self.run("mkdir", "-p", parent, check=True)
-        cmd = ["scp",
-               "-o", "StrictHostKeyChecking=accept-new",
-               "-o", "BatchMode=yes",
-               "-P", str(self.ssh_port)]
-        if self.ssh_key:
-            cmd.extend(["-i", str(self.ssh_key)])
+        cmd = ["scp"] + self._ssh_opts() + ["-P", str(self._local_forward_port)]
+        if self.outer_key:
+            cmd.extend(["-i", str(self.outer_key)])
         cmd.extend([str(local_path),
-                    "{}@{}:{}".format(self.ssh_user, self.hostname, remote_path)])
+                    "{}@127.0.0.1:{}".format(self.container_user, remote_path)])
         subprocess.run(cmd, check=True)
 
     def rsync_from(self, remote_path, local_dir, includes=None,
                    excludes=None, inplace=False):
-        # type: (str, Path, list[str], list[str], bool) -> SyncStats
-        """Pull ``remote_path`` (a directory, trailing slash assumed) into ``local_dir``.
+        # type: (str, Path, list, list, bool) -> SyncStats
+        """Pull ``remote_path`` (directory) into ``local_dir`` via rsync.
 
-        On failure, returns a SyncStats with ``self.hostname`` recorded in
-        ``failed_hosts`` rather than raising.  Callers decide whether
-        repeated failures are fatal.
+        Returns a SyncStats; on failure records ``self.hostname`` in
+        ``failed_hosts`` instead of raising.
         """
         local_dir = Path(local_dir)
         local_dir.mkdir(parents=True, exist_ok=True)
         stats = SyncStats()
 
-        cmd = ["rsync", "-az", "--partial",
-               "--stats", "--out-format=%f"]
+        cmd = ["rsync", "-az", "--partial", "--stats", "--out-format=%f"]
         if inplace:
             cmd.append("--inplace")
         if self.rsync_bwlimit > 0:
@@ -148,22 +259,21 @@ class SupervisorHost(object):
         for pat in excludes or []:
             cmd.append("--exclude={}".format(pat))
 
-        # Make sure remote_path ends with '/' so rsync copies dir contents.
         if not remote_path.endswith("/"):
             remote_path = remote_path + "/"
 
         if self.is_local:
             src = remote_path
         else:
-            ssh_e = ["ssh",
-                     "-o", "StrictHostKeyChecking=accept-new",
-                     "-o", "BatchMode=yes",
-                     "-o", "ConnectTimeout=10",
-                     "-p", str(self.ssh_port)]
-            if self.ssh_key:
-                ssh_e.extend(["-i", str(self.ssh_key)])
+            if self._local_forward_port is None:
+                stats.failed_hosts.append(self.hostname)
+                return stats
+            ssh_e = (["ssh"] + self._ssh_opts()
+                     + ["-p", str(self._local_forward_port)])
+            if self.outer_key:
+                ssh_e.extend(["-i", str(self.outer_key)])
             cmd.extend(["-e", " ".join(shlex.quote(p) for p in ssh_e)])
-            src = "{}@{}:{}".format(self.ssh_user, self.hostname, remote_path)
+            src = "{}@127.0.0.1:{}".format(self.container_user, remote_path)
 
         cmd.extend([src, str(local_dir) + "/"])
 
@@ -173,15 +283,15 @@ class SupervisorHost(object):
             stats.failed_hosts.append(self.hostname)
             return stats
 
-        if proc.returncode not in (0, 24):  # 24 = "some files vanished during transfer"
+        if proc.returncode not in (0, 24):
             stats.failed_hosts.append(self.hostname)
             return stats
 
-        # Best-effort parse of --stats output for byte/file counts.
         for line in (proc.stderr or "").splitlines():
             if line.startswith("Number of regular files transferred:"):
                 try:
-                    stats.files_transferred = int(line.split(":", 1)[1].strip().replace(",", ""))
+                    stats.files_transferred = int(
+                        line.split(":", 1)[1].strip().replace(",", ""))
                 except ValueError:
                     pass
             elif line.startswith("Total transferred file size:"):
@@ -194,10 +304,12 @@ class SupervisorHost(object):
 
     def reachable(self):
         # type: () -> bool
-        """True iff we can SSH and run ``docker version``."""
+        """True iff the tunnel is open, SSH into the devcontainer works, and docker responds."""
         if self.is_local:
             return subprocess.run(["docker", "version"],
                                   capture_output=True).returncode == 0
+        if self._local_forward_port is None:
+            return False
         try:
             proc = self.run("docker", "version", capture_output=True, timeout=15)
         except subprocess.TimeoutExpired:
@@ -222,7 +334,7 @@ class ClusterTopology(object):
     """A master plus the slaves active for the current scale step."""
 
     def __init__(self, master, slaves):
-        # type: (MasterHost, list[SupervisorHost]) -> None
+        # type: (MasterHost, list) -> None
         self.master = master
         self.slaves = list(slaves)
 
@@ -231,5 +343,36 @@ class ClusterTopology(object):
         return len(self.slaves)
 
     def slave_hostnames(self):
-        # type: () -> list[str]
+        # type: () -> list
         return [s.hostname for s in self.slaves]
+
+    def open_tunnels(self, wait_timeout=20):
+        # type: (int) -> None
+        """Open SSH tunnels for every non-local slave in parallel."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        remote = [s for s in self.slaves if not s.is_local]
+        if not remote:
+            return
+
+        def _open(slave):
+            slave.open_tunnel(wait_timeout=wait_timeout)
+            return slave.hostname
+
+        with ThreadPoolExecutor(max_workers=len(remote)) as ex:
+            futures = {ex.submit(_open, s): s for s in remote}
+            for fut in as_completed(futures):
+                slave = futures[fut]
+                exc = fut.exception()
+                if exc:
+                    raise RuntimeError(
+                        "Failed to open tunnel to {}: {}".format(slave.hostname, exc))
+
+    def close_tunnels(self):
+        # type: () -> None
+        """Close all open SSH tunnels (best-effort, does not raise)."""
+        for slave in self.slaves:
+            try:
+                slave.close_tunnel()
+            except Exception:
+                pass

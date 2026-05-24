@@ -207,11 +207,21 @@ def parse_args():
                    help="Comma-separated list of N (supervisor count) values "
                         "to sweep, e.g. 1,2,4,8. Ignored without --supervisor-hosts.")
     p.add_argument("--ssh-user", type=str,
-                   default=env_str("SSH_USER", os.environ.get("USER", "root")))
+                   default=env_str("SSH_USER", os.environ.get("USER", "root")),
+                   help="SSH user for the outer host (to establish the tunnel).")
     p.add_argument("--ssh-key", type=str,
-                   default=env_str("SSH_KEY", str(Path.home() / ".ssh" / "id_ed25519")))
+                   default=env_str("SSH_KEY", str(Path.home() / ".ssh" / "id_ed25519")),
+                   help="SSH key used for both the outer hop and the devcontainer hop.")
     p.add_argument("--ssh-port", type=int,
-                   default=env_int("SSH_PORT", 22))
+                   default=env_int("SSH_PORT", 22),
+                   help="SSH port on the outer host.")
+    p.add_argument("--container-user", type=str,
+                   default=env_str("CONTAINER_USER", "dev"),
+                   help="SSH user inside the devcontainer (default: dev).")
+    p.add_argument("--container-port", type=int,
+                   default=env_int("CONTAINER_PORT", 2222),
+                   help="SSH port the devcontainer listens on (on the outer host's "
+                        "127.0.0.1, default: 2222).")
     p.add_argument("--remote-data-dir", type=str,
                    default=env_str("REMOTE_DATA_DIR", "/opt/confidential-storm"))
     p.add_argument("--slot-ports", type=str,
@@ -254,15 +264,18 @@ def build_master(args):
 
 
 def build_slaves(args, slot_ports):
-    # type: (argparse.Namespace, list[int]) -> list[SupervisorHost]
+    # type: (argparse.Namespace, list) -> list
     hostnames = [h for h in args.supervisor_hosts.replace(",", " ").split() if h]
+    ssh_key = args.ssh_key if args.ssh_key else None
     slaves = []
     for h in hostnames:
         slaves.append(SupervisorHost(
             hostname=h,
-            ssh_user=args.ssh_user,
-            ssh_key=args.ssh_key,
-            ssh_port=args.ssh_port,
+            outer_user=args.ssh_user,
+            outer_key=ssh_key,
+            outer_port=args.ssh_port,
+            container_user=args.container_user,
+            container_port=args.container_port,
             remote_data_dir=args.remote_data_dir,
             slot_ports=list(slot_ports),
             rsync_bwlimit=args.rsync_bwlimit,
@@ -280,9 +293,11 @@ def build_local_supervisor(args, slot_ports):
     """
     return SupervisorHost(
         hostname="localhost",
-        ssh_user=args.ssh_user,
-        ssh_key=None,
-        ssh_port=args.ssh_port,
+        outer_user=args.ssh_user,
+        outer_key=None,
+        outer_port=args.ssh_port,
+        container_user=args.container_user,
+        container_port=args.container_port,
         remote_data_dir=str(FRAMEWORK_ROOT),
         slot_ports=list(slot_ports),
         rsync_bwlimit=args.rsync_bwlimit,
@@ -420,6 +435,21 @@ def main():
     for sub in ("nimbus", "ui", "supervisor", "supervisor/profiler", "logviewer"):
         (local_logs_dir / sub).mkdir(parents=True, exist_ok=True)
 
+    # ---- Open SSH tunnels for all remote slaves upfront ----
+    if is_multi_host:
+        print("[grid-search] Opening SSH tunnels to {} slave(s)...".format(len(remote_slaves)))
+        try:
+            ClusterTopology(master=master, slaves=remote_slaves).open_tunnels()
+        except RuntimeError as exc:
+            print("[grid-search] ERROR: {}\n"
+                  "             Check outer-host SSH access and that the "
+                  "devcontainer is running on each slave.".format(exc))
+            sys.exit(1)
+        for s in remote_slaves:
+            print("[grid-search]   {} -> localhost:{}".format(
+                s.hostname, s._local_forward_port))
+        print()
+
     # ---- Scale sweep ----
     run_id = args.start_run_id
     cluster_managers = []  # track for atexit cleanup
@@ -430,9 +460,14 @@ def main():
                 cm.tear_down(remove_volumes=False)
             except Exception:
                 pass
+        if is_multi_host:
+            for s in remote_slaves:
+                try:
+                    s.close_tunnel()
+                except Exception:
+                    pass
 
-    if is_multi_host and not args.no_cluster:
-        atexit.register(_shutdown_all)
+    atexit.register(_shutdown_all)
 
     for n in scale_values:
         print("=" * 60)
