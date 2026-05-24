@@ -98,7 +98,7 @@ class ConfigRenderer(object):
             else str(host_logs_dir.resolve()))
         master_host_conf = (
             str(Path(topology.master.host_project_dir) / "data" / "cluster"
-                / master_yaml_path.relative_to(self.output_dir.parent))
+                / master_yaml_path.relative_to(self.output_dir.parent.parent))
             if topology.master.host_project_dir
             else str(master_yaml_path.resolve()))
         master_compose_path.write_text(_read_template(
