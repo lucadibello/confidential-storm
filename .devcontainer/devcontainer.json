@@ -33,8 +33,7 @@
   "mounts": [
     "source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind",
     "source=${localWorkspaceFolder}/conf/storm.yaml,target=/home/dev/.storm/storm.yaml,type=bind,readonly",
-    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
-    "source=/opt/confidential-storm,target=/opt/confidential-storm,type=bind"
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
   ],
   "containerEnv": {
     "SSH_AUTH_SOCK": "/ssh-agent"
