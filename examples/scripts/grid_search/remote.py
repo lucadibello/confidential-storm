@@ -174,7 +174,9 @@ class RemoteCollector(object):
                       check=False)
             slave.run("sh", "-c",
                       "sudo rm -rf {0}/data/storm-logs/supervisor/workers-artifacts"
-                      " && mkdir -p {0}/data/storm-logs/supervisor/workers-artifacts".format(
+                      " && sudo mkdir -p {0}/data/storm-logs/supervisor/workers-artifacts"
+                      " && sudo chown $(id -u):$(id -g)"
+                      " {0}/data/storm-logs/supervisor/workers-artifacts".format(
                           slave.remote_data_dir),
                       check=False)
 

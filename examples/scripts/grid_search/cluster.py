@@ -88,7 +88,7 @@ class ClusterManager(object):
             slave.run("rm", "-rf",
                       "{}/conf/storm.yaml".format(slave.remote_data_dir),
                       check=True)
-            slave.run("mkdir", "-p",
+            slave.run("sudo", "mkdir", "-p",
                       "{}/conf".format(slave.remote_data_dir),
                       "{}/data/storm-logs/supervisor/profiler".format(slave.remote_data_dir),
                       "{}/data/storm-logs/supervisor/workers-artifacts".format(slave.remote_data_dir),
