@@ -188,7 +188,8 @@ class SupervisorHost(object):
 
         self._tunnel_proc = subprocess.Popen(cmd,
                                              stdout=subprocess.DEVNULL,
-                                             stderr=subprocess.DEVNULL)
+                                             stderr=subprocess.DEVNULL,
+                                             start_new_session=True)
         self._local_forward_port = port
 
         # Poll until the forwarded port accepts connections.
