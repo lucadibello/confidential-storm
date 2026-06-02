@@ -6,6 +6,7 @@ out/
 
 # Output data (histogram snapshots, storm logs, etc.)
 data/
+!benchmark/data/*.csv
 # Ignore data/ directories inside subprojects (e.g. examples/*/data/)
 **/data/
 
