@@ -53,6 +53,7 @@ public class BaselineHistogramAggregationBolt extends BaseRichBolt {
     private final TreeMap<Integer, EpochState> epochStates = new TreeMap<>();
 
     private String outputFile;
+    private int runId;
 
     private transient BoltProfiler profiler;
     private transient int ticksSinceLastCompletion;
@@ -72,7 +73,7 @@ public class BaselineHistogramAggregationBolt extends BaseRichBolt {
         this.maxTimeSteps = ((Number) topoConf.getOrDefault("dp.max.time.steps", DPConfig.maxTimeSteps())).intValue();
         this.tickIntervalSecs = ((Number) topoConf.getOrDefault("dp.tick.interval.secs", 5)).intValue();
         String outputDir = (String) topoConf.getOrDefault("synthetic.output.dir", DEFAULT_OUTPUT_DIR);
-        int runId = ((Number) topoConf.getOrDefault("synthetic.run.id", 1)).intValue();
+        this.runId = ((Number) topoConf.getOrDefault("synthetic.run.id", 1)).intValue();
         this.outputFile = String.format("%s/synthetic-report-run%d.txt", outputDir, runId);
 
         if (ProfilerConfig.ENABLED) {
@@ -273,7 +274,7 @@ public class BaselineHistogramAggregationBolt extends BaseRichBolt {
         boolean isFirstWrite = roundCount == 1 && !stale;
         try (PrintWriter out = new PrintWriter(new FileWriter(file, !isFirstWrite))) {
             if (isFirstWrite) {
-                out.println("# Synthetic DP Histogram Baseline Benchmark - Run " + RUN_ID);
+                out.println("# Synthetic DP Histogram Baseline Benchmark - Run " + runId);
                 out.println("# Timestamp: " + Instant.now());
                 out.println("# Format: tick, timestamp, stale, keys_retained(l0), l_inf, l_1, l_2, dp_keys, gt_keys");
                 out.println("#");

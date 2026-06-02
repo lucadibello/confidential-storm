@@ -1,6 +1,7 @@
 package ch.usi.inf.examples.synthetic_baseline.bolts;
 
 import ch.usi.inf.examples.synthetic_baseline.config.DPConfig;
+import ch.usi.inf.examples.synthetic_baseline.dp.CompositionMode;
 import ch.usi.inf.examples.synthetic_baseline.dp.DPUtil;
 import ch.usi.inf.examples.synthetic_baseline.dp.EpochBarrierCoordinator;
 import ch.usi.inf.examples.synthetic_baseline.dp.StreamingDPMechanism;
@@ -64,29 +65,40 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
         this.tickIntervalSecs = ((Number) topoConf.getOrDefault("dp.tick.interval.secs", 5)).intValue();
         long mu = ((Number) topoConf.getOrDefault("dp.mu", DPConfig.mu())).longValue();
 
-        // Budget split (from SyntheticDataPerturbationServiceProvider):
-        //   epsilon: 50/50 split
-        //   delta: 2/3 for key selection, 1/3 for histogram
+        // Budget split (mirrors SyntheticDataPerturbationServiceProvider):
+        //   epsilon: 50/50 split between key selection and histogram
+        //   delta:   2/3 for key selection, 1/3 for histogram
         //
-        // Per paper Section 4.4, key selection composes over at most C rounds,
-        // so we first convert total key-selection budget into per-round budget.
-        DPUtil.PerRoundBudget keyRoundBudget = DPUtil.keySelectionPerRoundBudget(
-                DPConfig.EPSILON / 2.0,
-                (2.0 / 3.0) * DPConfig.DELTA,
-                DPConfig.MAX_CONTRIBUTIONS_PER_USER
-        );
-        double rhoK = DPUtil.cdpRho(keyRoundBudget.epsilon(), keyRoundBudget.delta());
-        double sigmaKey = DPUtil.calculateSigma(rhoK, maxTimeSteps, 1.0);
-
-        double rhoH = DPUtil.cdpRho(DPConfig.EPSILON / 2.0, (1.0 / 3.0) * DPConfig.DELTA);
-        double l1Sens = DPUtil.l1Sensitivity(DPConfig.MAX_CONTRIBUTIONS_PER_USER, DPConfig.PER_RECORD_CLAMP);
-        double sigmaHist = DPUtil.calculateSigma(rhoH, maxTimeSteps, l1Sens);
+        // The mechanism runs the full DP-SQLP Section 4.4 calibration internally
+        // (compose the key-selection budget over C rounds, split the per-round
+        // delta into Gaussian-noise and threshold-failure shares, derive beta and
+        // the threshold quantile, and calibrate sigma_h against (eps_h, delta_h)).
+        // We use the same defaults as the confidential AbstractDataPerturbationServiceProvider:
+        // ZCDP_LINEAR composition (tightest) and alpha = 0.5.
+        final double epsilonK = DPConfig.EPSILON / 2.0;
+        final double deltaK = (2.0 / 3.0) * DPConfig.DELTA;
+        final double epsilonH = DPConfig.EPSILON / 2.0;
+        final double deltaH = (1.0 / 3.0) * DPConfig.DELTA;
+        final double alpha = 0.5;
+        final CompositionMode composition = CompositionMode.ZCDP_LINEAR;
 
         this.mechanism = new StreamingDPMechanism(
-                sigmaKey, sigmaHist, this.maxTimeSteps, mu, DPConfig.MAX_CONTRIBUTIONS_PER_USER);
+                composition,
+                epsilonK, deltaK,
+                epsilonH, deltaH,
+                this.maxTimeSteps,
+                mu,
+                DPConfig.MAX_CONTRIBUTIONS_PER_USER,
+                DPConfig.PER_RECORD_CLAMP,
+                alpha);
 
-        LOG.info("[BaselineDataPerturbation {}] DP mechanism initialized: sigmaKey={}, sigmaHist={}, maxTimeSteps={}, mu={}",
-                taskId, sigmaKey, sigmaHist, maxTimeSteps, mu);
+        // Recompute the calibration purely for logging the derived noise scales.
+        DPUtil.DpCalibration cal = DPUtil.calibrate(
+                composition, epsilonK, deltaK, epsilonH, deltaH,
+                DPConfig.MAX_CONTRIBUTIONS_PER_USER, this.maxTimeSteps, DPConfig.PER_RECORD_CLAMP, alpha);
+        LOG.info("[BaselineDataPerturbation {}] DP mechanism initialized: composition={}, sigmaKey={}, "
+                        + "sigmaHist={}, thresholdQuantile={}, maxTimeSteps={}, mu={}",
+                taskId, composition, cal.sigmaKey(), cal.sigmaHist(), cal.thresholdQuantile(), maxTimeSteps, mu);
 
         // Set up epoch coordination via ZooKeeper
         int totalReplicas = context.getComponentTasks(context.getThisComponentId()).size();
