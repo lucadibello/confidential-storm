@@ -97,7 +97,7 @@ class ClusterManager(object):
             slave.scp_to(compose_file.local_path, compose_file.remote_path)
             slave.run("docker", "compose", "-f",
                       "{}/docker-compose.yml".format(slave.remote_data_dir),
-                      "up", "-d", check=True)
+                      "up", "-d", "--force-recreate", check=True)
 
         if not self.topology.slaves:
             return
