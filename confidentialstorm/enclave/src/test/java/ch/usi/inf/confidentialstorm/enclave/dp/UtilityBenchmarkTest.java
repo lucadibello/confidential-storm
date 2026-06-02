@@ -1,7 +1,7 @@
 package ch.usi.inf.confidentialstorm.enclave.dp;
 
+import ch.usi.inf.confidentialstorm.common.dp.CompositionMode;
 import ch.usi.inf.confidentialstorm.enclave.util.DPUtil;
-import org.apache.commons.math3.distribution.NormalDistribution;
 import org.apache.commons.math3.util.FastMath;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -137,33 +137,8 @@ class UtilityBenchmarkTest {
   // -------------------------------------------------------------------------
 
   /**
-   * Which $C$-fold composition theorem to use when deriving the per-round
-   * key-selection budget.
-   * <ul>
-   * <li>{@code DWORK_ANALYTICAL}: advanced-composition bound from
-   * Dwork-Rothblum-Vadhan, applied to $(\varepsilon_k, \delta_k)$-DP per round.
-   * Goes through $(\varepsilon, \delta)$-DP throughout and converts to $\rho$
-   * only at the Gaussian-calibration step.
-   * </li>
-   * <li>{@code OPTIMAL_KOV}: Kairouz-Oh-Viswanath optimal $k$-fold composition.
-   * Same shape as DWORK_ANALYTICAL but with a tighter per-round $\varepsilon$.
-   * </li>
-   * <li>{@code ZCDP_LINEAR}: skip the $(\varepsilon, \delta)$-DP composition
-   * entirely. Convert the total $(\varepsilon_k, \delta_k)$ directly to
-   * $\rho_k$-zCDP and split linearly across the $C$ rounds:
-   * $\rho_k^{(r)} = \rho_k / C$.
-   * </li>
-   * </ul>
-   */
-  enum CompositionMode {
-    DWORK_ANALYTICAL,
-    OPTIMAL_KOV,
-    ZCDP_LINEAR
-  }
-
-  /**
    * One row of the comparison table: a named combination of $\alpha$ and the
-   * $C$-fold composition theorem.
+   * $C$-fold composition theorem ({@link CompositionMode}).
    */
   record BenchmarkConfig(
       String name,
@@ -269,10 +244,9 @@ class UtilityBenchmarkTest {
       System.out.printf(Locale.ROOT, "%n[run %2d/%2d, seed=%d]%n", run + 1, NUM_RUNS, seed);
       for (int c = 0; c < configs.size(); c++) {
         BenchmarkConfig cfg = configs.get(c);
-        Calibration cal = cals[c];
 
         long t0 = System.nanoTime();
-        double[] metrics = runOnce(batches, T, cal, MU);
+        double[] metrics = runOnce(batches, T, cfg, MU);
         double elapsedSec = (System.nanoTime() - t0) / 1e9;
 
         perRunPerConfig[c][run] = metrics;
@@ -417,15 +391,17 @@ class UtilityBenchmarkTest {
    *                {@link #generateBatches}
    * @param T       number of micro-batches (time steps) to stream through the
    *                mechanism
-   * @param cal     calibration parameters for the mechanism, as derived by
-   *                {@link #calibrate}
+   * @param cfg     the configuration (composition theorem + alpha) used to
+   *                construct the mechanism
    * @param mu      the threshold offset to use in the mechanism
    * @return array of (l0, l_inf, l1, l2) metrics comparing the final released
    *         histogram
    */
-  private double[] runOnce(List<int[]>[] batches, int T, Calibration cal, long mu) {
+  private double[] runOnce(List<int[]>[] batches, int T, BenchmarkConfig cfg, long mu) {
+    // Construct the mechanism directly from the high-level DP budget using the
+    // chosen composition theorem; the calibration pipeline runs internally.
     StreamingDPMechanism mechanism = new StreamingDPMechanism(
-        cal.sigmaKey(), cal.sigmaHist(), cal.thresholdQuantile(), T, mu, C);
+        cfg.composition(), EPS_K, DELTA_K, EPS_H, DELTA_H, T, mu, C, L, cfg.alpha());
 
     Map<String, Long> groundTruth = new HashMap<>();
     Map<String, Long> dpHistogram = null;
@@ -488,71 +464,23 @@ class UtilityBenchmarkTest {
    * $\rho_k$-zCDP once and splits linearly across rounds.
    */
   private Calibration calibrate(BenchmarkConfig cfg, int T) {
-    // Derive per-round (epsilon, delta) and rho_k_round depending on composition.
-    //
-    // ZCDP_LINEAR doesn't use the (eps, delta)-DP composition entirely as we
-    // directly use the sequential composition theorem for rho-zCDP
-    // (rho_round = rho_k / C), and recover an (eps_round, delta_round) only for the
-    // beta accounting.
-    //
-    // DWORK / KOV first compose in (eps, delta)-DP to obtain (eps_round,
-    // delta_round), then re-convert to rho_round via the closed-form zCDP -> DP
-    // bound.
-    double epsRound;
-    double deltaRound;
-    double rhoKRound;
-    switch (cfg.composition()) {
-      case DWORK_ANALYTICAL -> {
-        DPUtil.PerRoundBudget b = DPUtil.keySelectionPerRoundBudget(EPS_K, DELTA_K, C);
-        epsRound = b.epsilon();
-        deltaRound = b.delta();
-        rhoKRound = DPUtil.cdpRho(epsRound, DPUtil.gaussianShareDelta(deltaRound, cfg.alpha()));
-      }
-      case OPTIMAL_KOV -> {
-        DPUtil.PerRoundBudget b = DPUtil.keySelectionPerRoundBudgetOptimal(EPS_K, DELTA_K, C);
-        epsRound = b.epsilon();
-        deltaRound = b.delta();
-        rhoKRound = DPUtil.cdpRho(epsRound, DPUtil.gaussianShareDelta(deltaRound, cfg.alpha()));
-      }
-      case ZCDP_LINEAR -> {
-        // Convert (eps_k, delta_k) directly to rho_k via the closed-form zCDP -> DP
-        // bound, then split linearly across C rounds. delta_k is also partitioned
-        // linearly across rounds so we have a per-round delta for the beta accounting,
-        // and eps_round is recovered from rho_round via eps = rho +
-        // 2*sqrt(rho*ln(1/delta)).
-        double rhoKTotal = DPUtil.cdpRho(EPS_K, DELTA_K);
+    // Delegate the full Section 4.4 calibration pipeline to the shared utility:
+    // the per-round key-selection budget for the chosen composition theorem,
+    // sigma_k, beta, the threshold quantile, and sigma_h are all derived there.
+    DPUtil.DpCalibration dp = DPUtil.calibrate(
+        cfg.composition(), EPS_K, DELTA_K, EPS_H, DELTA_H, C, T, L, cfg.alpha());
 
-        // sequential composition for rho-zCDP (split evenly across rounds)
-        rhoKRound = rhoKTotal / C;
-        // in a similar fashion to the approximate-DP case, delta is split evenly across
-        // rounds
-        deltaRound = DELTA_K / C;
-
-        // recover eps_round from rho_round using Preposition 1.3 of the zCDP paper:
-        // rho-CDP => (rho + 2*sqrt(rho*ln(1/delta)), delta)-DP for all delta > 0. This
-        epsRound = rhoKRound + 2.0 * FastMath.sqrt(rhoKRound * FastMath.log(1.0 / deltaRound));
-      }
-      default -> throw new IllegalStateException("Unknown composition mode: " + cfg.composition());
-    }
-
-    double beta = DPUtil.computeBeta(epsRound, deltaRound, cfg.alpha());
-    double sigmaKey = DPUtil.calculateSigma(rhoKRound, T, 1.0);
-
-    double thresholdQuantile = new NormalDistribution(0.0, 1.0)
-        .inverseCumulativeProbability(1.0 - beta);
-
-    double rhoH = DPUtil.cdpRho(EPS_H, DELTA_H);
-    double sigmaHist = DPUtil.calculateSigma(rhoH, T, DPUtil.l1Sensitivity(C, L));
-
+    // Diagnostic-only fields used by the CSV/log output, recovered from the
+    // calibrated sigma_k and threshold quantile.
     double kappa = FastMath.ceil(FastMath.log(T) / FastMath.log(2));
-    double honakerNodeVariance = sigmaKey * sigmaKey / (2.0 * (1.0 - FastMath.pow(2.0, -kappa)));
-    double tauAtLastStep = FastMath.sqrt(kappa * honakerNodeVariance) * thresholdQuantile;
+    double honakerNodeVariance = dp.sigmaKey() * dp.sigmaKey() / (2.0 * (1.0 - FastMath.pow(2.0, -kappa)));
+    double tauAtLastStep = FastMath.sqrt(kappa * honakerNodeVariance) * dp.thresholdQuantile();
 
     return new Calibration(
-        epsRound, deltaRound,
-        rhoKRound, sigmaKey,
-        rhoH, sigmaHist,
-        beta, thresholdQuantile,
+        dp.epsilonKeyRound(), dp.deltaKeyRound(),
+        dp.rhoKey(), dp.sigmaKey(),
+        dp.rhoHist(), dp.sigmaHist(),
+        dp.beta(), dp.thresholdQuantile(),
         tauAtLastStep, kappa);
   }
 

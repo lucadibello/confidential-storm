@@ -4,10 +4,9 @@ import ch.usi.inf.confidentialstorm.common.api.dp.perturbation.DataPerturbationS
 import ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.*;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
+import ch.usi.inf.confidentialstorm.common.dp.CompositionMode;
 import ch.usi.inf.confidentialstorm.enclave.dp.StreamingDPMechanism;
 import ch.usi.inf.confidentialstorm.enclave.service.bolts.ConfidentialBoltService;
-import ch.usi.inf.confidentialstorm.enclave.util.DPUtil;
-import org.apache.commons.math3.distribution.NormalDistribution;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -132,108 +131,49 @@ public abstract class AbstractDataPerturbationServiceProvider
   }
 
   /**
+   * The C-fold composition theorem used to derive the per-round key-selection
+   * budget from the total (epsilon_k, delta_k) budget.
+   * <p>
+   * Defaults to {@link CompositionMode#ZCDP_LINEAR}, which is the tightest of the
+   * three theorems (it avoids the lossy (epsilon, delta) -> rho conversion that
+   * the advanced-composition variants incur) and therefore yields the lowest
+   * Gaussian noise / best utility. Subclasses may override to select the
+   * Dwork-Rothblum-Vadhan or Kairouz-Oh-Viswanath advanced-composition variants.
+   *
+   * @return the composition mode to use for key-selection budget derivation
+   */
+  public CompositionMode getCompositionMode() {
+    return CompositionMode.ZCDP_LINEAR;
+  }
+
+  /**
    * Constructs a new AbstractDataPerturbationServiceProvider and initializes the
    * DP mechanism.
    * <p>
-   * Privacy budget flow follows DP-SQLP Section 4.4:
-   * <ol>
-   *
-   * <li>
-   * Compose (epsilon_k, delta_k) over C rounds via
-   * {@link DPUtil#keySelectionPerRoundBudgetOptimal}
-   * to obtain the per-round budget (epsilon_k_round, delta_k_round). We use the
-   * Kairouz-Oh-Viswanath optimal k-fold composition (the "empirically tighter
-   * variant of advanced composition" referenced in Section 4.4 of the DP-SQLP
-   * paper) rather than the Dwork analytical bound, since it yields a strictly
-   * larger per-round epsilon for the same total budget and therefore lower
-   * Gaussian noise.
-   * </li>
-   *
-   * <li>
-   * Split delta_k^{(r)} into a Gaussian-noise share
-   * 
-   * <pre>
-   * (1 - alpha) * delta_k^{(r)}
-   * </pre>
-   * 
-   * and a threshold-failure share
-   * 
-   * <pre>
-   * alpha * delta_k^{(r)}
-   * </pre>
-   * 
-   * </li>
-   * <li>
-   * Derive beta from the threshold
-   * after the
-   * Theorem 3.1 additive term (e^{eps} + 1) * beta is added, the per-round cost
-   * stays exactly (epsilon_k_round, delta_k_round)-DP.
-   * </li>
-   * <li>Calibrate sigma_h directly against (epsilon_h, delta_h) with sensitivity
-   * C * L_m.</li>
-   * </ol>
+   * The full DP-SQLP Section 4.4 calibration (composing the key-selection budget
+   * over C rounds via {@link #getCompositionMode()}, splitting the per-round
+   * delta into Gaussian-noise and threshold-failure shares, deriving beta and the
+   * threshold quantile, and calibrating sigma_h against (epsilon_h, delta_h) with
+   * sensitivity C * L_m) is delegated to
+   * {@link StreamingDPMechanism#StreamingDPMechanism(CompositionMode, double,
+   * double, double, double, int, long, long, double, double)}.
+   * <p>
    * The caller is responsible for choosing the split (epsilon_k, delta_k) and
-   * (epsilon_h, delta_h)
-   * so that their advanced composition stays within the desired total (epsilon,
-   * delta) -- this
-   * class does not enforce a global budget.
+   * (epsilon_h, delta_h) so that their composition stays within the desired total
+   * (epsilon, delta) -- this class does not enforce a global budget.
    */
   public AbstractDataPerturbationServiceProvider() {
-    // acquire privacy parameters form subclass template methods
-    final long C = getMaxUserContributions();
-    final int T = getMaxTimeSteps();
-    final double alpha = getThresholdFailureFraction();
-
-    // sanity checks to avoid misconfiguration by subclasses.
-    if (alpha <= 0.0 || alpha >= 1.0) {
-      throw new IllegalArgumentException(
-          "thresholdFailureFraction (alpha) must lie in (0, 1); got " + alpha);
-    }
-    if (C <= 0) {
-      throw new IllegalArgumentException("maxUserContributions (C) must be positive; got " + C);
-    }
-    if (T <= 0) {
-      throw new IllegalArgumentException("maxTimeSteps (T) must be positive; got " + T);
-    }
-
-    // Compute the per-round budget for key selection using the Kairouz-Oh-Viswanath
-    // optimal k-fold composition theorem (the "empirically tighter variant of advanced
-    // composition" referenced in Section 4.4 of the DP-SQLP paper). A user may
-    // participate in at most C rounds of Algorithm 1, so we compose (epsilon_k, delta_k)
-    // over C rounds.
-    DPUtil.PerRoundBudget keyRoundBudget = DPUtil.keySelectionPerRoundBudgetOptimal(
-        getEpsilonK(), // total epsilon_k budget for key selection
-        getDeltaK(), // total delta_k budget for key selection
-        C // number of rounds (max user contributions)
-    );
-
-    // Pre-allocation approach (thesis background: "Choosing the Accuracy Parameter
-    // beta"):
-    // calibrate sigma_k against the Gaussian share (1-alpha)*delta_round,
-    // and let the threshold-failure term consume the remaining alpha*delta_round
-    // via beta.
-    final double deltaGaussianShare = DPUtil.gaussianShareDelta(keyRoundBudget.delta(), alpha);
-    final double rhoK = DPUtil.cdpRho(keyRoundBudget.epsilon(), deltaGaussianShare);
-    final double sigmaKey = DPUtil.calculateSigma(rhoK, T, 1.0);
-
-    final double beta = DPUtil.computeBeta(
-        keyRoundBudget.epsilon(),
-        keyRoundBudget.delta(),
-        alpha);
-    final double thresholdQuantile = new NormalDistribution(0.0, 1.0).inverseCumulativeProbability(1.0 - beta);
-
-    // Histogram noise (Sensitivity = C * L_m).
-    final double rhoH = DPUtil.cdpRho(getEpsilonH(), getDeltaH());
-    final double l1Sensitivity = DPUtil.l1Sensitivity(C, getPerRecordClamp());
-    final double sigmaHist = DPUtil.calculateSigma(rhoH, T, l1Sensitivity);
-
     this.mechanism = new StreamingDPMechanism(
-        sigmaKey,
-        sigmaHist,
-        thresholdQuantile,
-        T,
+        getCompositionMode(),
+        getEpsilonK(),
+        getDeltaK(),
+        getEpsilonH(),
+        getDeltaH(),
+        getMaxTimeSteps(),
         getMu(),
-        C);
+        getMaxUserContributions(),
+        getPerRecordClamp(),
+        getThresholdFailureFraction());
   }
 
   @Override

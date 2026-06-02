@@ -3,6 +3,8 @@ package ch.usi.inf.confidentialstorm.enclave.dp;
 import java.util.*;
 
 import org.apache.commons.math3.util.FastMath;
+import ch.usi.inf.confidentialstorm.common.dp.CompositionMode;
+import ch.usi.inf.confidentialstorm.enclave.util.DPUtil;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 
@@ -170,6 +172,92 @@ public class StreamingDPMechanism {
         this.thresholdQuantile = thresholdQuantile;
         this.maxTimeSteps = maxTimeSteps;
         this.mu = mu;
+    }
+
+    /**
+     * Initializes the streaming DP mechanism directly from a high-level DP
+     * configuration, deriving the noise scales and threshold quantile internally
+     * via the chosen {@link CompositionMode} composition theorem.
+     * <p>
+     * This is the recommended entry point: callers supply the privacy budget and
+     * sensitivity parameters and pick a composition theorem, and the mechanism
+     * runs the full DP-SQLP Section 4.4 calibration pipeline (see
+     * {@link DPUtil#calibrate}) without the caller having to remember the exact
+     * steps.
+     *
+     * @param composition              the C-fold composition theorem used to
+     *                                 derive the per-round key-selection budget
+     * @param epsilonK                 total epsilon budget for key selection
+     * @param deltaK                   total delta budget for key selection
+     * @param epsilonH                 total epsilon budget for histogram release
+     * @param deltaH                   total delta budget for histogram release
+     * @param maxTimeSteps             maximum number of triggering times (T)
+     * @param mu                       base threshold for key selection
+     * @param maxContributionsPerUser  maximum contributions per user (C)
+     * @param perRecordClamp           per-record clamp value (L_m)
+     * @param thresholdFailureFraction fraction alpha of the per-round
+     *                                 key-selection delta reserved for the
+     *                                 threshold-failure cost, in (0, 1)
+     */
+    public StreamingDPMechanism(CompositionMode composition,
+                                double epsilonK,
+                                double deltaK,
+                                double epsilonH,
+                                double deltaH,
+                                int maxTimeSteps,
+                                long mu,
+                                long maxContributionsPerUser,
+                                double perRecordClamp,
+                                double thresholdFailureFraction) {
+        this(DPUtil.calibrate(composition, epsilonK, deltaK, epsilonH, deltaH,
+                maxContributionsPerUser, maxTimeSteps, perRecordClamp, thresholdFailureFraction),
+                maxTimeSteps, mu, maxContributionsPerUser);
+    }
+
+    /**
+     * Initializes the streaming DP mechanism from a high-level DP configuration
+     * using the default {@link CompositionMode#ZCDP_LINEAR} composition, which is
+     * the tightest of the three theorems and therefore the recommended default.
+     * <p>
+     * Equivalent to the {@link #StreamingDPMechanism(CompositionMode, double,
+     * double, double, double, int, long, long, double, double) composition-aware
+     * constructor} with {@link CompositionMode#ZCDP_LINEAR}.
+     *
+     * @param epsilonK                 total epsilon budget for key selection
+     * @param deltaK                   total delta budget for key selection
+     * @param epsilonH                 total epsilon budget for histogram release
+     * @param deltaH                   total delta budget for histogram release
+     * @param maxTimeSteps             maximum number of triggering times (T)
+     * @param mu                       base threshold for key selection
+     * @param maxContributionsPerUser  maximum contributions per user (C)
+     * @param perRecordClamp           per-record clamp value (L_m)
+     * @param thresholdFailureFraction fraction alpha of the per-round
+     *                                 key-selection delta reserved for the
+     *                                 threshold-failure cost, in (0, 1)
+     */
+    public StreamingDPMechanism(double epsilonK,
+                                double deltaK,
+                                double epsilonH,
+                                double deltaH,
+                                int maxTimeSteps,
+                                long mu,
+                                long maxContributionsPerUser,
+                                double perRecordClamp,
+                                double thresholdFailureFraction) {
+        this(CompositionMode.ZCDP_LINEAR, epsilonK, deltaK, epsilonH, deltaH,
+                maxTimeSteps, mu, maxContributionsPerUser, perRecordClamp, thresholdFailureFraction);
+    }
+
+    /**
+     * Delegating constructor from a pre-computed {@link DPUtil.DpCalibration},
+     * unpacking the derived noise scales and threshold quantile.
+     */
+    private StreamingDPMechanism(DPUtil.DpCalibration calibration,
+                                 int maxTimeSteps,
+                                 long mu,
+                                 long maxContributionsPerUser) {
+        this(calibration.sigmaKey(), calibration.sigmaHist(), calibration.thresholdQuantile(),
+                maxTimeSteps, mu, maxContributionsPerUser);
     }
 
     /**

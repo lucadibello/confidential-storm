@@ -1,6 +1,9 @@
 package ch.usi.inf.confidentialstorm.enclave.util;
 
+import org.apache.commons.math3.distribution.NormalDistribution;
 import org.apache.commons.math3.util.FastMath;
+
+import ch.usi.inf.confidentialstorm.common.dp.CompositionMode;
 
 /**
  * Utility class for Differential Privacy (DP) calculations.
@@ -18,6 +21,44 @@ public class DPUtil {
    * Holder for per-round privacy budget obtained from composition.
    */
   public static final record PerRoundBudget(double epsilon, double delta) {
+  }
+
+  /**
+   * Per-round key-selection budget plus the $\rho$ used to calibrate
+   * $\sigma_k$, as derived from one of the {@link CompositionMode} strategies.
+   *
+   * @param epsilon the per-round epsilon allocated to one Algorithm 1 run
+   * @param delta   the per-round delta allocated to one Algorithm 1 run
+   * @param rho     the per-round zCDP parameter against which $\sigma_k$ is
+   *                calibrated
+   */
+  public static final record KeySelectionRoundBudget(double epsilon, double delta, double rho) {
+  }
+
+  /**
+   * Fully derived noise/threshold parameters for one calibration of
+   * {@link ch.usi.inf.confidentialstorm.enclave.dp.StreamingDPMechanism}.
+   * Captures everything needed to construct the mechanism plus the intermediate
+   * diagnostics callers may want to log.
+   *
+   * @param epsilonKeyRound per-round key-selection epsilon
+   * @param deltaKeyRound   per-round key-selection delta
+   * @param rhoKey          per-round key-selection zCDP parameter
+   * @param sigmaKey        Gaussian noise scale for key selection (Algorithm 1)
+   * @param rhoHist         histogram-release zCDP parameter
+   * @param sigmaHist       Gaussian noise scale for histogram release (Algorithm 2)
+   * @param beta            accuracy parameter of Algorithm 1
+   * @param thresholdQuantile $\Phi^{-1}(1 - \beta)$ of the standard normal
+   */
+  public static final record DpCalibration(
+      double epsilonKeyRound,
+      double deltaKeyRound,
+      double rhoKey,
+      double sigmaKey,
+      double rhoHist,
+      double sigmaHist,
+      double beta,
+      double thresholdQuantile) {
   }
 
   /**
@@ -516,5 +557,147 @@ public class DPUtil {
     // return the Gaussian noise share of the remaining delta budget after reserving
     // alpha * deltaRound for the threshold failure term beta.
     return (1.0 - alpha) * deltaRound;
+  }
+
+  /**
+   * Computes the threshold quantile $\Phi^{-1}(1 - \beta)$ of the standard
+   * normal distribution used to scale the time-dependent key-selection
+   * threshold $\tau_{tr_i} = \sqrt{\lambda^2_{tr_i}} \cdot \Phi^{-1}(1 - \beta)$.
+   *
+   * @param beta the accuracy parameter of Algorithm 1, in (0, 1)
+   * @return the standard-normal quantile $\Phi^{-1}(1 - \beta)$
+   */
+  public static double thresholdQuantile(double beta) {
+    if (beta <= 0.0 || beta >= 1.0) {
+      throw new IllegalArgumentException("beta must lie in (0, 1); got " + beta);
+    }
+    return new NormalDistribution(0.0, 1.0).inverseCumulativeProbability(1.0 - beta);
+  }
+
+  /**
+   * Derives the per-round key-selection budget (epsilon_round, delta_round) and
+   * the per-round $\rho$ used to calibrate $\sigma_k$, for the requested
+   * {@link CompositionMode}.
+   * <p>
+   * In all three modes the per-round delta is later split via the privacy-tight
+   * pre-allocation into a Gaussian-noise share $(1-\alpha)\delta^{(r)}$ and a
+   * threshold-failure share $\alpha\delta^{(r)}$ (see {@link #computeBeta} and
+   * {@link #gaussianShareDelta}). The modes differ only in how the per-round
+   * $\rho$ is obtained:
+   * <ul>
+   * <li>{@link CompositionMode#DWORK_ANALYTICAL} / {@link CompositionMode#OPTIMAL_KOV}:
+   * compose in $(\varepsilon, \delta)$-DP to obtain (epsilon_round,
+   * delta_round), then convert the Gaussian share to $\rho$ via
+   * {@link #cdpRho(double, double)}.</li>
+   * <li>{@link CompositionMode#ZCDP_LINEAR}: convert the total
+   * $(\varepsilon_k, \delta_k)$ directly to $\rho_k$ and split linearly across
+   * the $C$ rounds ($\rho^{(r)} = \rho_k / C$, $\delta^{(r)} = \delta_k / C$),
+   * recovering epsilon_round from $\rho^{(r)}$ for the beta accounting.</li>
+   * </ul>
+   *
+   * @param composition the C-fold composition theorem to apply
+   * @param epsilonK    total epsilon budget for key selection
+   * @param deltaK      total delta budget for key selection
+   * @param C           maximum number of key-selection rounds per user
+   * @param alpha       fraction of the per-round delta reserved for the
+   *                    threshold-failure cost, in (0, 1)
+   * @return the per-round key-selection budget including the calibration $\rho$
+   */
+  public static KeySelectionRoundBudget keySelectionRoundBudget(
+      CompositionMode composition,
+      double epsilonK,
+      double deltaK,
+      long C,
+      double alpha) {
+    switch (composition) {
+      case DWORK_ANALYTICAL -> {
+        PerRoundBudget b = keySelectionPerRoundBudget(epsilonK, deltaK, C);
+        double rho = cdpRho(b.epsilon(), gaussianShareDelta(b.delta(), alpha));
+        return new KeySelectionRoundBudget(b.epsilon(), b.delta(), rho);
+      }
+      case OPTIMAL_KOV -> {
+        PerRoundBudget b = keySelectionPerRoundBudgetOptimal(epsilonK, deltaK, C);
+        double rho = cdpRho(b.epsilon(), gaussianShareDelta(b.delta(), alpha));
+        return new KeySelectionRoundBudget(b.epsilon(), b.delta(), rho);
+      }
+      case ZCDP_LINEAR -> {
+        double rhoKTotal = cdpRho(epsilonK, deltaK);
+        // split linearly in zCDP regime
+        double rhoRound = rhoKTotal / C;
+        double deltaRound = deltaK / C;
+        // Compute epsilon_round using proposition 1.3 of the zCDP paper: rho-CDP => (rho + 2*sqrt(rho*ln(1/delta)), delta)-DP.
+        double epsRound = rhoRound + 2.0 * FastMath.sqrt(rhoRound * FastMath.log(1.0 / deltaRound));
+        return new KeySelectionRoundBudget(epsRound, deltaRound, rhoRound);
+      }
+      default -> throw new IllegalStateException("Unknown composition mode: " + composition);
+    }
+  }
+
+  /**
+   * Translates a high-level DP configuration into the concrete $\sigma_k$,
+   * $\sigma_h$ and threshold quantile consumed by
+   * {@link ch.usi.inf.confidentialstorm.enclave.dp.StreamingDPMechanism},
+   * following DP-SQLP Section 4.4.
+   * <p>
+   * This wraps the full calibration pipeline so callers do not need to remember
+   * the exact sequence of steps: derive the per-round key-selection budget for
+   * the chosen {@link CompositionMode}, calibrate $\sigma_k$ against the
+   * per-round $\rho$, derive $\beta$ and the threshold quantile from the
+   * threshold-failure share, and calibrate $\sigma_h$ directly against
+   * $(\varepsilon_h, \delta_h)$ with sensitivity $C \cdot L_m$.
+   *
+   * @param composition             the C-fold composition theorem to apply
+   * @param epsilonK                total epsilon budget for key selection
+   * @param deltaK                  total delta budget for key selection
+   * @param epsilonH                total epsilon budget for histogram release
+   * @param deltaH                  total delta budget for histogram release
+   * @param C                       maximum number of contributions per user
+   * @param T                       maximum number of time steps (triggering times)
+   * @param perRecordClamp          per-record clamp value $L_m$
+   * @param thresholdFailureFraction fraction $\alpha$ of the per-round
+   *                                 key-selection delta reserved for the
+   *                                 threshold-failure cost, in (0, 1)
+   * @return the derived calibration parameters
+   */
+  public static DpCalibration calibrate(
+      CompositionMode composition,
+      double epsilonK,
+      double deltaK,
+      double epsilonH,
+      double deltaH,
+      long C,
+      int T,
+      double perRecordClamp,
+      double thresholdFailureFraction) {
+    final double alpha = thresholdFailureFraction;
+    if (alpha <= 0.0 || alpha >= 1.0) {
+      throw new IllegalArgumentException(
+          "thresholdFailureFraction (alpha) must lie in (0, 1); got " + alpha);
+    }
+    if (C <= 0) {
+      throw new IllegalArgumentException("maxUserContributions (C) must be positive; got " + C);
+    }
+    if (T <= 0) {
+      throw new IllegalArgumentException("maxTimeSteps (T) must be positive; got " + T);
+    }
+
+    // 1. Per-round key-selection budget and calibration rho for the chosen theorem.
+    KeySelectionRoundBudget keyRound = keySelectionRoundBudget(composition, epsilonK, deltaK, C, alpha);
+
+    // 2. Gaussian noise for key selection (sensitivity 1).
+    double sigmaKey = calculateSigma(keyRound.rho(), T, 1.0);
+
+    // 3. Accuracy parameter beta and threshold quantile from the threshold-failure share.
+    double beta = computeBeta(keyRound.epsilon(), keyRound.delta(), alpha);
+    double thresholdQuantile = thresholdQuantile(beta);
+
+    // 4. Histogram noise calibrated directly against (eps_h, delta_h) with sensitivity C * L_m.
+    double rhoHist = cdpRho(epsilonH, deltaH);
+    double sigmaHist = calculateSigma(rhoHist, T, l1Sensitivity(C, perRecordClamp));
+
+    return new DpCalibration(
+        keyRound.epsilon(), keyRound.delta(), keyRound.rho(), sigmaKey,
+        rhoHist, sigmaHist,
+        beta, thresholdQuantile);
   }
 }
