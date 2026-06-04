@@ -142,8 +142,8 @@ public class SyntheticBaselineTopology {
         conf.put("dp.mu", DPConfig.mu());
         conf.put("dp.tick.interval.secs", Integer.getInteger("dp.tick.interval.secs", 5));
 
-	// register additional classes for serialization
         conf.registerSerialization(java.util.LinkedHashMap.class);
+        conf.registerSerialization(java.util.Collections.emptyMap().getClass());
 
         // Enable Storm's built-in metric collection when profiler is active
         if (ProfilerConfig.ENABLED) {
