@@ -69,9 +69,13 @@ public abstract class AbstractHistogramAggregationBolt extends ConfidentialBolt<
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public Map<String, Object> getComponentConfiguration() {
         Map<String, Object> config = Objects.requireNonNullElse(super.getComponentConfiguration(), new HashMap<>());
         config.put(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, getTickIntervalSecs());
+        List<Object> kryo = (List<Object>) config.computeIfAbsent(Config.TOPOLOGY_KRYO_REGISTER, k -> new ArrayList<>());
+        kryo.add(LinkedHashMap.class.getName());
+        kryo.add(Collections.emptyMap().getClass().getName());
         return config;
     }
 

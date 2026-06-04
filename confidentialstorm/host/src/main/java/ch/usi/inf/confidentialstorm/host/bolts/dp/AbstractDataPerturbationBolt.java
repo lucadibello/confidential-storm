@@ -14,7 +14,11 @@ import org.apache.storm.tuple.Tuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -146,9 +150,13 @@ public abstract class AbstractDataPerturbationBolt extends ConfidentialBolt<Data
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public Map<String, Object> getComponentConfiguration() {
         Map<String, Object> config = Objects.requireNonNullElse(super.getComponentConfiguration(), new HashMap<>());
         config.put(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, getTickIntervalSecs());
+        List<Object> kryo = (List<Object>) config.computeIfAbsent(Config.TOPOLOGY_KRYO_REGISTER, k -> new ArrayList<>());
+        kryo.add(LinkedHashMap.class.getName());
+        kryo.add(Collections.emptyMap().getClass().getName());
         return config;
     }
 
