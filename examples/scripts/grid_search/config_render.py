@@ -79,6 +79,8 @@ class ConfigRenderer(object):
 
         # Master storm.yaml
         master_yaml_path = master_dir / "storm.yaml"
+        slots_per_slave = len(topology.slaves[0].slot_ports) if topology.slaves else 0
+        topology_workers = len(topology.slaves) * slots_per_slave
         master_yaml_path.write_text(_read_template(
             self.templates_dir, "storm.master.yaml.tmpl").substitute(
                 master_host=topology.master.hostname,
@@ -86,6 +88,7 @@ class ConfigRenderer(object):
                 nimbus_thrift_port=topology.master.nimbus_thrift_port,
                 ui_port=topology.master.ui_port,
                 logviewer_port=topology.master.logviewer_port,
+                topology_workers=topology_workers,
         ))
         out.master_storm_yaml = RenderedFile(master_yaml_path)
 
@@ -173,6 +176,7 @@ class ConfigRenderer(object):
                 nimbus_thrift_port=topology.master.nimbus_thrift_port,
                 ui_port=topology.master.ui_port,
                 logviewer_port=topology.master.logviewer_port,
+                topology_workers=len(supervisor.slot_ports),
                 slot_ports_yaml=_slot_ports_yaml(supervisor.slot_ports),
         ))
         out.combined_storm_yaml = RenderedFile(yaml_path)
