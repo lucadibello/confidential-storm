@@ -174,7 +174,9 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
     }
 
     private static Map<String, Long> createDummyHistogram() {
-        return Map.of(DUMMY_MARKER_KEY, 0L);
+        Map<String, Long> dummy = new HashMap<>();
+        dummy.put(DUMMY_MARKER_KEY, 0L);
+        return dummy;
     }
 
     private void handleEpochTick() {
