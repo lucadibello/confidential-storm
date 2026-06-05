@@ -1,67 +1,55 @@
-# Custom Storm image with Intel SGX runtime support.
-#
-# Extends the official Storm image with:
-#   1. Intel SGX PSW runtime libraries (libsgx-urts, DCAP quoting)
-#   2. Teaclave Java TEE SDK config template required at runtime
-#
-# The Teaclave Java SDK (host-0.1.0.jar) unconditionally reads:
-#   /opt/javaenclave/config/template/java_enclave_configure.json
-# before any classpath-based overrides take effect.  The per-project
-# java_enclave_configure.json bundled in the topology JAR then
-# overrides these defaults.
-#
-# The JNI bridge lib_jni_tee_sdk_svm.so (extracted from the JAR at
-# runtime) dynamically links against libsgx_urts.so and
-# libsgx_dcap_ql.so.1, which must be present on the host filesystem.
-
 ARG STORM_VERSION=2.8.3
-FROM storm:${STORM_VERSION}
 
-ARG TEACLAVE_SDK_VERSION=v0.1.0
+# --- Stage 1: source the (glibc-independent) Storm distribution ---------------
+FROM storm:${STORM_VERSION} AS storm-dist
 
-# --- Intel SGX PSW runtime ---------------------------------------------------
-# storm:2.8.3 is based on Ubuntu 24.04 (Noble).  The Intel SGX APT
-# repository provides pre-built packages for this distribution.
+# --- Stage 2: runtime on the devcontainer base -------------------------------
+FROM teaclave/teaclave-java-tee-sdk:v0.1.0-ubuntu18.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG OPENJDK_VERSION=17
+
+ENV STORM_CONF_DIR=/conf \
+    STORM_DATA_DIR=/data \
+    STORM_LOG_DIR=/logs \
+    STORM_HOME=/apache-storm \
+    JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:/apache-storm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# JRE 17 + python3 (storm launcher).
 RUN set -eux; \
+    rm -f /etc/apt/sources.list.d/*sgx* /etc/apt/sources.list.d/*intel* /etc/apt/sources.list.d/*occlum*; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends software-properties-common; \
+    add-apt-repository -y universe; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        gnupg curl ca-certificates; \
-    # Add the Intel SGX APT repository (Noble)
-    curl -fsSL https://download.01.org/intel-sgx/sgx_repo/ubuntu/intel-sgx-deb.key \
-        | gpg --dearmor -o /usr/share/keyrings/intel-sgx.gpg; \
-    echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/intel-sgx.gpg] https://download.01.org/intel-sgx/sgx_repo/ubuntu noble main' \
-        > /etc/apt/sources.list.d/intel-sgx.list; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-        libsgx-urts \
-        libsgx-dcap-ql \
-        libsgx-dcap-default-qpl; \
-    # Clean up
-    apt-get purge -y --auto-remove gnupg; \
+        openjdk-${OPENJDK_VERSION}-jre-headless \
+        python3; \
     rm -rf /var/lib/apt/lists/*
 
-# --- SGX device access for the Storm worker user -----------------------------
-# The SGX device nodes (/dev/sgx/enclave, /dev/sgx/provision) are
-# passed through from the host with group ownership matching the host's
-# "sgx" group (GID 107 on most installations).  Storm worker JVMs run
-# as the "storm" user (UID 1000), so we add that user to a matching
-# group inside the container.
+# storm user (matches the uid/gid 1000 the copied distribution is owned by) and the SGX device group. 
 ARG SGX_GID=107
-RUN groupadd -g ${SGX_GID} sgx 2>/dev/null || true; \
+RUN set -eux; \
+    groupadd --gid 1000 storm; \
+    useradd --uid 1000 --gid 1000 --create-home --home-dir /home/storm --shell /bin/sh storm; \
+    groupadd -g "${SGX_GID}" sgx 2>/dev/null || true; \
     usermod -aG sgx storm
 
-# --- Teaclave Java TEE SDK config template ------------------------------------
-# Fetch the single required config file from the official Apache
-# Teaclave Java TEE SDK repository, pinned to the version matching
-# the SDK JARs used by this project.
+# --- Storm distribution + entrypoint + gosu (from stage 1) -------------------
+COPY --from=storm-dist /apache-storm /apache-storm
+COPY --from=storm-dist /docker-entrypoint.sh /docker-entrypoint.sh
+COPY --from=storm-dist /usr/sbin/gosu /usr/sbin/gosu
+
+# SGX device-access shim: relaxes the in-container SGX device node permissions
+COPY --chmod=0755 docker/sgx-entrypoint.sh /usr/local/bin/sgx-entrypoint
+
+# Storm dirs (+ the default profiler output dir).
 RUN set -eux; \
-    mkdir -p /opt/javaenclave/config/template; \
-    curl -fsSL \
-        "https://raw.githubusercontent.com/apache/teaclave-java-tee-sdk/${TEACLAVE_SDK_VERSION}/sdk/native/config/template/java_enclave_configure.json" \
-        -o /opt/javaenclave/config/template/java_enclave_configure.json; \
-    echo "Teaclave SDK config template installed successfully."
+    mkdir -p "${STORM_CONF_DIR}" "${STORM_DATA_DIR}" "${STORM_LOG_DIR}" /logs/storm/profiler; \
+    chown -R storm:storm "${STORM_CONF_DIR}" "${STORM_DATA_DIR}" "${STORM_LOG_DIR}" /apache-storm
 
-# --- Log directories ---------------------------------------------------------
-
-# Create the Storm log directory and the default profiler log directory
-RUN mkdir -p /logs/storm/profiler
+WORKDIR /apache-storm
+ENTRYPOINT ["/usr/local/bin/sgx-entrypoint"]
