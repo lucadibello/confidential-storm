@@ -145,7 +145,7 @@ class ConfigRenderer(object):
                 self.templates_dir, "docker-compose.slave.yml.tmpl").substitute(
                     storm_image=self.storm_image,
                     storm_version=self.storm_version,
-                    build_context=slave.remote_data_dir,
+                    build_context=host_base,
                     remote_conf_path="{}/conf/storm.yaml".format(host_base),
                     remote_logs_path="{}/data/storm-logs".format(host_base),
             ))
