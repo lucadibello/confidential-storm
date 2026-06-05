@@ -1,10 +1,13 @@
 package ch.usi.inf.confidentialstorm.host.bolts;
 
+import ch.usi.inf.confidentialstorm.common.api.dp.perturbation.model.EncryptedDataPerturbationSnapshot;
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
+import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.base.ConfidentialComponentState;
 import ch.usi.inf.confidentialstorm.host.profiling.BoltProfiler;
 import ch.usi.inf.confidentialstorm.host.profiling.ProfilerConfig;
 import ch.usi.inf.confidentialstorm.host.util.EnclaveErrorUtils;
+import org.apache.storm.Config;
 import org.apache.storm.Constants;
 import org.apache.storm.task.OutputCollector;
 import org.apache.storm.task.TopologyContext;
@@ -15,7 +18,11 @@ import org.apache.teaclave.javasdk.host.exception.EnclaveDestroyingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Base class for all confidential Storm bolts.
@@ -151,6 +158,16 @@ public abstract class ConfidentialBolt<S> extends BaseRichBolt {
      * @param topoConf the topology configuration
      * @param context  the topology context
      */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getComponentConfiguration() {
+        Map<String, Object> config = Objects.requireNonNullElse(super.getComponentConfiguration(), new HashMap<>());
+        List<Object> kryo = (List<Object>) config.computeIfAbsent(Config.TOPOLOGY_KRYO_REGISTER, k -> new ArrayList<>());
+        kryo.add(EncryptedValue.class.getName());
+        kryo.add(EncryptedDataPerturbationSnapshot.class.getName());
+        return config;
+    }
+
     protected void afterPrepare(Map<String, Object> topoConf, TopologyContext context) {
         // hook for subclasses
     }
