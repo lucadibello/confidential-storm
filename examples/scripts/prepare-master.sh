@@ -13,19 +13,18 @@ for SLAVE in 10.233.26.41 10.233.26.42 10.233.26.43; do
   ssh luca@"$SLAVE" "
     set -e
     TMPFILE=\$(mktemp)
-    # Preserve existing keys (ignore error if file absent).
-    docker exec confidential-storm-devcontainer \
-      cat /home/dev/.ssh/authorized_keys 2>/dev/null >> \"\$TMPFILE\" || true
     # Append our key and deduplicate.
     printf '%s\n' '${PUB_KEY}' >> \"\$TMPFILE\"
     sort -u -o \"\$TMPFILE\" \"\$TMPFILE\"
     # Ensure .ssh directory exists with correct ownership.
     docker exec -u root confidential-storm-devcontainer \
       bash -c 'mkdir -p /home/dev/.ssh && chown dev:dev /home/dev/.ssh && chmod 700 /home/dev/.ssh'
-    # Copy file in — docker cp bypasses in-container permission enforcement.
-    docker cp \"\$TMPFILE\" confidential-storm-devcontainer:/home/dev/.ssh/authorized_keys
-    docker exec -u root confidential-storm-devcontainer \
-      bash -c 'chown dev:dev /home/dev/.ssh/authorized_keys && chmod 600 /home/dev/.ssh/authorized_keys'
+    # Stream file in via tar pipe — avoids docker cp filename/path quoting issues.
+    tar -C \"\$(dirname \"\$TMPFILE\")\" -cf - \"\$(basename \"\$TMPFILE\")\" \
+      | docker exec -i -u root confidential-storm-devcontainer \
+          bash -c 'tar -C /home/dev/.ssh -xf - --transform \"s|.*|authorized_keys|\" \
+                   && chown dev:dev /home/dev/.ssh/authorized_keys \
+                   && chmod 600 /home/dev/.ssh/authorized_keys'
     rm -f \"\$TMPFILE\"
   "
 
