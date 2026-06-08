@@ -3,6 +3,7 @@ pandas
 matplotlib
 numpy
 ipykernel
+scikit-learn
 
 # for nvim
 jupytext

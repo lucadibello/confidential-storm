@@ -44,6 +44,8 @@ _INT_FIELDS = {
     "wait_used_secs", "max_wait_secs",
     "profiler_csvs_archived", "worker_logs_archived",
     "worker_error_count", "worker_oom_count",
+    "n_supervisors",
+    "agg_dummies_received", "agg_real_partials_received",
 }
 
 _PARAM_COLS = [
@@ -131,17 +133,34 @@ def discover_runs(base_dir: Path, labels: list[str] | None = None) -> pd.DataFra
             if not ts_dir.is_dir():
                 continue
 
-            for run_dir in sorted(ts_dir.iterdir()):
-                if not run_dir.is_dir():
+            # Multi-worker runs add an extra ``n=<N>`` directory between the
+            # timestamp and the individual run directories. Single-worker
+            # (legacy) runs sit directly under the timestamp. Handle both by
+            # collecting any immediate child that has a params.txt, and
+            # descending one extra level for those that don't.
+            candidate_dirs: list[Path] = []
+            for child in sorted(ts_dir.iterdir()):
+                if not child.is_dir():
                     continue
+                if (child / "params.txt").is_file():
+                    candidate_dirs.append(child)
+                else:
+                    candidate_dirs.extend(
+                        sub for sub in sorted(child.iterdir())
+                        if sub.is_dir() and (sub / "params.txt").is_file()
+                    )
 
+            for run_dir in candidate_dirs:
                 params_path = run_dir / "params.txt"
                 params = parse_params(params_path)
                 if params is None:
                     print(f"  WARNING: Skipping {run_dir.name} (no valid params.txt)")
                     continue
                 profiler_dir = run_dir / "profiler"
-                has_profiler = profiler_dir.is_dir() and any(profiler_dir.glob("profiler-*.csv"))
+                # Profiler CSVs may live directly under profiler/ (legacy single-worker
+                # layout) or under profiler/<worker_ip>/ (current multi-worker layout
+                # where bolt tasks are partitioned across supervisors).
+                has_profiler = profiler_dir.is_dir() and any(profiler_dir.rglob("profiler-*.csv"))
                 params["label"] = label_dir.name
                 params["grid_timestamp"] = ts_dir.name
                 params["run_path"] = run_dir
@@ -238,9 +257,17 @@ def short_label(row: pd.Series, vary_cols: list[str]) -> str:
 def load_profiler_csvs(csv_dir: Path) -> pd.DataFrame | None:
     """Load and concatenate all profiler-*.csv files from the given directory.
 
+    Supports two layouts:
+      - Legacy: ``profiler/profiler-*.csv`` (single-worker runs).
+      - Multi-worker: ``profiler/<worker_ip>/profiler-*.csv``. Bolt tasks are
+        partitioned across workers, so each (component, taskId) appears under
+        exactly one worker. Workers start in lockstep, so timestamps share a
+        common reference and ``elapsed_s`` is computed from the global minimum
+        across all per-worker CSVs.
+
     Returns None if no valid CSV data is found (instead of exiting).
     """
-    files = sorted(csv_dir.glob("profiler-*.csv"))
+    files = sorted(csv_dir.rglob("profiler-*.csv"))
     if not files:
         return None
 
@@ -249,9 +276,12 @@ def load_profiler_csvs(csv_dir: Path) -> pd.DataFrame | None:
         try:
             frame = pd.read_csv(f)
             frame["source_file"] = f.name
+            # The parent directory name is the worker IP when using the
+            # multi-worker layout; otherwise it is just "profiler".
+            frame["worker"] = f.parent.name if f.parent != csv_dir else ""
             frames.append(frame)
         except Exception as e:
-            print(f"  WARNING: Failed to read {f.name}: {e}")
+            print(f"  WARNING: Failed to read {f.relative_to(csv_dir)}: {e}")
 
     if not frames:
         return None
