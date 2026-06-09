@@ -579,20 +579,21 @@ public class DPUtil {
    * the per-round $\rho$ used to calibrate $\sigma_k$, for the requested
    * {@link CompositionMode}.
    * <p>
-   * In all three modes the per-round delta is later split via the privacy-tight
+   * In all three modes the per-round delta is split via the privacy-tight
    * pre-allocation into a Gaussian-noise share $(1-\alpha)\delta^{(r)}$ and a
    * threshold-failure share $\alpha\delta^{(r)}$ (see {@link #computeBeta} and
-   * {@link #gaussianShareDelta}). The modes differ only in how the per-round
-   * $\rho$ is obtained:
+   * {@link #gaussianShareDelta}), and the calibration $\rho$ is obtained by
+   * converting that Gaussian share via {@link #cdpRho(double, double)}. The modes
+   * differ only in how the per-round budget (epsilon_round, delta_round) is
+   * derived:
    * <ul>
    * <li>{@link CompositionMode#DWORK_ANALYTICAL} / {@link CompositionMode#OPTIMAL_KOV}:
    * compose in $(\varepsilon, \delta)$-DP to obtain (epsilon_round,
-   * delta_round), then convert the Gaussian share to $\rho$ via
-   * {@link #cdpRho(double, double)}.</li>
+   * delta_round).</li>
    * <li>{@link CompositionMode#ZCDP_LINEAR}: convert the total
-   * $(\varepsilon_k, \delta_k)$ directly to $\rho_k$ and split linearly across
-   * the $C$ rounds ($\rho^{(r)} = \rho_k / C$, $\delta^{(r)} = \delta_k / C$),
-   * recovering epsilon_round from $\rho^{(r)}$ for the beta accounting.</li>
+   * $(\varepsilon_k, \delta_k)$ to $\rho_k$ and split linearly across the $C$
+   * rounds ($\rho^{(r)} = \rho_k / C$, $\delta^{(r)} = \delta_k / C$), recovering
+   * epsilon_round from $\rho^{(r)}$.</li>
    * </ul>
    *
    * @param composition the C-fold composition theorem to apply
@@ -625,9 +626,15 @@ public class DPUtil {
         // split linearly in zCDP regime
         double rhoRound = rhoKTotal / C;
         double deltaRound = deltaK / C;
-        // Compute epsilon_round using proposition 1.3 of the zCDP paper: rho-CDP => (rho + 2*sqrt(rho*ln(1/delta)), delta)-DP.
+        // Recover the per-round approximate-DP epsilon from the zCDP budget using
+        // proposition 1.3 of the zCDP paper: rho-zCDP => (rho + 2*sqrt(rho*ln(1/delta)), delta)-DP.
         double epsRound = rhoRound + 2.0 * FastMath.sqrt(rhoRound * FastMath.log(1.0 / deltaRound));
-        return new KeySelectionRoundBudget(epsRound, deltaRound, rhoRound);
+        // Calibrate sigma against the Gaussian-noise share (1 - alpha) * deltaRound,
+        // identical to the (eps, delta)-composition paths, so that the threshold-failure
+        // term consumed by beta does not push the per-round cost beyond (epsRound, deltaRound)
+        // and the C-fold composition stays within the assigned (epsilonK, deltaK) budget.
+        double rho = cdpRho(epsRound, gaussianShareDelta(deltaRound, alpha));
+        return new KeySelectionRoundBudget(epsRound, deltaRound, rho);
       }
       default -> throw new IllegalStateException("Unknown composition mode: " + composition);
     }
