@@ -9,6 +9,7 @@ import ch.usi.inf.examples.microbatch_baseline.profiling.BoltProfiler;
 import ch.usi.inf.examples.microbatch_baseline.profiling.ProfilerConfig;
 import ch.usi.inf.examples.microbatch_baseline.util.BatchMarker;
 import ch.usi.inf.examples.microbatch_baseline.util.ComponentConstants;
+import org.apache.storm.Config;
 import org.apache.storm.task.OutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
@@ -19,6 +20,7 @@ import org.apache.storm.tuple.Values;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -45,7 +47,9 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
     private static final Logger LOG = LoggerFactory.getLogger(BaselineDataPerturbationBolt.class);
 
     /** Grace delay after the last END arrives, in millis, to drain in-flight data tuples. */
-    private static final long DEFAULT_END_GRACE_MS = 250L;
+    private static final long DEFAULT_END_GRACE_MS = 50L;
+    /** Tick frequency that drives the grace-window re-check when no more data/control tuples arrive. */
+    private static final int TICK_FREQ_SECS = 1;
 
     private OutputCollector collector;
     private int taskId;
@@ -110,7 +114,23 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
     }
 
     @Override
+    public Map<String, Object> getComponentConfiguration() {
+        Map<String, Object> conf = new HashMap<>();
+        conf.put(Config.TOPOLOGY_TICK_TUPLE_FREQ_SECS, TICK_FREQ_SECS);
+        return conf;
+    }
+
+    @Override
     public void execute(Tuple input) {
+        if (isTickTuple(input)) {
+            // Tick drives the grace-window re-check. Without it, the last END
+            // marker arrives while we're still inside the grace window, no
+            // more tuples come in, and `tryFlushReadyBatches` is never called
+            // again -> the batch deadlocks.
+            tryFlushReadyBatches();
+            collector.ack(input);
+            return;
+        }
         if (ComponentConstants.CONTROL_STREAM.equals(input.getSourceStreamId())) {
             handleControl(input);
             collector.ack(input);
@@ -206,5 +226,10 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
         declarer.declare(new Fields("histogram", "isDummy", "batchId", "producerId"));
         declarer.declareStream(ComponentConstants.CONTROL_STREAM, BatchMarker.fields());
+    }
+
+    private static boolean isTickTuple(Tuple t) {
+        return "__system".equals(t.getSourceComponent())
+                && "__tick".equals(t.getSourceStreamId());
     }
 }

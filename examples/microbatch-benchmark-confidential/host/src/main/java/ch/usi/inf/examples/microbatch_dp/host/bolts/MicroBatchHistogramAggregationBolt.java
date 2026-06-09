@@ -159,6 +159,10 @@ public class MicroBatchHistogramAggregationBolt extends AbstractHistogramAggrega
                 LOG.info("[MicroBatchAggregator] BEGIN batch {} (size={} GB, target {} records)",
                         batchId, b.sizeGb, b.recordCount);
             }
+            // Storm gives no cross-stream ordering guarantee, so BEGIN can land
+            // after all ENDs have already arrived. Retry completion here so we
+            // don't deadlock waiting for an event that already passed.
+            tryComplete(batchId, b);
         } else if (BatchMarker.END.equals(type)) {
             b.endsFrom.add(input.getSourceTask());
             LOG.info("[MicroBatchAggregator] END for batch {} from task {} ({}/{} ends)",
