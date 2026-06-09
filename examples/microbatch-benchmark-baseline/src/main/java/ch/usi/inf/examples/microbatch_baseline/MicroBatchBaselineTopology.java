@@ -152,7 +152,14 @@ public class MicroBatchBaselineTopology {
         conf.put(MicroBatchConfig.CONF_COMPLETION_TIMEOUT_MS, completionTimeoutMs);
         conf.put("microbatch.end.grace.ms", endGraceMs);
 
-        conf.put(Config.TOPOLOGY_WORKER_MAX_HEAP_SIZE_MB, 4096.0);
+        // Micro-batch DP accumulates the full batch in memory before the per-batch
+        // snapshot (tens of millions of contributions at 5 GB), so we need much
+        // more heap than the synthetic-throughput baseline. Worker JVM Xmx is
+        // controlled by TOPOLOGY_WORKER_CHILDOPTS; TOPOLOGY_WORKER_MAX_HEAP_SIZE_MB
+        // is just the scheduler-side cap and must match (or exceed) the -Xmx.
+        conf.put(Config.TOPOLOGY_WORKER_MAX_HEAP_SIZE_MB, 8192.0);
+        conf.put(Config.TOPOLOGY_WORKER_CHILDOPTS,
+                "-Xmx8192m -Xms2048m -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError");
 
         conf.registerSerialization(java.util.LinkedHashMap.class);
         conf.registerSerialization(java.util.Collections.emptyMap().getClass());
