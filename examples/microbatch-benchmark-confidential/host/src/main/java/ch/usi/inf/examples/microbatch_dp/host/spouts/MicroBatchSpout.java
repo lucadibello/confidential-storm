@@ -47,9 +47,16 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
     private List<BatchPlan> plan;
     private int currentBatchIdx = 0;
     private long emittedInCurrentBatch = 0L;
+    private boolean currentBatchPregenerated = false;
     private boolean currentBatchBeginSent = false;
     private boolean currentBatchEndSent = false;
     private boolean exhausted = false;
+
+    // Pre-generated workload for the active batch. RNG / Zipf sampling runs
+    // before BEGIN so the BEGIN->END window measures pure pipeline cost
+    // (per-tuple encryption + emit + downstream), not dataset generation.
+    private int[] preKeyIds;
+    private int[] preUserIds;
 
     public MicroBatchSpout() {
         super(MicroBatchDataService.class);
@@ -100,6 +107,12 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
 
         BatchPlan batch = plan.get(currentBatchIdx);
 
+        if (!currentBatchPregenerated) {
+            pregenerateBatch(batch);
+            currentBatchPregenerated = true;
+            return;
+        }
+
         if (!currentBatchBeginSent) {
             long tNanos = System.nanoTime();
             long tEpochMs = System.currentTimeMillis();
@@ -115,7 +128,7 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         }
 
         if (emittedInCurrentBatch < batch.recordCount()) {
-            emitOneEncryptedTuple();
+            emitPregeneratedEncryptedTuple((int) emittedInCurrentBatch);
             emittedInCurrentBatch++;
             if (emittedInCurrentBatch % 100_000 == 0) {
                 LOG.info("[MicroBatchSpout] batch {} progress: {}/{}",
@@ -125,6 +138,14 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         }
 
         if (!currentBatchEndSent) {
+            // Drop pregen buffers BEFORE the await-completion wait: by now the
+            // int arrays have been fully drained into encrypted Values, so they
+            // hold no live references. Releasing them here means the long
+            // await-completion period carries zero pregen footprint, and only
+            // ONE batch's pregen ever sits in memory at a time.
+            preKeyIds = null;
+            preUserIds = null;
+
             long tNanos = System.nanoTime();
             long tEpochMs = System.currentTimeMillis();
             getCollector().emit(ComponentConstants.CONTROL_STREAM,
@@ -132,7 +153,8 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
                             batch.recordCount(), recoverBytesPerTuple(batch),
                             tNanos, tEpochMs));
             currentBatchEndSent = true;
-            LOG.info("[MicroBatchSpout] END batch {} ({} records emitted)", batch.batchId(), emittedInCurrentBatch);
+            LOG.info("[MicroBatchSpout] END batch {} ({} records emitted, pregen buffers released)",
+                    batch.batchId(), emittedInCurrentBatch);
             return;
         }
 
@@ -147,9 +169,38 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         }
 
         currentBatchIdx++;
+        currentBatchPregenerated = false;
         currentBatchBeginSent = false;
         currentBatchEndSent = false;
         emittedInCurrentBatch = 0L;
+    }
+
+    private void pregenerateBatch(BatchPlan batch) {
+        long recordCount = batch.recordCount();
+        if (recordCount > Integer.MAX_VALUE) {
+            throw new IllegalStateException("Batch " + batch.batchId() + " has "
+                    + recordCount + " records; pre-generation buffer caps at "
+                    + Integer.MAX_VALUE + ". Split the batch or use long-indexed arrays.");
+        }
+        int n = (int) recordCount;
+        // Encourage the JVM to reclaim the previous batch's int[] arrays before
+        // we allocate the (often larger) next pair. Without this hint, the new
+        // allocation can race ahead of background GC and trigger an OOM even
+        // though only the new arrays should be resident.
+        if (currentBatchIdx > 0) {
+            System.gc();
+        }
+        long t0 = System.nanoTime();
+        preKeyIds = new int[n];
+        preUserIds = new int[n];
+        for (int i = 0; i < n; i++) {
+            preKeyIds[i] = keyDistribution.sample();
+            preUserIds[i] = pickUserWithRemainingBudget();
+            userRemainingContributions[preUserIds[i]]--;
+        }
+        long elapsedMs = (System.nanoTime() - t0) / 1_000_000L;
+        LOG.info("[MicroBatchSpout] Pre-generated batch {} ({} records, size={} GB) in {} ms -- outside BEGIN/END window",
+                batch.batchId(), n, batch.sizeGb(), elapsedMs);
     }
 
     private long recoverBytesPerTuple(BatchPlan b) {
@@ -157,15 +208,15 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         return Math.max(1L, (long) Math.round(totalBytes / (double) b.recordCount()));
     }
 
-    private void emitOneEncryptedTuple() throws EnclaveServiceException {
-        int userId = pickUserWithRemainingBudget();
-        final String key = Integer.toString(keyDistribution.sample());
-        MicroBatchEncryptedRecord rec = getService().encryptRecord(key, "1", Integer.toString(userId));
+    private void emitPregeneratedEncryptedTuple(int idx) throws EnclaveServiceException {
+        final int userId = preUserIds[idx];
+        final String key = Integer.toString(preKeyIds[idx]);
+        final String userIdStr = Integer.toString(userId);
+        MicroBatchEncryptedRecord rec = getService().encryptRecord(key, "1", userIdStr);
         if (rec == null) {
             throw new EnclaveServiceException("Failed to encrypt record for user " + userId);
         }
         getCollector().emit(new Values(rec.key(), rec.count(), rec.userId(), rec.routingKey()));
-        userRemainingContributions[userId]--;
     }
 
     private int pickUserWithRemainingBudget() {

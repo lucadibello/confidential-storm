@@ -58,9 +58,16 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
     private List<BatchPlan> plan;
     private int currentBatchIdx = 0;
     private long emittedInCurrentBatch = 0L;
+    private boolean currentBatchPregenerated = false;
     private boolean currentBatchBeginSent = false;
     private boolean currentBatchEndSent = false;
     private boolean exhausted = false;
+
+    // Pre-generated workload for the active batch. Populated before BEGIN is
+    // emitted so the BEGIN->END window measures only the topology pipeline
+    // cost, not the per-tuple RNG / Zipf sampling cost.
+    private int[] preKeyIds;
+    private int[] preUserIds;
 
     @Override
     public void open(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector) {
@@ -111,6 +118,12 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
 
         BatchPlan batch = plan.get(currentBatchIdx);
 
+        if (!currentBatchPregenerated) {
+            pregenerateBatch(batch);
+            currentBatchPregenerated = true;
+            return;
+        }
+
         if (!currentBatchBeginSent) {
             long tNanos = System.nanoTime();
             long tEpochMs = System.currentTimeMillis();
@@ -126,7 +139,7 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
         }
 
         if (emittedInCurrentBatch < batch.recordCount()) {
-            emitOneDataTuple();
+            emitPregeneratedTuple((int) emittedInCurrentBatch);
             emittedInCurrentBatch++;
             if (emittedInCurrentBatch % 1_000_000 == 0) {
                 LOG.info("[MicroBatchSpout] batch {} progress: {}/{}",
@@ -136,6 +149,15 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
         }
 
         if (!currentBatchEndSent) {
+            // Pregen buffers have been fully drained into Storm's outbound queue
+            // (the Values objects we emitted reference fresh Strings, not the
+            // int arrays). Drop the references now so GC can reclaim them
+            // BEFORE we go into the await-completion wait, which can be long.
+            // This guarantees only ONE batch's pregen footprint is resident at
+            // any moment: prior batch is gone, next batch hasn't started.
+            preKeyIds = null;
+            preUserIds = null;
+
             long tNanos = System.nanoTime();
             long tEpochMs = System.currentTimeMillis();
             collector.emit(ComponentConstants.CONTROL_STREAM,
@@ -143,7 +165,7 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
                             batch.recordCount(), recoverBytesPerTuple(batch),
                             tNanos, tEpochMs));
             currentBatchEndSent = true;
-            LOG.info("[MicroBatchSpout] END batch {} ({} records emitted) -- awaiting aggregator completion",
+            LOG.info("[MicroBatchSpout] END batch {} ({} records emitted, pregen buffers released) -- awaiting aggregator completion",
                     batch.batchId(), emittedInCurrentBatch);
             return;
         }
@@ -159,22 +181,49 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
         }
 
         currentBatchIdx++;
+        currentBatchPregenerated = false;
         currentBatchBeginSent = false;
         currentBatchEndSent = false;
         emittedInCurrentBatch = 0L;
     }
 
+    private void pregenerateBatch(BatchPlan batch) {
+        long recordCount = batch.recordCount();
+        if (recordCount > Integer.MAX_VALUE) {
+            throw new IllegalStateException("Batch " + batch.batchId() + " has "
+                    + recordCount + " records; pre-generation buffer caps at "
+                    + Integer.MAX_VALUE + ". Split the batch or use long-indexed arrays.");
+        }
+        int n = (int) recordCount;
+        // Encourage the JVM to reclaim the previous batch's int[] arrays before
+        // we allocate the (often larger) next pair. Without this, the next
+        // allocation may race ahead of background GC and trigger an OOM even
+        // though only the new arrays should be resident.
+        if (currentBatchIdx > 0) {
+            System.gc();
+        }
+        long t0 = System.nanoTime();
+        preKeyIds = new int[n];
+        preUserIds = new int[n];
+        for (int i = 0; i < n; i++) {
+            preKeyIds[i] = keyDistribution.sample();
+            preUserIds[i] = pickUserWithRemainingBudget();
+            userRemainingContributions[preUserIds[i]]--;
+        }
+        long elapsedMs = (System.nanoTime() - t0) / 1_000_000L;
+        LOG.info("[MicroBatchSpout] Pre-generated batch {} ({} records, size={} GB) in {} ms -- outside BEGIN/END window",
+                batch.batchId(), n, batch.sizeGb(), elapsedMs);
+    }
+
+    private void emitPregeneratedTuple(int idx) {
+        final String key = Integer.toString(preKeyIds[idx]);
+        final String userIdStr = Integer.toString(preUserIds[idx]);
+        collector.emit(new Values(key, 1.0, userIdStr, userIdStr));
+    }
+
     private long recoverBytesPerTuple(BatchPlan b) {
         double totalBytes = b.sizeGb() * 1024.0 * 1024.0 * 1024.0;
         return Math.max(1L, (long) Math.round(totalBytes / (double) b.recordCount()));
-    }
-
-    private void emitOneDataTuple() {
-        int userId = pickUserWithRemainingBudget();
-        final String key = Integer.toString(keyDistribution.sample());
-        final String userIdStr = Integer.toString(userId);
-        collector.emit(new Values(key, 1.0, userIdStr, userIdStr));
-        userRemainingContributions[userId]--;
     }
 
     private int pickUserWithRemainingBudget() {
