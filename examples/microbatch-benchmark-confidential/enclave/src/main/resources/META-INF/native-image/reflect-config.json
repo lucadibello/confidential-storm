@@ -109,6 +109,9 @@
     "name": "[Ljava.lang.String;"
   },
   {
+    "name": "[Lch.usi.inf.examples.microbatch_dp.common.api.model.MicroBatchEncryptedRecord;"
+  },
+  {
     "name": "sun.security.provider.SHA",
     "methods": [
       {

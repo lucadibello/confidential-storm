@@ -58,6 +58,18 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
     private int[] preKeyIds;
     private int[] preUserIds;
 
+    // Records encrypted per ECALL. The enclave-transition cost is fixed and
+    // dominates the per-record cost when called one-at-a-time. Batching ~1024
+    // records per call amortises the transition across the whole chunk.
+    private static final int ENCRYPT_CHUNK_SIZE = 1024;
+
+    // Buffer of already-encrypted records, refilled by one ECALL at a time
+    // and drained one tuple per nextTuple() call (so Storm's per-tuple emit
+    // model is preserved).
+    private MicroBatchEncryptedRecord[] encryptedChunk;
+    private int chunkOffset;
+    private int chunkValid;
+
     public MicroBatchSpout() {
         super(MicroBatchDataService.class);
     }
@@ -128,7 +140,11 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         }
 
         if (emittedInCurrentBatch < batch.recordCount()) {
-            emitPregeneratedEncryptedTuple((int) emittedInCurrentBatch);
+            if (encryptedChunk == null || chunkOffset >= chunkValid) {
+                refillEncryptedChunk(batch);
+            }
+            MicroBatchEncryptedRecord rec = encryptedChunk[chunkOffset++];
+            getCollector().emit(new Values(rec.key(), rec.count(), rec.userId(), rec.routingKey()));
             emittedInCurrentBatch++;
             if (emittedInCurrentBatch % 100_000 == 0) {
                 LOG.info("[MicroBatchSpout] batch {} progress: {}/{}",
@@ -138,13 +154,17 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         }
 
         if (!currentBatchEndSent) {
-            // Drop pregen buffers BEFORE the await-completion wait: by now the
-            // int arrays have been fully drained into encrypted Values, so they
-            // hold no live references. Releasing them here means the long
-            // await-completion period carries zero pregen footprint, and only
-            // ONE batch's pregen ever sits in memory at a time.
+            // Drop pregen + chunk buffers BEFORE the await-completion wait: by
+            // now the int arrays have been fully drained into encrypted Values
+            // and the last chunk has been emitted, so they hold no live
+            // references. Releasing them here means the long await-completion
+            // period carries zero per-batch footprint, and only ONE batch's
+            // pregen ever sits in memory at a time.
             preKeyIds = null;
             preUserIds = null;
+            encryptedChunk = null;
+            chunkOffset = 0;
+            chunkValid = 0;
 
             long tNanos = System.nanoTime();
             long tEpochMs = System.currentTimeMillis();
@@ -208,15 +228,27 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         return Math.max(1L, (long) Math.round(totalBytes / (double) b.recordCount()));
     }
 
-    private void emitPregeneratedEncryptedTuple(int idx) throws EnclaveServiceException {
-        final int userId = preUserIds[idx];
-        final String key = Integer.toString(preKeyIds[idx]);
-        final String userIdStr = Integer.toString(userId);
-        MicroBatchEncryptedRecord rec = getService().encryptRecord(key, "1", userIdStr);
-        if (rec == null) {
-            throw new EnclaveServiceException("Failed to encrypt record for user " + userId);
+    private void refillEncryptedChunk(BatchPlan batch) throws EnclaveServiceException {
+        long remaining = batch.recordCount() - emittedInCurrentBatch;
+        int n = (int) Math.min((long) ENCRYPT_CHUNK_SIZE, remaining);
+        int base = (int) emittedInCurrentBatch;
+        String[] ks = new String[n];
+        String[] cs = new String[n];
+        String[] us = new String[n];
+        for (int i = 0; i < n; i++) {
+            ks[i] = Integer.toString(preKeyIds[base + i]);
+            cs[i] = "1";
+            us[i] = Integer.toString(preUserIds[base + i]);
         }
-        getCollector().emit(new Values(rec.key(), rec.count(), rec.userId(), rec.routingKey()));
+        MicroBatchEncryptedRecord[] result = getService().encryptRecords(ks, cs, us);
+        if (result == null) {
+            throw new EnclaveServiceException(
+                    "Batched encryption returned null for " + n + " records (batch "
+                            + batch.batchId() + ", offset " + base + ")");
+        }
+        encryptedChunk = result;
+        chunkOffset = 0;
+        chunkValid = n;
     }
 
     private int pickUserWithRemainingBudget() {

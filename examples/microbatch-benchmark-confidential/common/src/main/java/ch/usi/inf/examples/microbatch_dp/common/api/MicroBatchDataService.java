@@ -11,4 +11,17 @@ import org.apache.teaclave.javasdk.common.annotations.EnclaveService;
 @EnclaveService
 public interface MicroBatchDataService {
     MicroBatchEncryptedRecord encryptRecord(String key, String count, String userId) throws EnclaveServiceException;
+
+    /**
+     * Batched variant: encrypts N records in a single ECALL.
+     *
+     * <p>The three input arrays must have the same length. Returns a parallel
+     * array of encrypted records (one per input row). The fixed enclave-
+     * transition cost is amortised across the whole chunk, so per-record cost
+     * is dominated by the in-enclave AES-GCM work rather than the ECALL.
+     *
+     * @return array of {@code keys.length} encrypted records, or {@code null}
+     *         if encryption failed at any index.
+     */
+    MicroBatchEncryptedRecord[] encryptRecords(String[] keys, String[] counts, String[] userIds) throws EnclaveServiceException;
 }

@@ -39,27 +39,7 @@ public final class MicroBatchDataServiceProvider
         String userId
     ) throws EnclaveServiceException {
         try {
-            // build AAD using metadata
-            AADSpecification aad = AADSpecification.builder()
-                .sourceComponent(ComponentConstants.SPOUT)
-                .destinationComponent(
-                    ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING
-                )
-                .put("producer_id", producerId)
-                .put("seq", seq++)
-                .put("user_id", userId)
-                .build();
-
-            // encrypt each field separately
-            EncryptedValue k = sealedPayload.encryptString(key, aad);
-            EncryptedValue c = sealedPayload.encryptString(count, aad);
-            EncryptedValue u = sealedPayload.encryptString(userId, aad);
-
-            // generate routing key for user-based partitioning
-            byte[] routingKey = Hash.computeHash(("user:" + userId).getBytes());
-
-            // return the encrypted record with routing key
-            return new MicroBatchEncryptedRecord(k, c, u, routingKey);
+            return encryptOne(key, count, userId);
         } catch (
             SealedPayloadProcessingException
             | CipherInitializationException
@@ -70,5 +50,55 @@ public final class MicroBatchDataServiceProvider
             log.error("Failed to encrypt record for key {}", key);
             return null;
         }
+    }
+
+    @Override
+    public MicroBatchEncryptedRecord[] encryptRecords(
+        String[] keys,
+        String[] counts,
+        String[] userIds
+    ) throws EnclaveServiceException {
+        if (keys.length != counts.length || keys.length != userIds.length) {
+            log.error("encryptRecords: array length mismatch (keys={}, counts={}, userIds={})",
+                keys.length, counts.length, userIds.length);
+            return null;
+        }
+        final int n = keys.length;
+        final MicroBatchEncryptedRecord[] out = new MicroBatchEncryptedRecord[n];
+        try {
+            for (int i = 0; i < n; i++) {
+                out[i] = encryptOne(keys[i], counts[i], userIds[i]);
+            }
+            return out;
+        } catch (
+            SealedPayloadProcessingException
+            | CipherInitializationException
+            | AADEncodingException
+            | NoSuchAlgorithmException e
+        ) {
+            exceptionCtx.handleException(e);
+            log.error("Failed to encrypt batch of {} records", n);
+            return null;
+        }
+    }
+
+    private MicroBatchEncryptedRecord encryptOne(String key, String count, String userId)
+        throws SealedPayloadProcessingException,
+               CipherInitializationException,
+               AADEncodingException,
+               NoSuchAlgorithmException
+    {
+        AADSpecification aad = AADSpecification.builder()
+            .sourceComponent(ComponentConstants.SPOUT)
+            .destinationComponent(ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING)
+            .put("producer_id", producerId)
+            .put("seq", seq++)
+            .put("user_id", userId)
+            .build();
+        EncryptedValue k = sealedPayload.encryptString(key, aad);
+        EncryptedValue c = sealedPayload.encryptString(count, aad);
+        EncryptedValue u = sealedPayload.encryptString(userId, aad);
+        byte[] routingKey = Hash.computeHash(("user:" + userId).getBytes());
+        return new MicroBatchEncryptedRecord(k, c, u, routingKey);
     }
 }
