@@ -1,4 +1,4 @@
-package ch.usi.inf.examples.microbatch_dp.common.topology;
+package ch.usi.inf.examples.microbatch_dp.host.topology;
 
 import org.apache.storm.tuple.Fields;
 

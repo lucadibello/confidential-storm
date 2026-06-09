@@ -1,4 +1,4 @@
-package ch.usi.inf.examples.microbatch_dp.common.config;
+package ch.usi.inf.examples.microbatch_dp.host.config;
 
 import java.util.ArrayList;
 import java.util.List;

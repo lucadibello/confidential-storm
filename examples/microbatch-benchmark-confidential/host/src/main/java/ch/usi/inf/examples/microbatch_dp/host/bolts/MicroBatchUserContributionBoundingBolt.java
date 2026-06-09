@@ -4,7 +4,7 @@ import ch.usi.inf.confidentialstorm.common.api.dp.bounding.UserContributionBound
 import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceException;
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.dp.AbstractContributionBoundingBolt;
-import ch.usi.inf.examples.microbatch_dp.common.topology.BatchMarker;
+import ch.usi.inf.examples.microbatch_dp.host.topology.BatchMarker;
 import ch.usi.inf.examples.microbatch_dp.common.topology.ComponentConstants;
 import org.apache.storm.topology.OutputFieldsDeclarer;
 import org.apache.storm.tuple.Fields;

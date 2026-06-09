@@ -5,8 +5,8 @@ import ch.usi.inf.confidentialstorm.common.crypto.exception.EnclaveServiceExcept
 import ch.usi.inf.confidentialstorm.common.crypto.model.EncryptedValue;
 import ch.usi.inf.confidentialstorm.host.bolts.dp.AbstractHistogramAggregationBolt;
 import ch.usi.inf.examples.microbatch_dp.common.config.DPConfig;
-import ch.usi.inf.examples.microbatch_dp.common.topology.BatchCompletionCoordinator;
-import ch.usi.inf.examples.microbatch_dp.common.topology.BatchMarker;
+import ch.usi.inf.examples.microbatch_dp.host.topology.BatchCompletionCoordinator;
+import ch.usi.inf.examples.microbatch_dp.host.topology.BatchMarker;
 import ch.usi.inf.examples.microbatch_dp.common.topology.ComponentConstants;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;

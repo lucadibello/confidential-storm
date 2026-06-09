@@ -3,7 +3,7 @@ package ch.usi.inf.examples.microbatch_dp.host;
 import ch.usi.inf.confidentialstorm.common.annotation.ConfidentialTopologyBuilder;
 import ch.usi.inf.confidentialstorm.host.profiling.ProfilerConfig;
 import ch.usi.inf.examples.microbatch_dp.common.config.DPConfig;
-import ch.usi.inf.examples.microbatch_dp.common.config.MicroBatchConfig;
+import ch.usi.inf.examples.microbatch_dp.host.config.MicroBatchConfig;
 import ch.usi.inf.examples.microbatch_dp.common.topology.ComponentConstants;
 import ch.usi.inf.examples.microbatch_dp.host.bolts.MicroBatchDataPerturbationBolt;
 import ch.usi.inf.examples.microbatch_dp.host.bolts.MicroBatchHistogramAggregationBolt;
