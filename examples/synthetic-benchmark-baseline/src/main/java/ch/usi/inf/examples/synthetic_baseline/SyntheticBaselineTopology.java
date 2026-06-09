@@ -142,6 +142,8 @@ public class SyntheticBaselineTopology {
         conf.put("dp.mu", DPConfig.mu());
         conf.put("dp.tick.interval.secs", Integer.getInteger("dp.tick.interval.secs", 5));
 
+        conf.put(Config.TOPOLOGY_WORKER_MAX_HEAP_SIZE_MB, 4096.0);
+
         conf.registerSerialization(java.util.LinkedHashMap.class);
         conf.registerSerialization(java.util.Collections.emptyMap().getClass());
 
