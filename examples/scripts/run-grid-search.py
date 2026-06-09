@@ -81,6 +81,24 @@ BASELINE_CLASS = "ch.usi.inf.examples.synthetic_baseline.SyntheticBaselineTopolo
 ENCLAVE_JAR = ENCLAVE_PROJECT / "host" / "target" / "synthetic-benchmark-confidential-host-1.0-SNAPSHOT.jar"
 ENCLAVE_CLASS = "ch.usi.inf.examples.synthetic_dp.host.SyntheticTopology"
 
+MICROBATCH_BASELINE_PROJECT = EXAMPLES_DIR / "microbatch-benchmark-baseline"
+MICROBATCH_ENCLAVE_PROJECT = EXAMPLES_DIR / "microbatch-benchmark-confidential"
+
+MICROBATCH_BASELINE_JAR = (
+    MICROBATCH_BASELINE_PROJECT / "target" / "microbatch-benchmark-baseline-1.0-SNAPSHOT.jar"
+)
+MICROBATCH_BASELINE_CLASS = (
+    "ch.usi.inf.examples.microbatch_baseline.MicroBatchBaselineTopology"
+)
+
+MICROBATCH_ENCLAVE_JAR = (
+    MICROBATCH_ENCLAVE_PROJECT / "host" / "target"
+    / "microbatch-benchmark-confidential-host-1.0-SNAPSHOT.jar"
+)
+MICROBATCH_ENCLAVE_CLASS = (
+    "ch.usi.inf.examples.microbatch_dp.host.MicroBatchTopology"
+)
+
 
 BASELINE = TopologyType(
     name="baseline",
@@ -101,6 +119,30 @@ ENCLAVE = TopologyType(
     startup_timeout=800,
     build_target="build-profiled",
 )
+
+MICROBATCH_BASELINE = TopologyType(
+    name="microbatch-baseline",
+    jar=MICROBATCH_BASELINE_JAR,
+    topology_class=MICROBATCH_BASELINE_CLASS,
+    topo_prefix="MicroBatchBaseline",
+    project_dir=MICROBATCH_BASELINE_PROJECT,
+    startup_timeout=120,
+    build_target="build",
+)
+
+MICROBATCH_ENCLAVE = TopologyType(
+    name="microbatch-enclave",
+    jar=MICROBATCH_ENCLAVE_JAR,
+    topology_class=MICROBATCH_ENCLAVE_CLASS,
+    topo_prefix="MicroBatchDP",
+    project_dir=MICROBATCH_ENCLAVE_PROJECT,
+    startup_timeout=800,
+    build_target="build",
+)
+
+# Modes that drive batches via BEGIN/END markers — they ignore mu/num_users/
+# /num_keys/tick/max_time_steps and instead take batch-sizes-gb + runs-per-size.
+MICROBATCH_MODES = ("microbatch-baseline", "microbatch-enclave")
 
 
 # ---------------------------------------------------------------------------
@@ -139,9 +181,32 @@ def parse_args():
         epilog="All parameters can also be set via environment variables "
                "(see module docstring).")
 
-    p.add_argument("--mode", choices=["baseline", "enclave", "comparison"],
+    p.add_argument("--mode", choices=[
+                       "baseline", "enclave", "comparison",
+                       "microbatch-baseline", "microbatch-enclave",
+                   ],
                    default=env_str("MODE", "enclave"),
-                   help="Which topology to benchmark (default: enclave)")
+                   help="Which topology to benchmark (default: enclave). "
+                        "microbatch-* modes ignore tick/max_time_steps/mu/num_users/"
+                        "num_keys and use --batch-sizes-gb / --runs-per-size instead.")
+
+    # ---- Micro-batch parameters (only used when --mode microbatch-*) -------
+    p.add_argument("--batch-sizes-gb", type=str,
+                   default=env_str("BATCH_SIZES_GB", "1,2,5"),
+                   help="Comma-separated micro-batch sizes in GB. "
+                        "Default: 1,2,5 (matches paper Fig.).")
+    p.add_argument("--runs-per-size", type=int,
+                   default=env_int("RUNS_PER_SIZE", 3),
+                   help="Number of times each batch size is repeated in a single "
+                        "topology run. Default: 3.")
+    p.add_argument("--bytes-per-tuple", type=int,
+                   default=env_int("BYTES_PER_TUPLE", 31),
+                   help="Bytes used for the GB->records conversion. Default: 31 "
+                        "(measured baseline Kryo footprint; pass the same value to "
+                        "both pipelines for matched record-count workload).")
+    p.add_argument("--completion-timeout-ms", type=int,
+                   default=env_int("COMPLETION_TIMEOUT_MS", 30 * 60 * 1000),
+                   help="Spout-side ZK wait timeout per batch, in ms. Default: 30 min.")
 
     # ---- Grid parameters ---------------------------------------------------
     p.add_argument("--tick-intervals", type=int, nargs="+",
@@ -337,6 +402,168 @@ def parse_scale_values(args, n_available):
 
 
 # ---------------------------------------------------------------------------
+# Micro-batch execution
+# ---------------------------------------------------------------------------
+
+def _microbatch_csv_basename(topo_type, run_id):
+    # type: (TopologyType, int) -> str
+    if topo_type.name == "microbatch-baseline":
+        return "microbatch-baseline-run{}.csv".format(run_id)
+    return "microbatch-confidential-run{}.csv".format(run_id)
+
+
+def _count_microbatch_csv_rows(csv_path):
+    # type: (Path) -> int
+    if not csv_path.is_file():
+        return 0
+    n = 0
+    with open(str(csv_path), "r") as fh:
+        for i, line in enumerate(fh):
+            if i == 0:
+                # header
+                continue
+            if line.strip():
+                n += 1
+    return n
+
+
+def execute_microbatch_run(topo_type, run_id, parallelism, batch_sizes_gb,
+                           runs_per_size, bytes_per_tuple, completion_timeout_ms,
+                           seed, total_runs, run_dir, topology, staging_paths,
+                           remote_collector, storm_conf_dir, post_kill_sleep,
+                           poll_interval):
+    """Submit, drive and archive a single micro-batch topology run.
+
+    Completion signal: the aggregator writes one CSV row per batch completed
+    (`microbatch-{baseline,confidential}-runN.csv`). We poll until the row
+    count reaches `len(sizes) * runs_per_size`, then kill the topology and
+    archive the CSV + worker logs.
+
+    Submission flags mirror MicroBatchTopology / MicroBatchBaselineTopology's
+    CLI surface; mu / num_users / num_keys / tick / max_time_steps are not
+    used in micro-batch mode.
+    """
+    from grid_search.runner import run_storm
+    from grid_search.archival import (
+        FatalErrors,
+        snapshot_worker_log_sizes,
+        check_worker_fatal_errors,
+        archive_profiler_csvs,
+        archive_topology_report,
+        archive_worker_logs_and_artifacts,
+    )
+
+    topo_name = "{}{}".format(topo_type.topo_prefix, run_id)
+    sizes_list = [s.strip() for s in batch_sizes_gb.split(",") if s.strip()]
+    expected_rows = len(sizes_list) * runs_per_size
+
+    print("=" * 60)
+    print(" [{}] Run {}/{}: parallelism={} sizes={} runs/size={} bytes/tuple={}".format(
+        topo_type.name, run_id, total_runs, parallelism,
+        batch_sizes_gb, runs_per_size, bytes_per_tuple))
+    print(" Topology: {}  Expected batches: {}  Startup timeout: {}s".format(
+        topo_name, expected_rows, topo_type.startup_timeout))
+    print(" Archive:  {}".format(run_dir))
+    print("=" * 60)
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # ---- 1. Clean remote artifacts + local staging ----
+    print("[microbatch run {}] Cleaning remote profiler dirs + local staging...".format(run_id))
+    remote_collector.clean_remote_dirs(topo_name)
+    remote_collector.clean_local_staging()
+
+    # ---- 2. Submit ----
+    print("[microbatch run {}] Submitting topology...".format(run_id))
+    rc = run_storm(
+        storm_conf_dir,
+        "jar", str(topo_type.jar), topo_type.topology_class,
+        "--run-id",                str(run_id),
+        "--parallelism",           str(parallelism),
+        "--batch-sizes-gb",        batch_sizes_gb,
+        "--runs-per-size",         str(runs_per_size),
+        "--bytes-per-tuple",       str(bytes_per_tuple),
+        "--completion-timeout-ms", str(completion_timeout_ms),
+        "--seed",                  str(seed),
+    )
+    if rc != 0:
+        raise RuntimeError(
+            "storm jar exited with code {} for topology {}".format(rc, topo_name))
+
+    # ---- 3. Poll CSV row count ----
+    # Hard cap on total wall time = startup + N batches * conservative per-batch budget
+    # (we trust completion_timeout_ms per batch already, plus a 60s pad per batch).
+    per_batch_pad_secs = max(60, completion_timeout_ms // 1000)
+    max_wait = topo_type.startup_timeout + expected_rows * per_batch_pad_secs
+
+    errors = FatalErrors()
+    elapsed = 0
+    last_rows = 0
+    completed = False
+    csv_name = _microbatch_csv_basename(topo_type, run_id)
+
+    while elapsed < max_wait:
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+
+        remote_collector.sync_all()
+        # The aggregator writes to /logs/storm/profiler/<csv>; the remote
+        # collector rsyncs that into the merged profiler view.
+        candidates = list(staging_paths.merged_profiler.glob(csv_name))
+        if not candidates:
+            print("[microbatch run {}] {}s: CSV not yet visible ({})".format(
+                run_id, elapsed, csv_name))
+            continue
+
+        rows = max(_count_microbatch_csv_rows(c) for c in candidates)
+        if rows != last_rows:
+            print("[microbatch run {}] {}s: {} / {} batches complete".format(
+                run_id, elapsed, rows, expected_rows))
+            last_rows = rows
+
+        if rows >= expected_rows:
+            print("[microbatch run {}] All {} batches reported after {}s.".format(
+                run_id, expected_rows, elapsed))
+            completed = True
+            break
+
+    if not completed:
+        print("[microbatch run {}] WARNING: timed out after {}s ({} / {} batches).".format(
+            run_id, max_wait, last_rows, expected_rows))
+
+    # ---- 4. Snapshot logs, kill, final sync ----
+    log_sizes = snapshot_worker_log_sizes(staging_paths, topo_name)
+    scan_errors = check_worker_fatal_errors(staging_paths, topo_name, run_id, log_sizes)
+    errors.oom = errors.oom or scan_errors.oom
+    errors.fatal = errors.fatal or scan_errors.fatal
+
+    print("[microbatch run {}] Killing topology {}...".format(run_id, topo_name))
+    run_storm(storm_conf_dir, "kill", topo_name, "-w", "5")
+    time.sleep(post_kill_sleep)
+    remote_collector.sync_all()
+
+    # ---- 5. Archive ----
+    csv_count = archive_profiler_csvs(topology, staging_paths, run_dir)
+    aggregator_host = archive_topology_report(topology, staging_paths, run_dir, run_id)
+    worker_log_count, worker_artifact_count = archive_worker_logs_and_artifacts(
+        topology, staging_paths, run_dir, topo_name, run_id, log_sizes, errors)
+    print("[microbatch run {}] Archived: profiler-csvs={} worker-logs={} "
+          "worker-artifacts={} aggregator-host={}".format(
+              run_id, csv_count, worker_log_count, worker_artifact_count, aggregator_host))
+
+    # ---- 6. Params file ----
+    with open(str(run_dir / "params.txt"), "w") as fh:
+        fh.write("run_id={}\nparallelism={}\nbatch_sizes_gb={}\nruns_per_size={}\n"
+                 "bytes_per_tuple={}\ncompletion_timeout_ms={}\n"
+                 "completed={}\nbatches_reported={}\nexpected_batches={}\n"
+                 "oom={}\nfatal={}\n".format(
+                     run_id, parallelism, batch_sizes_gb, runs_per_size,
+                     bytes_per_tuple, completion_timeout_ms,
+                     str(completed).lower(), last_rows, expected_rows,
+                     str(errors.oom).lower(), str(errors.fatal).lower()))
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -352,16 +579,28 @@ def main():
         types_to_run = [BASELINE]
     elif args.mode == "enclave":
         types_to_run = [ENCLAVE]
+    elif args.mode == "microbatch-baseline":
+        types_to_run = [MICROBATCH_BASELINE]
+    elif args.mode == "microbatch-enclave":
+        types_to_run = [MICROBATCH_ENCLAVE]
     else:
         types_to_run = [BASELINE, ENCLAVE]
 
     BASELINE.startup_timeout = args.startup_timeout_baseline
     ENCLAVE.startup_timeout = args.startup_timeout_enclave
+    MICROBATCH_BASELINE.startup_timeout = args.startup_timeout_baseline
+    MICROBATCH_ENCLAVE.startup_timeout = args.startup_timeout_enclave
 
-    # Build the grid
-    grid = list(product(
-        args.max_time_steps, args.parallelisms,
-        args.mus, args.num_users, args.num_keys, args.tick_intervals))
+    is_microbatch = args.mode in MICROBATCH_MODES
+
+    # Build the grid. In micro-batch mode only parallelism is swept — batch
+    # sizes and runs-per-size are handled inside one topology submission.
+    if is_microbatch:
+        grid = [(0, par, 0, 0, 0, 0) for par in args.parallelisms]
+    else:
+        grid = list(product(
+            args.max_time_steps, args.parallelisms,
+            args.mus, args.num_users, args.num_keys, args.tick_intervals))
     total_combos = len(grid)
 
     # Resolve cluster shape
@@ -387,6 +626,10 @@ def main():
         base = BASELINE_PROJECT / "data" / "comparison-runs"
     elif args.mode == "baseline":
         base = BASELINE_PROJECT / "data" / "runs"
+    elif args.mode == "microbatch-baseline":
+        base = MICROBATCH_BASELINE_PROJECT / "data" / "runs"
+    elif args.mode == "microbatch-enclave":
+        base = MICROBATCH_ENCLAVE_PROJECT / "data" / "runs"
     else:
         base = ENCLAVE_PROJECT / "data" / "runs"
     runs_root = (base / label / grid_timestamp) if label else (base / grid_timestamp)
@@ -397,6 +640,8 @@ def main():
         "baseline": "Baseline DP Histogram (No SGX)",
         "enclave": "Enclave DP Histogram (SGX)",
         "comparison": "Baseline vs Enclave -- Comparison",
+        "microbatch-baseline": "Micro-batch DP Histogram -- Baseline (No SGX)",
+        "microbatch-enclave": "Micro-batch DP Histogram -- Enclave (SGX)",
     }[args.mode]
 
     print("=" * 60)
@@ -551,7 +796,8 @@ def main():
                 manager.bring_up(
                     fresh=True,
                     health_timeout=args.cluster_health_timeout,
-                    sgx_check=(not args.no_sgx_check) and (args.mode != "baseline"),
+                    sgx_check=(not args.no_sgx_check)
+                              and (args.mode not in ("baseline", "microbatch-baseline")),
                 )
                 cluster_managers.append(manager)
             except Exception as exc:
@@ -579,12 +825,44 @@ def main():
                 continue
 
             for tt in types_to_run:
-                if combo_dir is not None:
+                if is_microbatch:
+                    run_dir = (runs_root / "n={}".format(n)
+                               / "p{}_sizes{}_runs{}_run{}".format(
+                                   par, args.batch_sizes_gb.replace(",", "-"),
+                                   args.runs_per_size, run_id))
+                elif combo_dir is not None:
                     run_dir = combo_dir / tt.name
                 else:
                     run_dir = (runs_root / "n={}".format(n)
                                / "tick{}_epochs{}_p{}_mu{}_u{}_k{}_run{}".format(
                                    tick, epochs, par, mu, num_users, num_keys, run_id))
+
+                if is_microbatch:
+                    try:
+                        execute_microbatch_run(
+                            topo_type=tt,
+                            run_id=run_id,
+                            parallelism=par,
+                            batch_sizes_gb=args.batch_sizes_gb,
+                            runs_per_size=args.runs_per_size,
+                            bytes_per_tuple=args.bytes_per_tuple,
+                            completion_timeout_ms=args.completion_timeout_ms,
+                            seed=args.seed,
+                            total_runs=total_runs,
+                            run_dir=run_dir,
+                            topology=topology,
+                            staging_paths=staging_paths,
+                            remote_collector=remote_collector,
+                            storm_conf_dir=storm_conf_dir,
+                            post_kill_sleep=args.post_kill_sleep,
+                            poll_interval=args.poll_interval,
+                        )
+                    except Exception as exc:
+                        print("[microbatch run {}] FAILED: {}".format(run_id, exc))
+                        run_dir.mkdir(parents=True, exist_ok=True)
+                        (run_dir / "run-error.txt").write_text(str(exc))
+                    print()
+                    continue
 
                 params = RunParams(
                     topo_type=tt,
