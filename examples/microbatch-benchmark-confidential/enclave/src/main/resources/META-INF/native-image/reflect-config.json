@@ -1,6 +1,6 @@
 [
   {
-    "name": "ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticEncryptedRecord",
+    "name": "ch.usi.inf.examples.microbatch_dp.common.api.model.MicroBatchEncryptedRecord",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
     "allDeclaredMethods": true,

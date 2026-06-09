@@ -1,5 +1,5 @@
 [
-  { "name": "ch.usi.inf.examples.synthetic_dp.common.api.model.SyntheticEncryptedRecord" },
+  { "name": "ch.usi.inf.examples.microbatch_dp.common.api.model.MicroBatchEncryptedRecord" },
 
   { "name": "ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributionBoundingRequest" },
   { "name": "ch.usi.inf.confidentialstorm.common.api.dp.bounding.model.UserContributionBoundingResponse" },
