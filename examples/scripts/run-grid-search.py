@@ -427,21 +427,21 @@ def _count_microbatch_csv_rows(csv_path):
     return n
 
 
-def execute_microbatch_run(topo_type, run_id, parallelism, batch_sizes_gb,
-                           runs_per_size, bytes_per_tuple, completion_timeout_ms,
-                           seed, total_runs, run_dir, topology, staging_paths,
-                           remote_collector, storm_conf_dir, post_kill_sleep,
-                           poll_interval):
-    """Submit, drive and archive a single micro-batch topology run.
+def _execute_one_microbatch_submission(topo_type, sub_run_id, parallelism,
+                                       size_gb, bytes_per_tuple,
+                                       completion_timeout_ms, seed, sub_run_dir,
+                                       topology, staging_paths, remote_collector,
+                                       storm_conf_dir, post_kill_sleep,
+                                       poll_interval):
+    """Submit, drive and archive a single (size, repetition) micro-batch run.
+
+    Each call submits a fresh Storm topology that processes exactly one batch
+    of `size_gb`, so every bolt/enclave starts from a clean state with no
+    warm-state carry-over from a previous batch.
 
     Completion signal: the aggregator writes one CSV row per batch completed
-    (`microbatch-{baseline,confidential}-runN.csv`). We poll until the row
-    count reaches `len(sizes) * runs_per_size`, then kill the topology and
-    archive the CSV + worker logs.
-
-    Submission flags mirror MicroBatchTopology / MicroBatchBaselineTopology's
-    CLI surface; mu / num_users / num_keys / tick / max_time_steps are not
-    used in micro-batch mode.
+    (`microbatch-{baseline,confidential}-run<sub_run_id>.csv`). We poll until
+    a row appears, then kill the topology and archive into `sub_run_dir`.
     """
     from grid_search.runner import run_storm
     from grid_search.archival import (
@@ -453,35 +453,27 @@ def execute_microbatch_run(topo_type, run_id, parallelism, batch_sizes_gb,
         archive_worker_logs_and_artifacts,
     )
 
-    topo_name = "{}{}".format(topo_type.topo_prefix, run_id)
-    sizes_list = [s.strip() for s in batch_sizes_gb.split(",") if s.strip()]
-    expected_rows = len(sizes_list) * runs_per_size
+    topo_name = "{}{}".format(topo_type.topo_prefix, sub_run_id)
+    expected_rows = 1
 
-    print("=" * 60)
-    print(" [{}] Run {}/{}: parallelism={} sizes={} runs/size={} bytes/tuple={}".format(
-        topo_type.name, run_id, total_runs, parallelism,
-        batch_sizes_gb, runs_per_size, bytes_per_tuple))
-    print(" Topology: {}  Expected batches: {}  Startup timeout: {}s".format(
-        topo_name, expected_rows, topo_type.startup_timeout))
-    print(" Archive:  {}".format(run_dir))
-    print("=" * 60)
+    print("[microbatch sub {}] {} (size={}GB, parallelism={})".format(
+        sub_run_id, topo_name, size_gb, parallelism))
+    print("[microbatch sub {}] Archive: {}".format(sub_run_id, sub_run_dir))
 
-    run_dir.mkdir(parents=True, exist_ok=True)
+    sub_run_dir.mkdir(parents=True, exist_ok=True)
 
     # ---- 1. Clean remote artifacts + local staging ----
-    print("[microbatch run {}] Cleaning remote profiler dirs + local staging...".format(run_id))
     remote_collector.clean_remote_dirs(topo_name)
     remote_collector.clean_local_staging()
 
     # ---- 2. Submit ----
-    print("[microbatch run {}] Submitting topology...".format(run_id))
     rc = run_storm(
         storm_conf_dir,
         "jar", str(topo_type.jar), topo_type.topology_class,
-        "--run-id",                str(run_id),
+        "--run-id",                str(sub_run_id),
         "--parallelism",           str(parallelism),
-        "--batch-sizes-gb",        batch_sizes_gb,
-        "--runs-per-size",         str(runs_per_size),
+        "--batch-sizes-gb",        size_gb,
+        "--runs-per-size",         "1",
         "--bytes-per-tuple",       str(bytes_per_tuple),
         "--completion-timeout-ms", str(completion_timeout_ms),
         "--seed",                  str(seed),
@@ -491,76 +483,147 @@ def execute_microbatch_run(topo_type, run_id, parallelism, batch_sizes_gb,
             "storm jar exited with code {} for topology {}".format(rc, topo_name))
 
     # ---- 3. Poll CSV row count ----
-    # Hard cap on total wall time = startup + N batches * conservative per-batch budget
-    # (we trust completion_timeout_ms per batch already, plus a 60s pad per batch).
     per_batch_pad_secs = max(60, completion_timeout_ms // 1000)
-    max_wait = topo_type.startup_timeout + expected_rows * per_batch_pad_secs
+    max_wait = topo_type.startup_timeout + per_batch_pad_secs
 
     errors = FatalErrors()
     elapsed = 0
     last_rows = 0
     completed = False
-    csv_name = _microbatch_csv_basename(topo_type, run_id)
+    csv_name = _microbatch_csv_basename(topo_type, sub_run_id)
 
     while elapsed < max_wait:
         time.sleep(poll_interval)
         elapsed += poll_interval
 
         remote_collector.sync_all()
-        # The aggregator writes to /logs/storm/profiler/<csv>; the remote
-        # collector rsyncs that into the merged profiler view.
         candidates = list(staging_paths.merged_profiler.glob(csv_name))
         if not candidates:
-            print("[microbatch run {}] {}s: CSV not yet visible ({})".format(
-                run_id, elapsed, csv_name))
+            print("[microbatch sub {}] {}s: CSV not yet visible ({})".format(
+                sub_run_id, elapsed, csv_name))
             continue
 
         rows = max(_count_microbatch_csv_rows(c) for c in candidates)
         if rows != last_rows:
-            print("[microbatch run {}] {}s: {} / {} batches complete".format(
-                run_id, elapsed, rows, expected_rows))
+            print("[microbatch sub {}] {}s: {} / {} batches complete".format(
+                sub_run_id, elapsed, rows, expected_rows))
             last_rows = rows
 
         if rows >= expected_rows:
-            print("[microbatch run {}] All {} batches reported after {}s.".format(
-                run_id, expected_rows, elapsed))
+            print("[microbatch sub {}] Batch complete after {}s.".format(
+                sub_run_id, elapsed))
             completed = True
             break
 
     if not completed:
-        print("[microbatch run {}] WARNING: timed out after {}s ({} / {} batches).".format(
-            run_id, max_wait, last_rows, expected_rows))
+        print("[microbatch sub {}] WARNING: timed out after {}s ({} / {} batches).".format(
+            sub_run_id, max_wait, last_rows, expected_rows))
 
     # ---- 4. Snapshot logs, kill, final sync ----
     log_sizes = snapshot_worker_log_sizes(staging_paths, topo_name)
-    scan_errors = check_worker_fatal_errors(staging_paths, topo_name, run_id, log_sizes)
+    scan_errors = check_worker_fatal_errors(staging_paths, topo_name, sub_run_id, log_sizes)
     errors.oom = errors.oom or scan_errors.oom
     errors.fatal = errors.fatal or scan_errors.fatal
 
-    print("[microbatch run {}] Killing topology {}...".format(run_id, topo_name))
+    print("[microbatch sub {}] Killing topology {}...".format(sub_run_id, topo_name))
     run_storm(storm_conf_dir, "kill", topo_name, "-w", "5")
     time.sleep(post_kill_sleep)
     remote_collector.sync_all()
 
     # ---- 5. Archive ----
-    csv_count = archive_profiler_csvs(topology, staging_paths, run_dir)
-    aggregator_host = archive_topology_report(topology, staging_paths, run_dir, run_id)
+    csv_count = archive_profiler_csvs(topology, staging_paths, sub_run_dir)
+    aggregator_host = archive_topology_report(topology, staging_paths, sub_run_dir, sub_run_id)
     worker_log_count, worker_artifact_count = archive_worker_logs_and_artifacts(
-        topology, staging_paths, run_dir, topo_name, run_id, log_sizes, errors)
-    print("[microbatch run {}] Archived: profiler-csvs={} worker-logs={} "
+        topology, staging_paths, sub_run_dir, topo_name, sub_run_id, log_sizes, errors)
+    print("[microbatch sub {}] Archived: profiler-csvs={} worker-logs={} "
           "worker-artifacts={} aggregator-host={}".format(
-              run_id, csv_count, worker_log_count, worker_artifact_count, aggregator_host))
+              sub_run_id, csv_count, worker_log_count,
+              worker_artifact_count, aggregator_host))
 
-    # ---- 6. Params file ----
-    with open(str(run_dir / "params.txt"), "w") as fh:
-        fh.write("run_id={}\nparallelism={}\nbatch_sizes_gb={}\nruns_per_size={}\n"
+    # ---- 6. Per-submission params file ----
+    with open(str(sub_run_dir / "params.txt"), "w") as fh:
+        fh.write("sub_run_id={}\nparallelism={}\nbatch_size_gb={}\n"
                  "bytes_per_tuple={}\ncompletion_timeout_ms={}\n"
-                 "completed={}\nbatches_reported={}\nexpected_batches={}\n"
-                 "oom={}\nfatal={}\n".format(
-                     run_id, parallelism, batch_sizes_gb, runs_per_size,
+                 "completed={}\noom={}\nfatal={}\n".format(
+                     sub_run_id, parallelism, size_gb,
                      bytes_per_tuple, completion_timeout_ms,
-                     str(completed).lower(), last_rows, expected_rows,
+                     str(completed).lower(),
                      str(errors.oom).lower(), str(errors.fatal).lower()))
+
+
+def execute_microbatch_run(topo_type, run_id, parallelism, batch_sizes_gb,
+                           runs_per_size, bytes_per_tuple, completion_timeout_ms,
+                           seed, total_runs, run_dir, topology, staging_paths,
+                           remote_collector, storm_conf_dir, post_kill_sleep,
+                           poll_interval):
+    """Drive a micro-batch sweep using one fresh topology per (size, repetition).
+
+    Repeated runs of the same batch size are submitted as independent Storm
+    topologies (rather than as multiple batches over one long-running topology)
+    so each repetition measures a cold-start bolt/enclave and the timings are
+    not biased by warm caches or accumulated state from earlier batches.
+
+    Submission flags mirror MicroBatchTopology / MicroBatchBaselineTopology's
+    CLI surface; mu / num_users / num_keys / tick / max_time_steps are not
+    used in micro-batch mode.
+    """
+    sizes_list = [s.strip() for s in batch_sizes_gb.split(",") if s.strip()]
+    total_submissions = len(sizes_list) * runs_per_size
+
+    print("=" * 60)
+    print(" [{}] Run {}/{}: parallelism={} sizes={} runs/size={} bytes/tuple={}".format(
+        topo_type.name, run_id, total_runs, parallelism,
+        batch_sizes_gb, runs_per_size, bytes_per_tuple))
+    print(" Sizes: {}  Reps/size: {}  Total submissions: {}  Startup/sub: {}s".format(
+        sizes_list, runs_per_size, total_submissions, topo_type.startup_timeout))
+    print(" Archive root: {}".format(run_dir))
+    print("=" * 60)
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    submission_idx = 0
+    for size_gb in sizes_list:
+        for rep in range(1, runs_per_size + 1):
+            submission_idx += 1
+            sub_run_id = run_id * 1000 + submission_idx
+            sub_run_dir = run_dir / "size{}gb_rep{}".format(size_gb, rep)
+
+            print("-" * 60)
+            print(" Submission {}/{} (run {}, size={}GB, rep={})".format(
+                submission_idx, total_submissions, run_id, size_gb, rep))
+            print("-" * 60)
+
+            try:
+                _execute_one_microbatch_submission(
+                    topo_type=topo_type,
+                    sub_run_id=sub_run_id,
+                    parallelism=parallelism,
+                    size_gb=size_gb,
+                    bytes_per_tuple=bytes_per_tuple,
+                    completion_timeout_ms=completion_timeout_ms,
+                    seed=seed,
+                    sub_run_dir=sub_run_dir,
+                    topology=topology,
+                    staging_paths=staging_paths,
+                    remote_collector=remote_collector,
+                    storm_conf_dir=storm_conf_dir,
+                    post_kill_sleep=post_kill_sleep,
+                    poll_interval=poll_interval,
+                )
+            except Exception as exc:
+                print("[microbatch sub {}] FAILED: {}".format(sub_run_id, exc))
+                sub_run_dir.mkdir(parents=True, exist_ok=True)
+                (sub_run_dir / "run-error.txt").write_text(str(exc))
+                # Best-effort kill in case the topology was submitted but the
+                # poll/archive step failed, so the next submission starts clean.
+                try:
+                    from grid_search.runner import run_storm
+                    topo_name = "{}{}".format(topo_type.topo_prefix, sub_run_id)
+                    run_storm(storm_conf_dir, "kill", topo_name, "-w", "5")
+                except Exception:
+                    pass
+                time.sleep(post_kill_sleep)
+            print()
 
 
 # ---------------------------------------------------------------------------
