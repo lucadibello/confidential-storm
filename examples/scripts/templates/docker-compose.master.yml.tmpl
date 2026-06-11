@@ -67,6 +67,7 @@ services:
       - $local_conf_path:/conf/storm.yaml
       - storm-data:/data
       - $local_logs_path/supervisor:/logs/storm
+$supervisor_service_block
 
 volumes:
   storm-data:

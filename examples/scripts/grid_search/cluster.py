@@ -64,7 +64,13 @@ class ClusterManager(object):
         flags = ["down"] + (["-v"] if remove_volumes else [])
 
         if not self.combined_mode:
+            master_host = self.topology.master.hostname
             for slave in self.topology.slaves:
+                # Master-colocated supervisor lives inside the master compose;
+                # skip the per-slave teardown to avoid touching a non-existent
+                # slave compose at FRAMEWORK_ROOT/docker-compose.yml.
+                if slave.hostname == master_host:
+                    continue
                 compose_remote = "{}/docker-compose.yml".format(slave.remote_data_dir)
                 slave.run("docker", "compose", "-f", compose_remote, *flags, check=False)
 
@@ -99,10 +105,12 @@ class ClusterManager(object):
                       "{}/docker-compose.yml".format(slave.remote_data_dir),
                       "up", "-d", "--force-recreate", check=True)
 
-        if not self.topology.slaves:
+        master_host = self.topology.master.hostname
+        remote_slaves = [s for s in self.topology.slaves if s.hostname != master_host]
+        if not remote_slaves:
             return
-        with ThreadPoolExecutor(max_workers=len(self.topology.slaves)) as ex:
-            list(ex.map(push_one, self.topology.slaves))
+        with ThreadPoolExecutor(max_workers=len(remote_slaves)) as ex:
+            list(ex.map(push_one, remote_slaves))
 
     # ---- Health checks -----------------------------------------------------
 

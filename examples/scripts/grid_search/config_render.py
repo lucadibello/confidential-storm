@@ -25,6 +25,33 @@ def _slot_ports_yaml(ports):
     return "\n".join("  - {}".format(p) for p in ports)
 
 
+def _build_supervisor_service_block(local_conf_path, local_logs_path):
+    # type: (str, str) -> str
+    """YAML fragment injected into the master compose when the master IP is
+    also listed in --supervisor-hosts.  Mirrors the supervisor service in
+    docker-compose.combined.yml.tmpl but inherits *storm-common from the
+    master compose so the image/build/network settings stay in one place.
+    """
+    return (
+        "\n"
+        "  supervisor:\n"
+        "    <<: *storm-common\n"
+        "    container_name: storm-supervisor\n"
+        "    command: [\"storm\", \"supervisor\"]\n"
+        "    depends_on:\n"
+        "      - nimbus\n"
+        "    devices:\n"
+        "      - /dev/sgx_enclave:/dev/sgx/enclave\n"
+        "      - /dev/sgx_provision:/dev/sgx/provision\n"
+        "    volumes:\n"
+        "      - {conf}:/conf/storm.yaml\n"
+        "      - storm-data:/data\n"
+        "      - /var/run/aesmd/aesm.socket:/var/run/aesmd/aesm.socket\n"
+        "      - {logs}/supervisor:/logs/storm\n"
+        "      - {logs}/supervisor/profiler:/logs/storm/profiler\n"
+    ).format(conf=local_conf_path, logs=local_logs_path)
+
+
 class RenderedFile(object):
     """Pair of (local source path, optional remote destination path)."""
 
@@ -77,18 +104,32 @@ class ConfigRenderer(object):
         master_dir = self.output_dir / "master"
         master_dir.mkdir(parents=True, exist_ok=True)
 
+        # Detect master-colocated supervisor: a slave whose hostname is
+        # identical to the master's hostname/IP.  When present, the master
+        # compose grows a supervisor service and the master storm.yaml
+        # declares its supervisor.slots.ports.
+        master_host = topology.master.hostname
+        master_colocated = next(
+            (s for s in topology.slaves if s.hostname == master_host), None)
+
         # Master storm.yaml
         master_yaml_path = master_dir / "storm.yaml"
         slots_per_slave = len(topology.slaves[0].slot_ports) if topology.slaves else 0
         topology_workers = len(topology.slaves) * slots_per_slave
+        if master_colocated is not None:
+            supervisor_block = "supervisor.slots.ports:\n" + _slot_ports_yaml(
+                master_colocated.slot_ports)
+        else:
+            supervisor_block = ""
         master_yaml_path.write_text(_read_template(
             self.templates_dir, "storm.master.yaml.tmpl").substitute(
-                master_host=topology.master.hostname,
+                master_host=master_host,
                 zk_port=topology.master.zk_port,
                 nimbus_thrift_port=topology.master.nimbus_thrift_port,
                 ui_port=topology.master.ui_port,
                 logviewer_port=topology.master.logviewer_port,
                 topology_workers=topology_workers,
+                supervisor_block=supervisor_block,
         ))
         out.master_storm_yaml = RenderedFile(master_yaml_path)
 
@@ -104,6 +145,11 @@ class ConfigRenderer(object):
                 / master_yaml_path.relative_to(self.output_dir.parent.parent))
             if topology.master.host_project_dir
             else str(master_yaml_path.resolve()))
+        if master_colocated is not None:
+            supervisor_service_block = _build_supervisor_service_block(
+                master_host_conf, master_host_logs)
+        else:
+            supervisor_service_block = ""
         master_compose_path.write_text(_read_template(
             self.templates_dir, "docker-compose.master.yml.tmpl").substitute(
                 storm_image=self.storm_image,
@@ -113,11 +159,16 @@ class ConfigRenderer(object):
                 zk_port=topology.master.zk_port,
                 local_conf_path=master_host_conf,
                 local_logs_path=master_host_logs,
+                supervisor_service_block=supervisor_service_block,
         ))
         out.master_compose = RenderedFile(master_compose_path)
 
-        # Per-slave configs
+        # Per-slave configs.  Skip the master-colocated slave: its supervisor
+        # ships as part of the master compose above (no separate stack pushed
+        # over SSH).
         for slave in topology.slaves:
+            if slave.hostname == master_host:
+                continue
             sdir = self.output_dir / slave.hostname
             sdir.mkdir(parents=True, exist_ok=True)
 

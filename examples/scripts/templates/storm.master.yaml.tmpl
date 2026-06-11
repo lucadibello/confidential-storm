@@ -1,6 +1,8 @@
 # Rendered by examples/scripts/grid_search/config_render.py
 # Master role: Nimbus + ZooKeeper + Storm UI + Logviewer.
-# Master does NOT run a Supervisor in multi-host mode.
+# If the master IP is also listed in --supervisor-hosts, the renderer
+# appends a supervisor.slots.ports block below so the master also acts
+# as a Supervisor (single docker compose stack on the master host).
 
 storm.zookeeper.servers:
   - "$master_host"
@@ -21,3 +23,4 @@ ui.port: $ui_port
 logviewer.port: $logviewer_port
 
 topology.workers: $topology_workers
+$supervisor_block

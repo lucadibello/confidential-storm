@@ -353,17 +353,38 @@ def build_slaves(args, slot_ports):
     ssh_key = args.ssh_key if args.ssh_key else None
     slaves = []
     for h in hostnames:
-        slaves.append(SupervisorHost(
-            hostname=h,
-            outer_user=args.ssh_user,
-            outer_key=ssh_key,
-            outer_port=args.ssh_port,
-            container_user=args.container_user,
-            container_port=args.container_port,
-            remote_data_dir=args.remote_data_dir,
-            slot_ports=list(slot_ports),
-            rsync_bwlimit=args.rsync_bwlimit,
-        ))
+        if h == args.master_host:
+            # Master IP is also listed as a supervisor: the supervisor service
+            # is rendered into the master compose, so the slave acts locally —
+            # no SSH tunnel, no SCP push, and rsync reads files directly from
+            # the master's FRAMEWORK_ROOT bind-mount.
+            slave = SupervisorHost(
+                hostname=h,
+                outer_user=args.ssh_user,
+                outer_key=None,
+                outer_port=args.ssh_port,
+                container_user=args.container_user,
+                container_port=args.container_port,
+                remote_data_dir=str(FRAMEWORK_ROOT),
+                slot_ports=list(slot_ports),
+                rsync_bwlimit=args.rsync_bwlimit,
+            )
+            # Force local even when the user-supplied hostname is an IP that
+            # doesn't match socket.gethostname()/getfqdn().
+            slave.is_local = True
+            slaves.append(slave)
+        else:
+            slaves.append(SupervisorHost(
+                hostname=h,
+                outer_user=args.ssh_user,
+                outer_key=ssh_key,
+                outer_port=args.ssh_port,
+                container_user=args.container_user,
+                container_port=args.container_port,
+                remote_data_dir=args.remote_data_dir,
+                slot_ports=list(slot_ports),
+                rsync_bwlimit=args.rsync_bwlimit,
+            ))
     return slaves
 
 
@@ -792,8 +813,12 @@ def main():
                   "devcontainer is running on each slave.".format(exc))
             sys.exit(1)
         for s in remote_slaves:
-            print("[grid-search]   {} -> localhost:{} (host dir: {})".format(
-                s.hostname, s._local_forward_port, s.host_project_dir))
+            if s.is_local:
+                print("[grid-search]   {} (co-located with master, "
+                      "supervisor runs in master compose)".format(s.hostname))
+            else:
+                print("[grid-search]   {} -> localhost:{} (host dir: {})".format(
+                    s.hostname, s._local_forward_port, s.host_project_dir))
         print()
 
     # ---- Scale sweep ----
