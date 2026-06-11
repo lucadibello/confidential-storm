@@ -145,6 +145,26 @@ MICROBATCH_ENCLAVE = TopologyType(
 MICROBATCH_MODES = ("microbatch-baseline", "microbatch-enclave")
 
 
+def scaled_completion_timeout_ms(size_gb_str, hours_per_gb, floor_ms):
+    # type: (str, float, int) -> int
+    """Auto-scale the per-batch completion timeout from the batch size.
+
+    Throughput of the confidential SGX pipeline is the long pole here: a 1 GB
+    batch can take well over an hour at ~9k records/s, and the legacy 30-min
+    default was killing every micro-batch run. We default to 2 hours of wall
+    time per GB so the orchestrator only kills a run that has truly stalled,
+    not one that is grinding through tuples.
+
+    Returns max(floor_ms, ceil(size_gb * hours_per_gb * 3_600_000)).
+    Passing hours_per_gb <= 0 disables scaling (returns floor_ms unchanged).
+    """
+    if hours_per_gb <= 0:
+        return floor_ms
+    size_gb = float(size_gb_str)
+    scaled = int(round(size_gb * hours_per_gb * 3600 * 1000))
+    return max(scaled, floor_ms)
+
+
 # ---------------------------------------------------------------------------
 # Env / arg helpers
 # ---------------------------------------------------------------------------
@@ -206,7 +226,14 @@ def parse_args():
                         "both pipelines for matched record-count workload).")
     p.add_argument("--completion-timeout-ms", type=int,
                    default=env_int("COMPLETION_TIMEOUT_MS", 30 * 60 * 1000),
-                   help="Spout-side ZK wait timeout per batch, in ms. Default: 30 min.")
+                   help="Floor for the per-batch spout-side ZK wait timeout, in ms. "
+                        "Default: 30 min. Actual timeout is "
+                        "max(this, ceil(size_gb * hours_per_gb * 3600s)).")
+    p.add_argument("--hours-per-gb", type=float,
+                   default=env_float("HOURS_PER_GB", 2.0),
+                   help="Hours per GB used to auto-scale completion timeout per "
+                        "batch. Default: 2.0 (confidential SGX throughput estimate). "
+                        "Set to 0 to disable scaling and use --completion-timeout-ms as-is.")
 
     # ---- Grid parameters ---------------------------------------------------
     p.add_argument("--tick-intervals", type=int, nargs="+",
@@ -574,9 +601,9 @@ def _execute_one_microbatch_submission(topo_type, sub_run_id, parallelism,
 
 def execute_microbatch_run(topo_type, run_id, parallelism, batch_sizes_gb,
                            runs_per_size, bytes_per_tuple, completion_timeout_ms,
-                           seed, total_runs, run_dir, topology, staging_paths,
-                           remote_collector, storm_conf_dir, post_kill_sleep,
-                           poll_interval):
+                           hours_per_gb, seed, total_runs, run_dir, topology,
+                           staging_paths, remote_collector, storm_conf_dir,
+                           post_kill_sleep, poll_interval):
     """Drive a micro-batch sweep using one fresh topology per (size, repetition).
 
     Repeated runs of the same batch size are submitted as independent Storm
@@ -604,14 +631,18 @@ def execute_microbatch_run(topo_type, run_id, parallelism, batch_sizes_gb,
 
     submission_idx = 0
     for size_gb in sizes_list:
+        per_batch_timeout_ms = scaled_completion_timeout_ms(
+            size_gb, hours_per_gb, completion_timeout_ms)
         for rep in range(1, runs_per_size + 1):
             submission_idx += 1
             sub_run_id = run_id * 1000 + submission_idx
             sub_run_dir = run_dir / "size{}gb_rep{}".format(size_gb, rep)
 
             print("-" * 60)
-            print(" Submission {}/{} (run {}, size={}GB, rep={})".format(
-                submission_idx, total_submissions, run_id, size_gb, rep))
+            print(" Submission {}/{} (run {}, size={}GB, rep={}, "
+                  "timeout={:.1f}h)".format(
+                      submission_idx, total_submissions, run_id,
+                      size_gb, rep, per_batch_timeout_ms / 3_600_000.0))
             print("-" * 60)
 
             try:
@@ -621,7 +652,7 @@ def execute_microbatch_run(topo_type, run_id, parallelism, batch_sizes_gb,
                     parallelism=parallelism,
                     size_gb=size_gb,
                     bytes_per_tuple=bytes_per_tuple,
-                    completion_timeout_ms=completion_timeout_ms,
+                    completion_timeout_ms=per_batch_timeout_ms,
                     seed=seed,
                     sub_run_dir=sub_run_dir,
                     topology=topology,
@@ -739,6 +770,15 @@ def main():
     print(" Num keys:            {}".format(" ".join(str(v) for v in args.num_keys)))
     print(" Fixed: seed={}".format(args.seed))
     print(" Timeout factor:      {}x  poll: {}s".format(args.wait_safety_factor, args.poll_interval))
+    if is_microbatch:
+        sizes_list = [s.strip() for s in args.batch_sizes_gb.split(",") if s.strip()]
+        per_size = [
+            (s, scaled_completion_timeout_ms(
+                s, args.hours_per_gb, args.completion_timeout_ms) / 3_600_000.0)
+            for s in sizes_list]
+        print(" Hours/GB scaling:    {}".format(args.hours_per_gb))
+        print(" Per-batch timeout:   {}".format(
+            ", ".join("{}GB={:.1f}h".format(s, h) for s, h in per_size)))
     print(" Total combos:        {}".format(total_combos))
     print(" Total runs:          {}".format(total_runs))
     print(" Estimated runtime:   {:.2f} hrs (worst case)".format(estimated_hrs))
@@ -935,6 +975,7 @@ def main():
                             runs_per_size=args.runs_per_size,
                             bytes_per_tuple=args.bytes_per_tuple,
                             completion_timeout_ms=args.completion_timeout_ms,
+                            hours_per_gb=args.hours_per_gb,
                             seed=args.seed,
                             total_runs=total_runs,
                             run_dir=run_dir,

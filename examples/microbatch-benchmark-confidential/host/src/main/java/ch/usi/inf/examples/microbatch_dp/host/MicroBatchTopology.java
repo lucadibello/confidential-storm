@@ -156,6 +156,17 @@ public class MicroBatchTopology {
         conf.put(MicroBatchConfig.CONF_BYTES_PER_TUPLE, bytesPerTuple);
         conf.put(MicroBatchConfig.CONF_COMPLETION_TIMEOUT_MS, completionTimeoutMs);
 
+        // Micro-batch DP pre-generates the full batch in the spout (two int[]
+        // arrays of size ~173M for 5 GB at 31 B/tuple = ~1.4 GB) before the
+        // run begins. The default 768 MB worker heap is far too small; mirror
+        // the baseline's 8 GB cap so the confidential workers can hold the
+        // pre-generated batch plus the in-flight tuples flowing into enclaves.
+        // TOPOLOGY_WORKER_MAX_HEAP_SIZE_MB is just the scheduler-side cap and
+        // must match (or exceed) the -Xmx in TOPOLOGY_WORKER_CHILDOPTS.
+        conf.put(Config.TOPOLOGY_WORKER_MAX_HEAP_SIZE_MB, 8192.0);
+        conf.put(Config.TOPOLOGY_WORKER_CHILDOPTS,
+                "-Xmx8192m -Xms2048m -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError");
+
         if (ProfilerConfig.ENABLED) {
             conf.registerMetricsConsumer(LoggingMetricsConsumer.class, 1);
         }
