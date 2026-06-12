@@ -43,12 +43,13 @@ public final class UserContributionLimiter {
         }
 
         long currentCount = counts.getOrDefault(userId, 0L);
-        if (currentCount + contributions <= maxContributions) {
-            counts.put(userId, currentCount + contributions);
-            return contributions;
-        } else {
-            return maxContributions - currentCount;
+        long remaining = maxContributions - currentCount;
+        if (remaining <= 0) {
+            return 0;
         }
+        long accepted = Math.min(contributions, remaining);
+        counts.put(userId, currentCount + accepted);
+        return accepted;
     }
 
     /**

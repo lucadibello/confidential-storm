@@ -12,6 +12,8 @@ import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLogger;
 import ch.usi.inf.confidentialstorm.enclave.util.logger.EnclaveLoggerFactory;
 import org.apache.commons.math3.util.FastMath;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -29,6 +31,12 @@ public abstract class AbstractUserContributionBoundingServiceProvider
 
     private final UserContributionLimiter userContributionLimiter = new UserContributionLimiter();
 
+
+    // Skip reflection-based field scanning: return the three known encrypted fields directly.
+    @Override
+    public Collection<EncryptedValue> valuesToVerify(UserContributionBoundingRequest request) {
+        return List.of(request.word(), request.count(), request.userId());
+    }
 
     // template methods to be implemented by subclasses
 
