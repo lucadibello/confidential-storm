@@ -61,6 +61,12 @@ public abstract class AbstractHistogramAggregationServiceProvider
      */
     private int expectedReplicaCount = -1;
 
+    // Skip reflection-based field scanning: request has exactly one encrypted field.
+    @Override
+    public Collection<EncryptedValue> valuesToVerify(HistogramAggregationRequest request) {
+        return List.of(request.encryptedPartialHistogram());
+    }
+
     @Override
     public void setExpectedReplicaCount(int count) {
         if (count <= 0) {
