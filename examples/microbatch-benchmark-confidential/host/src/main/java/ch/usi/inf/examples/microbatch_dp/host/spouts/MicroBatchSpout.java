@@ -28,6 +28,14 @@ import java.util.Random;
  * baseline variant, but each data tuple goes through the SGX-resident
  * encryption service before being emitted, so the recorded duration includes
  * the per-tuple ECALL + encryption cost.
+ *
+ * <p>When the topology runs with {@code numSpouts > 1}, each instance emits
+ * only its share of every batch. The leader (task index 0) emits BEGIN/END
+ * control markers; every instance signals
+ * {@link BatchCompletionCoordinator#signalEmitDone} once it has drained its
+ * share, and the leader waits on
+ * {@link BatchCompletionCoordinator#awaitAllEmitDone} before emitting END.
+ * See {@code MicroBatchBaselineSpout} for the full protocol notes.
  */
 public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
 
@@ -35,6 +43,12 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
 
     private int numUsers;
     private int numKeys;
+
+    private int taskIndex;
+    private int numSpouts;
+    private boolean isLeader;
+    /** Number of users owned by this instance (stride-partitioned by taskIndex). */
+    private int myUserCount;
 
     private ZipfMandelbrotDistribution keyDistribution;
     private ZipfMandelbrotDistribution userContributionDistribution;
@@ -46,15 +60,18 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
 
     private List<BatchPlan> plan;
     private int currentBatchIdx = 0;
+    /** Number of records this instance must emit for the active batch. */
+    private long myRecordsThisBatch = 0L;
     private long emittedInCurrentBatch = 0L;
     private boolean currentBatchPregenerated = false;
     private boolean currentBatchBeginSent = false;
+    private boolean currentBatchEmitSignalled = false;
     private boolean currentBatchEndSent = false;
     private boolean exhausted = false;
 
-    // Pre-generated workload for the active batch. RNG / Zipf sampling runs
-    // before BEGIN so the BEGIN->END window measures pure pipeline cost
-    // (per-tuple encryption + emit + downstream), not dataset generation.
+    // Pre-generated workload for this instance's share of the active batch.
+    // RNG / Zipf sampling runs before BEGIN so the BEGIN->END window measures
+    // pure pipeline cost (per-tuple encryption + emit + downstream).
     private int[] preKeyIds;
     private int[] preUserIds;
 
@@ -64,8 +81,7 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
     private static final int ENCRYPT_CHUNK_SIZE = 1024;
 
     // Buffer of already-encrypted records, refilled by one ECALL at a time
-    // and drained one tuple per nextTuple() call (so Storm's per-tuple emit
-    // model is preserved).
+    // and drained one tuple per nextTuple() call.
     private MicroBatchEncryptedRecord[] encryptedChunk;
     private int chunkOffset;
     private int chunkValid;
@@ -80,12 +96,18 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         this.numKeys = ((Number) conf.getOrDefault("synthetic.num.keys", 1_000_000)).intValue();
         long randomSeed = ((Number) conf.getOrDefault("synthetic.seed", 42L)).longValue();
 
-        this.rng = new Random(randomSeed);
+        this.taskIndex = context.getThisTaskIndex();
+        this.numSpouts = context.getComponentTasks(context.getThisComponentId()).size();
+        this.isLeader = (taskIndex == 0);
+
+        // Seed each instance distinctly so we don't generate identical sequences.
+        this.rng = new Random(randomSeed + taskIndex);
         this.userContributionDistribution = new ZipfMandelbrotDistribution(100_000, 26, 6.738, rng);
         this.keyDistribution = new ZipfMandelbrotDistribution(numKeys, 1000, 1.4, rng);
 
-        this.userRemainingContributions = new long[numUsers];
-        for (int i = 0; i < numUsers; i++) {
+        this.myUserCount = sharePerInstance(numUsers, taskIndex, numSpouts);
+        this.userRemainingContributions = new long[myUserCount];
+        for (int i = 0; i < myUserCount; i++) {
             long target = userContributionDistribution.sample();
             userRemainingContributions[i] = Math.max(1L, Math.min(target, DPConfig.MAX_CONTRIBUTIONS_PER_USER));
         }
@@ -96,8 +118,10 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         this.completionTimeoutMs = MicroBatchConfig.completionTimeoutMs(conf);
         this.plan = MicroBatchConfig.buildPlan(sizesGb, runsPerSize, bytesPerTuple);
 
-        LOG.info("[MicroBatchSpout] plan: {} batches across sizes={}, runsPerSize={}, bytesPerTuple={}",
-                plan.size(), java.util.Arrays.toString(sizesGb), runsPerSize, bytesPerTuple);
+        LOG.info("[MicroBatchSpout {}/{}] leader={}, plan: {} batches across sizes={}, runsPerSize={}, "
+                        + "bytesPerTuple={}, myUserCount={}/{}",
+                taskIndex, numSpouts, isLeader, plan.size(), java.util.Arrays.toString(sizesGb),
+                runsPerSize, bytesPerTuple, myUserCount, numUsers);
 
         this.completion = new BatchCompletionCoordinator(conf, context.getStormId());
     }
@@ -112,7 +136,8 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
     protected void executeNextTuple() throws EnclaveServiceException {
         if (exhausted) return;
         if (currentBatchIdx >= plan.size()) {
-            LOG.info("[MicroBatchSpout] All {} batches emitted -- spout becoming idle.", plan.size());
+            LOG.info("[MicroBatchSpout {}] All {} batches emitted -- spout becoming idle.",
+                    taskIndex, plan.size());
             exhausted = true;
             return;
         }
@@ -125,7 +150,7 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
             return;
         }
 
-        if (!currentBatchBeginSent) {
+        if (isLeader && !currentBatchBeginSent) {
             long tNanos = System.nanoTime();
             long tEpochMs = System.currentTimeMillis();
             getCollector().emit(ComponentConstants.CONTROL_STREAM,
@@ -134,38 +159,51 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
                             tNanos, tEpochMs));
             currentBatchBeginSent = true;
             emittedInCurrentBatch = 0L;
-            LOG.info("[MicroBatchSpout] BEGIN batch {} (size={} GB, target={} records)",
+            LOG.info("[MicroBatchSpout leader] BEGIN batch {} (size={} GB, target={} records total)",
                     batch.batchId(), batch.sizeGb(), batch.recordCount());
             return;
         }
 
-        if (emittedInCurrentBatch < batch.recordCount()) {
+        if (emittedInCurrentBatch < myRecordsThisBatch) {
             if (encryptedChunk == null || chunkOffset >= chunkValid) {
-                refillEncryptedChunk(batch);
+                refillEncryptedChunk();
             }
             MicroBatchEncryptedRecord rec = encryptedChunk[chunkOffset++];
             getCollector().emit(new Values(rec.key(), rec.count(), rec.userId(), rec.routingKey()));
             emittedInCurrentBatch++;
             if (emittedInCurrentBatch % 100_000 == 0) {
-                LOG.info("[MicroBatchSpout] batch {} progress: {}/{}",
-                        batch.batchId(), emittedInCurrentBatch, batch.recordCount());
+                LOG.info("[MicroBatchSpout {}] batch {} progress: {}/{} (my share)",
+                        taskIndex, batch.batchId(), emittedInCurrentBatch, myRecordsThisBatch);
             }
             return;
         }
 
-        if (!currentBatchEndSent) {
-            // Drop pregen + chunk buffers BEFORE the await-completion wait: by
-            // now the int arrays have been fully drained into encrypted Values
-            // and the last chunk has been emitted, so they hold no live
-            // references. Releasing them here means the long await-completion
-            // period carries zero per-batch footprint, and only ONE batch's
-            // pregen ever sits in memory at a time.
+        if (!currentBatchEmitSignalled) {
+            // Drop pregen + chunk buffers now: their contents have been emitted
+            // (Values hold their own Strings, not int[] refs) so they're dead
+            // weight during the upcoming barrier + completion wait.
             preKeyIds = null;
             preUserIds = null;
             encryptedChunk = null;
             chunkOffset = 0;
             chunkValid = 0;
+            completion.signalEmitDone(batch.batchId(), numSpouts);
+            currentBatchEmitSignalled = true;
+            LOG.info("[MicroBatchSpout {}] signalled emit-done for batch {} ({} records emitted)",
+                    taskIndex, batch.batchId(), emittedInCurrentBatch);
+            return;
+        }
 
+        if (isLeader && !currentBatchEndSent) {
+            try {
+                completion.awaitAllEmitDone(batch.batchId(), numSpouts, completionTimeoutMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.error("[MicroBatchSpout leader] interrupted waiting for emit barrier on batch {}",
+                        batch.batchId(), e);
+                exhausted = true;
+                return;
+            }
             long tNanos = System.nanoTime();
             long tEpochMs = System.currentTimeMillis();
             getCollector().emit(ComponentConstants.CONTROL_STREAM,
@@ -173,17 +211,19 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
                             batch.recordCount(), recoverBytesPerTuple(batch),
                             tNanos, tEpochMs));
             currentBatchEndSent = true;
-            LOG.info("[MicroBatchSpout] END batch {} ({} records emitted, pregen buffers released)",
-                    batch.batchId(), emittedInCurrentBatch);
+            LOG.info("[MicroBatchSpout leader] END batch {} (all {} spouts done)",
+                    batch.batchId(), numSpouts);
             return;
         }
 
         try {
             completion.awaitCompletion(batch.batchId(), completionTimeoutMs);
-            LOG.info("[MicroBatchSpout] aggregator confirmed batch {} complete", batch.batchId());
+            LOG.info("[MicroBatchSpout {}] aggregator confirmed batch {} complete",
+                    taskIndex, batch.batchId());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            LOG.error("[MicroBatchSpout] interrupted waiting for batch {} completion", batch.batchId(), e);
+            LOG.error("[MicroBatchSpout {}] interrupted waiting for batch {} completion",
+                    taskIndex, batch.batchId(), e);
             exhausted = true;
             return;
         }
@@ -191,18 +231,23 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         currentBatchIdx++;
         currentBatchPregenerated = false;
         currentBatchBeginSent = false;
+        currentBatchEmitSignalled = false;
         currentBatchEndSent = false;
         emittedInCurrentBatch = 0L;
+        myRecordsThisBatch = 0L;
     }
 
     private void pregenerateBatch(BatchPlan batch) {
-        long recordCount = batch.recordCount();
-        if (recordCount > Integer.MAX_VALUE) {
-            throw new IllegalStateException("Batch " + batch.batchId() + " has "
-                    + recordCount + " records; pre-generation buffer caps at "
-                    + Integer.MAX_VALUE + ". Split the batch or use long-indexed arrays.");
+        long totalRecords = batch.recordCount();
+        long myShare = shareForLong(totalRecords, taskIndex, numSpouts);
+        if (myShare > Integer.MAX_VALUE) {
+            throw new IllegalStateException("Spout " + taskIndex + " share for batch "
+                    + batch.batchId() + " is " + myShare
+                    + " records; pre-generation buffer caps at " + Integer.MAX_VALUE
+                    + ". Increase spout parallelism or split the batch.");
         }
-        int n = (int) recordCount;
+        int n = (int) myShare;
+        this.myRecordsThisBatch = myShare;
         // Encourage the JVM to reclaim the previous batch's int[] arrays before
         // we allocate the (often larger) next pair. Without this hint, the new
         // allocation can race ahead of background GC and trigger an OOM even
@@ -215,12 +260,13 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         preUserIds = new int[n];
         for (int i = 0; i < n; i++) {
             preKeyIds[i] = keyDistribution.sample();
-            preUserIds[i] = pickUserWithRemainingBudget();
-            userRemainingContributions[preUserIds[i]]--;
+            int localUserIdx = pickUserWithRemainingBudget();
+            preUserIds[i] = localToGlobalUser(localUserIdx);
+            userRemainingContributions[localUserIdx]--;
         }
         long elapsedMs = (System.nanoTime() - t0) / 1_000_000L;
-        LOG.info("[MicroBatchSpout] Pre-generated batch {} ({} records, size={} GB) in {} ms -- outside BEGIN/END window",
-                batch.batchId(), n, batch.sizeGb(), elapsedMs);
+        LOG.info("[MicroBatchSpout {}] Pre-generated batch {} share ({} of {} records, size={} GB) in {} ms",
+                taskIndex, batch.batchId(), n, totalRecords, batch.sizeGb(), elapsedMs);
     }
 
     private long recoverBytesPerTuple(BatchPlan b) {
@@ -228,8 +274,8 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         return Math.max(1L, (long) Math.round(totalBytes / (double) b.recordCount()));
     }
 
-    private void refillEncryptedChunk(BatchPlan batch) throws EnclaveServiceException {
-        long remaining = batch.recordCount() - emittedInCurrentBatch;
+    private void refillEncryptedChunk() throws EnclaveServiceException {
+        long remaining = myRecordsThisBatch - emittedInCurrentBatch;
         int n = (int) Math.min((long) ENCRYPT_CHUNK_SIZE, remaining);
         int base = (int) emittedInCurrentBatch;
         String[] ks = new String[n];
@@ -243,8 +289,7 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         MicroBatchEncryptedRecord[] result = getService().encryptRecords(ks, cs, us);
         if (result == null) {
             throw new EnclaveServiceException(
-                    "Batched encryption returned null for " + n + " records (batch "
-                            + batch.batchId() + ", offset " + base + ")");
+                    "Batched encryption returned null for " + n + " records (offset " + base + ")");
         }
         encryptedChunk = result;
         chunkOffset = 0;
@@ -253,14 +298,28 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
 
     private int pickUserWithRemainingBudget() {
         for (int attempt = 0; attempt < 64; attempt++) {
-            int u = rng.nextInt(numUsers);
+            int u = rng.nextInt(myUserCount);
             if (userRemainingContributions[u] > 0) return u;
         }
-        for (int i = 0; i < numUsers; i++) {
+        for (int i = 0; i < myUserCount; i++) {
             userRemainingContributions[i] = Math.max(1L,
                     Math.min(userContributionDistribution.sample(), DPConfig.MAX_CONTRIBUTIONS_PER_USER));
         }
-        return rng.nextInt(numUsers);
+        return rng.nextInt(myUserCount);
+    }
+
+    private int localToGlobalUser(int localIdx) {
+        return localIdx * numSpouts + taskIndex;
+    }
+
+    private static int sharePerInstance(int total, int index, int parties) {
+        int base = total / parties;
+        return base + (index < (total % parties) ? 1 : 0);
+    }
+
+    private static long shareForLong(long total, int index, int parties) {
+        long base = total / parties;
+        return base + ((long) index < (total % parties) ? 1L : 0L);
     }
 
     @Override

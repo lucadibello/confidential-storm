@@ -53,7 +53,7 @@ public class MicroBatchTopology {
         builder.setSpout(
                 ComponentConstants.SPOUT.toString(),
                 new MicroBatchSpout(),
-                1
+                parallelism
         );
 
         builder.setBolt(

@@ -26,18 +26,29 @@ import java.util.Random;
  * end-to-end (signalled via {@link BatchCompletionCoordinator}) before starting
  * the next one.
  *
- * <p>For batch {@code b} of target size {@code S_b} GB:
+ * <p><strong>Parallel-spout protocol.</strong> When the topology runs with
+ * {@code numSpouts > 1}, each spout instance pre-generates and emits only its
+ * share ({@code recordCount / numSpouts}, plus the remainder spread across the
+ * first instances) of every batch. To keep the BEGIN→END measurement window
+ * meaningful across instances, control markers are emitted by the
+ * <em>leader</em> (task index 0) only:
  * <ol>
- *   <li>Emit {@code BEGIN(b, S_b, N_b, bytesPerTuple, t0)} on the control
- *       stream (allGrouping to every downstream replica).</li>
- *   <li>Emit {@code N_b} data tuples on the default stream (fields-grouped by
- *       {@code routingKey}). Tuples are sampled from the same Zipf-Mandelbrot
- *       user/key distributions as the existing throughput benchmark, so the
- *       DP workload is realistic.</li>
- *   <li>Emit {@code END(b, N_b)} on the control stream.</li>
- *   <li>Block until the aggregator publishes completion for batch {@code b}
- *       via {@link BatchCompletionCoordinator}, then advance.</li>
+ *   <li>Leader emits {@code BEGIN(b, ...)} on the control stream
+ *       (allGrouping to every downstream replica).</li>
+ *   <li>Every instance emits its share of data tuples on the default stream
+ *       (fields-grouped by {@code routingKey}). User IDs are partitioned
+ *       stride-wise by {@code userId % numSpouts == taskIndex} so each user's
+ *       contribution budget is owned by exactly one spout instance.</li>
+ *   <li>After draining its share, every instance signals
+ *       {@link BatchCompletionCoordinator#signalEmitDone}.</li>
+ *   <li>The leader waits for all instances to have signalled, then emits
+ *       {@code END(b, ...)}.</li>
+ *   <li>Every instance waits for the aggregator's completion publication
+ *       before starting the next batch.</li>
  * </ol>
+ * The grace window in the DP bolt absorbs any remaining cross-stream skew
+ * between the leader's END marker and late data tuples still in flight from
+ * non-leader instances.
  */
 public class MicroBatchBaselineSpout extends BaseRichSpout {
 
@@ -46,6 +57,16 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
     private SpoutOutputCollector collector;
     private int numUsers;
     private int numKeys;
+
+    // Spout parallelism / partition.
+    private int taskIndex;
+    private int numSpouts;
+    private boolean isLeader;
+
+    // Number of users owned by this instance (stride-partitioned by taskIndex).
+    // Local index i in userRemainingContributions corresponds to global user ID
+    // i * numSpouts + taskIndex.
+    private int myUserCount;
 
     private ZipfMandelbrotDistribution keyDistribution;
     private ZipfMandelbrotDistribution userContributionDistribution;
@@ -57,15 +78,18 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
 
     private List<BatchPlan> plan;
     private int currentBatchIdx = 0;
+    /** Number of records this instance must emit for the active batch. */
+    private long myRecordsThisBatch = 0L;
     private long emittedInCurrentBatch = 0L;
     private boolean currentBatchPregenerated = false;
     private boolean currentBatchBeginSent = false;
+    private boolean currentBatchEmitSignalled = false;
     private boolean currentBatchEndSent = false;
     private boolean exhausted = false;
 
-    // Pre-generated workload for the active batch. Populated before BEGIN is
-    // emitted so the BEGIN->END window measures only the topology pipeline
-    // cost, not the per-tuple RNG / Zipf sampling cost.
+    // Pre-generated workload for the active batch (this instance's share).
+    // Populated before BEGIN is emitted so the BEGIN->END window measures only
+    // the topology pipeline cost, not the per-tuple RNG / Zipf sampling cost.
     private int[] preKeyIds;
     private int[] preUserIds;
 
@@ -76,12 +100,18 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
         this.numKeys = ((Number) conf.getOrDefault("synthetic.num.keys", 1_000_000)).intValue();
         long randomSeed = ((Number) conf.getOrDefault("synthetic.seed", 42L)).longValue();
 
-        this.rng = new Random(randomSeed);
+        this.taskIndex = context.getThisTaskIndex();
+        this.numSpouts = context.getComponentTasks(context.getThisComponentId()).size();
+        this.isLeader = (taskIndex == 0);
+
+        // Seed each instance distinctly so we don't generate identical sequences.
+        this.rng = new Random(randomSeed + taskIndex);
         this.userContributionDistribution = new ZipfMandelbrotDistribution(100_000, 26, 6.738, rng);
         this.keyDistribution = new ZipfMandelbrotDistribution(numKeys, 1000, 1.4, rng);
 
-        this.userRemainingContributions = new long[numUsers];
-        for (int i = 0; i < numUsers; i++) {
+        this.myUserCount = sharePerInstance(numUsers, taskIndex, numSpouts);
+        this.userRemainingContributions = new long[myUserCount];
+        for (int i = 0; i < myUserCount; i++) {
             long target = userContributionDistribution.sample();
             userRemainingContributions[i] = Math.max(1L, Math.min(target, DPConfig.MAX_CONTRIBUTIONS_PER_USER));
         }
@@ -92,11 +122,15 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
         this.completionTimeoutMs = MicroBatchConfig.completionTimeoutMs(conf);
         this.plan = MicroBatchConfig.buildPlan(sizesGb, runsPerSize, bytesPerTuple);
 
-        LOG.info("[MicroBatchSpout] plan: {} batches across sizes={}, runsPerSize={}, bytesPerTuple={}",
-                plan.size(), java.util.Arrays.toString(sizesGb), runsPerSize, bytesPerTuple);
-        for (BatchPlan b : plan) {
-            LOG.info("[MicroBatchSpout]   batch {} -> size={} GB, records={}, run={}",
-                    b.batchId(), b.sizeGb(), b.recordCount(), b.runIndex());
+        LOG.info("[MicroBatchSpout {}/{}] leader={}, plan: {} batches across sizes={}, runsPerSize={}, "
+                        + "bytesPerTuple={}, myUserCount={}/{}",
+                taskIndex, numSpouts, isLeader, plan.size(), java.util.Arrays.toString(sizesGb),
+                runsPerSize, bytesPerTuple, myUserCount, numUsers);
+        if (isLeader) {
+            for (BatchPlan b : plan) {
+                LOG.info("[MicroBatchSpout leader] batch {} -> size={} GB, totalRecords={}, run={}",
+                        b.batchId(), b.sizeGb(), b.recordCount(), b.runIndex());
+            }
         }
 
         this.completion = new BatchCompletionCoordinator(conf, context.getStormId());
@@ -111,7 +145,8 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
     public void nextTuple() {
         if (exhausted) return;
         if (currentBatchIdx >= plan.size()) {
-            LOG.info("[MicroBatchSpout] All {} batches emitted -- spout becoming idle.", plan.size());
+            LOG.info("[MicroBatchSpout {}] All {} batches emitted -- spout becoming idle.",
+                    taskIndex, plan.size());
             exhausted = true;
             return;
         }
@@ -124,7 +159,7 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
             return;
         }
 
-        if (!currentBatchBeginSent) {
+        if (isLeader && !currentBatchBeginSent) {
             long tNanos = System.nanoTime();
             long tEpochMs = System.currentTimeMillis();
             collector.emit(ComponentConstants.CONTROL_STREAM,
@@ -133,31 +168,44 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
                             tNanos, tEpochMs));
             currentBatchBeginSent = true;
             emittedInCurrentBatch = 0L;
-            LOG.info("[MicroBatchSpout] BEGIN batch {} (size={} GB, target={} records)",
+            LOG.info("[MicroBatchSpout leader] BEGIN batch {} (size={} GB, target={} records total)",
                     batch.batchId(), batch.sizeGb(), batch.recordCount());
             return;
         }
 
-        if (emittedInCurrentBatch < batch.recordCount()) {
+        if (emittedInCurrentBatch < myRecordsThisBatch) {
             emitPregeneratedTuple((int) emittedInCurrentBatch);
             emittedInCurrentBatch++;
             if (emittedInCurrentBatch % 1_000_000 == 0) {
-                LOG.info("[MicroBatchSpout] batch {} progress: {}/{}",
-                        batch.batchId(), emittedInCurrentBatch, batch.recordCount());
+                LOG.info("[MicroBatchSpout {}] batch {} progress: {}/{} (my share)",
+                        taskIndex, batch.batchId(), emittedInCurrentBatch, myRecordsThisBatch);
             }
             return;
         }
 
-        if (!currentBatchEndSent) {
-            // Pregen buffers have been fully drained into Storm's outbound queue
-            // (the Values objects we emitted reference fresh Strings, not the
-            // int arrays). Drop the references now so GC can reclaim them
-            // BEFORE we go into the await-completion wait, which can be long.
-            // This guarantees only ONE batch's pregen footprint is resident at
-            // any moment: prior batch is gone, next batch hasn't started.
+        if (!currentBatchEmitSignalled) {
+            // Drop pregen buffers now: their contents have been emitted (Values
+            // hold their own Strings, not int[] refs) so they're dead weight
+            // during the upcoming barrier + completion wait.
             preKeyIds = null;
             preUserIds = null;
+            completion.signalEmitDone(batch.batchId(), numSpouts);
+            currentBatchEmitSignalled = true;
+            LOG.info("[MicroBatchSpout {}] signalled emit-done for batch {} ({} records emitted)",
+                    taskIndex, batch.batchId(), emittedInCurrentBatch);
+            return;
+        }
 
+        if (isLeader && !currentBatchEndSent) {
+            try {
+                completion.awaitAllEmitDone(batch.batchId(), numSpouts, completionTimeoutMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.error("[MicroBatchSpout leader] interrupted waiting for emit barrier on batch {}",
+                        batch.batchId(), e);
+                exhausted = true;
+                return;
+            }
             long tNanos = System.nanoTime();
             long tEpochMs = System.currentTimeMillis();
             collector.emit(ComponentConstants.CONTROL_STREAM,
@@ -165,17 +213,19 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
                             batch.recordCount(), recoverBytesPerTuple(batch),
                             tNanos, tEpochMs));
             currentBatchEndSent = true;
-            LOG.info("[MicroBatchSpout] END batch {} ({} records emitted, pregen buffers released) -- awaiting aggregator completion",
-                    batch.batchId(), emittedInCurrentBatch);
+            LOG.info("[MicroBatchSpout leader] END batch {} (all {} spouts done) -- awaiting aggregator completion",
+                    batch.batchId(), numSpouts);
             return;
         }
 
         try {
             completion.awaitCompletion(batch.batchId(), completionTimeoutMs);
-            LOG.info("[MicroBatchSpout] aggregator confirmed batch {} complete", batch.batchId());
+            LOG.info("[MicroBatchSpout {}] aggregator confirmed batch {} complete",
+                    taskIndex, batch.batchId());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            LOG.error("[MicroBatchSpout] interrupted waiting for batch {} completion", batch.batchId(), e);
+            LOG.error("[MicroBatchSpout {}] interrupted waiting for batch {} completion",
+                    taskIndex, batch.batchId(), e);
             exhausted = true;
             return;
         }
@@ -183,18 +233,23 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
         currentBatchIdx++;
         currentBatchPregenerated = false;
         currentBatchBeginSent = false;
+        currentBatchEmitSignalled = false;
         currentBatchEndSent = false;
         emittedInCurrentBatch = 0L;
+        myRecordsThisBatch = 0L;
     }
 
     private void pregenerateBatch(BatchPlan batch) {
-        long recordCount = batch.recordCount();
-        if (recordCount > Integer.MAX_VALUE) {
-            throw new IllegalStateException("Batch " + batch.batchId() + " has "
-                    + recordCount + " records; pre-generation buffer caps at "
-                    + Integer.MAX_VALUE + ". Split the batch or use long-indexed arrays.");
+        long totalRecords = batch.recordCount();
+        long myShare = shareForLong(totalRecords, taskIndex, numSpouts);
+        if (myShare > Integer.MAX_VALUE) {
+            throw new IllegalStateException("Spout " + taskIndex + " share for batch "
+                    + batch.batchId() + " is " + myShare
+                    + " records; pre-generation buffer caps at " + Integer.MAX_VALUE
+                    + ". Increase spout parallelism or split the batch.");
         }
-        int n = (int) recordCount;
+        int n = (int) myShare;
+        this.myRecordsThisBatch = myShare;
         // Encourage the JVM to reclaim the previous batch's int[] arrays before
         // we allocate the (often larger) next pair. Without this, the next
         // allocation may race ahead of background GC and trigger an OOM even
@@ -207,12 +262,13 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
         preUserIds = new int[n];
         for (int i = 0; i < n; i++) {
             preKeyIds[i] = keyDistribution.sample();
-            preUserIds[i] = pickUserWithRemainingBudget();
-            userRemainingContributions[preUserIds[i]]--;
+            int localUserIdx = pickUserWithRemainingBudget();
+            preUserIds[i] = localToGlobalUser(localUserIdx);
+            userRemainingContributions[localUserIdx]--;
         }
         long elapsedMs = (System.nanoTime() - t0) / 1_000_000L;
-        LOG.info("[MicroBatchSpout] Pre-generated batch {} ({} records, size={} GB) in {} ms -- outside BEGIN/END window",
-                batch.batchId(), n, batch.sizeGb(), elapsedMs);
+        LOG.info("[MicroBatchSpout {}] Pre-generated batch {} share ({} of {} records, size={} GB) in {} ms",
+                taskIndex, batch.batchId(), n, totalRecords, batch.sizeGb(), elapsedMs);
     }
 
     private void emitPregeneratedTuple(int idx) {
@@ -228,14 +284,28 @@ public class MicroBatchBaselineSpout extends BaseRichSpout {
 
     private int pickUserWithRemainingBudget() {
         for (int attempt = 0; attempt < 64; attempt++) {
-            int u = rng.nextInt(numUsers);
+            int u = rng.nextInt(myUserCount);
             if (userRemainingContributions[u] > 0) return u;
         }
-        for (int i = 0; i < numUsers; i++) {
+        for (int i = 0; i < myUserCount; i++) {
             userRemainingContributions[i] = Math.max(1L,
                     Math.min(userContributionDistribution.sample(), DPConfig.MAX_CONTRIBUTIONS_PER_USER));
         }
-        return rng.nextInt(numUsers);
+        return rng.nextInt(myUserCount);
+    }
+
+    private int localToGlobalUser(int localIdx) {
+        return localIdx * numSpouts + taskIndex;
+    }
+
+    private static int sharePerInstance(int total, int index, int parties) {
+        int base = total / parties;
+        return base + (index < (total % parties) ? 1 : 0);
+    }
+
+    private static long shareForLong(long total, int index, int parties) {
+        long base = total / parties;
+        return base + ((long) index < (total % parties) ? 1L : 0L);
     }
 
     @Override

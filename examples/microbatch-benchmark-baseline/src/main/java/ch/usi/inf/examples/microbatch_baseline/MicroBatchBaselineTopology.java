@@ -50,7 +50,7 @@ public class MicroBatchBaselineTopology {
         builder.setSpout(
                 ComponentConstants.SPOUT,
                 new MicroBatchBaselineSpout(),
-                1
+                parallelism
         );
 
         builder.setBolt(

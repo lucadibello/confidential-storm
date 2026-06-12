@@ -3,7 +3,7 @@ set -euo pipefail
 
 PUB_KEY="$(cat ~/.ssh/id_ed25519.pub)"
 
-for SLAVE in 10.233.26.41 10.233.26.42 10.233.26.43; do
+for SLAVE in 10.233.26.41 10.233.26.42 10.233.26.43 10.233.26.45; do
   echo "=== $SLAVE ==="
 
   # Install the master's public key via docker cp.
@@ -36,9 +36,9 @@ for SLAVE in 10.233.26.41 10.233.26.42 10.233.26.43; do
   TUNNEL_PID=$!
   sleep 1
   ssh -o BatchMode=yes \
-      -o StrictHostKeyChecking=no \
-      -o UserKnownHostsFile=/dev/null \
-      -i ~/.ssh/id_ed25519 -p "$LOCAL_PORT" dev@127.0.0.1 echo "ok: $SLAVE"
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -i ~/.ssh/id_ed25519 -p "$LOCAL_PORT" dev@127.0.0.1 echo "ok: $SLAVE"
   kill "$TUNNEL_PID" 2>/dev/null
   wait "$TUNNEL_PID" 2>/dev/null
 done

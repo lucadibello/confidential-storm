@@ -127,7 +127,7 @@ MICROBATCH_BASELINE = TopologyType(
     topo_prefix="MicroBatchBaseline",
     project_dir=MICROBATCH_BASELINE_PROJECT,
     startup_timeout=120,
-    build_target="build",
+    build_target="build-profiled",
 )
 
 MICROBATCH_ENCLAVE = TopologyType(
@@ -137,7 +137,7 @@ MICROBATCH_ENCLAVE = TopologyType(
     topo_prefix="MicroBatchDP",
     project_dir=MICROBATCH_ENCLAVE_PROJECT,
     startup_timeout=800,
-    build_target="build",
+    build_target="build-profiled",
 )
 
 # Modes that drive batches via BEGIN/END markers — they ignore mu/num_users/
@@ -234,6 +234,12 @@ def parse_args():
                    help="Hours per GB used to auto-scale completion timeout per "
                         "batch. Default: 2.0 (confidential SGX throughput estimate). "
                         "Set to 0 to disable scaling and use --completion-timeout-ms as-is.")
+    p.add_argument("--per-worker-batch-gb", type=float,
+                   default=env_float("PER_WORKER_BATCH_GB", 0.0),
+                   help="Activates weak-scaling mode when > 0. The total batch size "
+                        "submitted for each parallelism p is per_worker_batch_gb * p "
+                        "(e.g. 0.1 with parallelisms 1,2,4 → 0.1, 0.2, 0.4 GB). "
+                        "Overrides --batch-sizes-gb. Default: 0 (disabled, strong-scaling).")
 
     # ---- Grid parameters ---------------------------------------------------
     p.add_argument("--tick-intervals", type=int, nargs="+",
@@ -707,6 +713,7 @@ def main():
     MICROBATCH_ENCLAVE.startup_timeout = args.startup_timeout_enclave
 
     is_microbatch = args.mode in MICROBATCH_MODES
+    is_weak_scaling = is_microbatch and args.per_worker_batch_gb > 0
 
     # Build the grid. In micro-batch mode only parallelism is swept — batch
     # sizes and runs-per-size are handled inside one topology submission.
@@ -771,12 +778,27 @@ def main():
     print(" Fixed: seed={}".format(args.seed))
     print(" Timeout factor:      {}x  poll: {}s".format(args.wait_safety_factor, args.poll_interval))
     if is_microbatch:
-        sizes_list = [s.strip() for s in args.batch_sizes_gb.split(",") if s.strip()]
-        per_size = [
-            (s, scaled_completion_timeout_ms(
-                s, args.hours_per_gb, args.completion_timeout_ms) / 3_600_000.0)
-            for s in sizes_list]
         print(" Hours/GB scaling:    {}".format(args.hours_per_gb))
+        if is_weak_scaling:
+            weak_sizes = ["{:g}".format(args.per_worker_batch_gb * par)
+                          for par in args.parallelisms]
+            per_size = [
+                (s, scaled_completion_timeout_ms(
+                    s, args.hours_per_gb, args.completion_timeout_ms) / 3_600_000.0)
+                for s in weak_sizes]
+            print(" Scaling mode:        WEAK  ({}GB/worker × parallelism)".format(
+                args.per_worker_batch_gb))
+            print(" Derived batch sizes: {}".format(
+                ", ".join("p{}→{}GB".format(par, s)
+                          for par, s in zip(args.parallelisms, weak_sizes))))
+        else:
+            sizes_list = [s.strip() for s in args.batch_sizes_gb.split(",") if s.strip()]
+            per_size = [
+                (s, scaled_completion_timeout_ms(
+                    s, args.hours_per_gb, args.completion_timeout_ms) / 3_600_000.0)
+                for s in sizes_list]
+            print(" Scaling mode:        STRONG  (fixed total batch sizes)")
+            print(" Batch sizes (GB):    {}".format(", ".join(sizes_list)))
         print(" Per-batch timeout:   {}".format(
             ", ".join("{}GB={:.1f}h".format(s, h) for s, h in per_size)))
     print(" Total combos:        {}".format(total_combos))
@@ -954,10 +976,19 @@ def main():
 
             for tt in types_to_run:
                 if is_microbatch:
-                    run_dir = (runs_root / "n={}".format(n)
-                               / "p{}_sizes{}_runs{}_run{}".format(
-                                   par, args.batch_sizes_gb.replace(",", "-"),
-                                   args.runs_per_size, run_id))
+                    if is_weak_scaling:
+                        effective_batch_sizes_gb = "{:g}".format(
+                            args.per_worker_batch_gb * par)
+                        run_dir = (runs_root / "n={}".format(n)
+                                   / "p{}_wb{}gb_runs{}_run{}".format(
+                                       par, args.per_worker_batch_gb,
+                                       args.runs_per_size, run_id))
+                    else:
+                        effective_batch_sizes_gb = args.batch_sizes_gb
+                        run_dir = (runs_root / "n={}".format(n)
+                                   / "p{}_sizes{}_runs{}_run{}".format(
+                                       par, args.batch_sizes_gb.replace(",", "-"),
+                                       args.runs_per_size, run_id))
                 elif combo_dir is not None:
                     run_dir = combo_dir / tt.name
                 else:
@@ -971,7 +1002,7 @@ def main():
                             topo_type=tt,
                             run_id=run_id,
                             parallelism=par,
-                            batch_sizes_gb=args.batch_sizes_gb,
+                            batch_sizes_gb=effective_batch_sizes_gb,
                             runs_per_size=args.runs_per_size,
                             bytes_per_tuple=args.bytes_per_tuple,
                             completion_timeout_ms=args.completion_timeout_ms,
