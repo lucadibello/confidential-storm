@@ -60,6 +60,8 @@ _run() {
     --ssh-user "$SSH_USER" \
     --ssh-key "$SSH_KEY" \
     --ssh-port "$SSH_PORT" \
+    --num-users 10000000 \
+    --num-keys 1000000 \
     --container-user "$CONTAINER_USER" \
     --container-port "$CONTAINER_PORT" \
     --ui-port "$UI_PORT" \
