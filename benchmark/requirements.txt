@@ -5,5 +5,8 @@ numpy
 ipykernel
 scikit-learn
 
+# style
+jinja2
+
 # for nvim
 jupytext
