@@ -25,14 +25,14 @@ UI_PORT="${UI_PORT:-18080}"
 PARALLELISMS="${PARALLELISMS:-4 8 16}"
 
 # Strong scaling: fixed total batch sizes (GB) swept across all parallelisms.
-STRONG_BATCH_SIZES_GB="${STRONG_BATCH_SIZES_GB:-1,2,5}"
+STRONG_BATCH_SIZES_GB="${STRONG_BATCH_SIZES_GB:-0.5,1,2}"
 
 # Weak scaling: per-worker batch size (GB). Total = per_worker * parallelism.
 # e.g. 0.125 GB/worker × (4,8,16) workers → 0.5, 1.0, 2.0 GB total.
 WEAK_PER_WORKER_GB="${WEAK_PER_WORKER_GB:-0.125}"
 
 # ---- Repetitions / timing ----------------------------------------------
-RUNS_PER_SIZE="${RUNS_PER_SIZE:-3}"
+RUNS_PER_SIZE="${RUNS_PER_SIZE:-2}"
 HOURS_PER_GB="${HOURS_PER_GB:-2.0}"
 
 # ---- Archive labels ----------------------------------------------------
