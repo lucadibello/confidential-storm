@@ -25,7 +25,7 @@ public class UserContributionBoundingBolt extends AbstractContributionBoundingBo
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        // Tuple format: (word, count, userId, dpRoutingKey)
+        // Output fields: word, count, userId, dpRoutingKey
         declarer.declare(new Fields("word", "count", "userId", "dpRoutingKey"));
     }
 }

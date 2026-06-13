@@ -39,7 +39,7 @@ public final class SyntheticDataServiceProvider
         String userId
     ) throws EnclaveServiceException {
         try {
-            // build AAD using metadata
+            // Construct AAD with metadata
             AADSpecification aad = AADSpecification.builder()
                 .sourceComponent(ComponentConstants.SPOUT)
                 .destinationComponent(
@@ -50,15 +50,15 @@ public final class SyntheticDataServiceProvider
                 .put("user_id", userId)
                 .build();
 
-            // encrypt each field separately
+
             EncryptedValue k = sealedPayload.encryptString(key, aad);
             EncryptedValue c = sealedPayload.encryptString(count, aad);
             EncryptedValue u = sealedPayload.encryptString(userId, aad);
 
-            // generate routing key for user-based partitioning
+            // Generate routing key
             byte[] routingKey = Hash.computeHash(("user:" + userId).getBytes());
 
-            // return the encrypted record with routing key
+
             return new SyntheticEncryptedRecord(k, c, u, routingKey);
         } catch (
             SealedPayloadProcessingException

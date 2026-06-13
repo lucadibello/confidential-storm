@@ -14,20 +14,18 @@ public class DataPerturbationBolt extends AbstractDataPerturbationBolt {
 
     @Override
     protected boolean useEncryptedSnapshots() {
-        return true; // this will make sure to encrypt snapshots before sending them to the aggregation bolt!
+        return true;
     }
 
     @Override
     protected void processEncryptedSnapshot(EncryptedDataPerturbationSnapshot snapshot) {
-        // Forward the encrypted partial histogram to the aggregation bolt
+        // Emit encrypted partial histogram
         getCollector().emit(new Values(snapshot.encryptedHistogram()));
     }
 
     @Override
     protected void processSnapshot(Map<String, Long> histogramSnapshot) {
-        // NOTE: since this bolt is configured to use encrypted snapshots, this method will never be called.
-        // If it is called, it means that something went wrong in the configuration of the bolt, so we throw an
-        // exception to make sure that we notice it.
+        // Unreachable when using encrypted snapshots
         throw new UnsupportedOperationException("This bolt uses encrypted snapshots");
     }
 

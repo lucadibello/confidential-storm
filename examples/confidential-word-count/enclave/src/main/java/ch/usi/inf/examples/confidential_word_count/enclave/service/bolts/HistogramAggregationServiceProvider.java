@@ -11,7 +11,7 @@ public class HistogramAggregationServiceProvider extends AbstractHistogramAggreg
 
     @Override
     protected int getExpectedReplicaCount() {
-        return 2; // matches DataPerturbationBolt parallelism in the topology
+        return 2; // Matches DataPerturbationBolt parallelism
     }
 
     @Override

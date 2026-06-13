@@ -1,8 +1,7 @@
 package ch.usi.inf.examples.synthetic_baseline.profiling;
 
 /**
- * Lifecycle events for baseline bolts. Mirrors {@code ConfidentialBoltLifecycleEvent}
- * from the enclave version but without enclave-specific events.
+ * Lifecycle events for baseline bolts.
  */
 public enum BaselineBoltLifecycleEvent implements LifecycleEvent {
     COMPONENT_STARTED,

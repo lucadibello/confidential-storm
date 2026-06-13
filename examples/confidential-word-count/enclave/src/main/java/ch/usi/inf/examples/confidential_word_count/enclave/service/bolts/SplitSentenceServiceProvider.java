@@ -28,64 +28,62 @@ public final class SplitSentenceServiceProvider
     private final EnclaveLogger log = EnclaveLoggerFactory.getLogger(SplitSentenceServiceProvider.class);
 
     /**
-     * Expected fields in the decrypted payload (body, category, id, rating - no user_id, it's separate).
+     * Expected fields in the decrypted payload (excluding user_id).
      */
     private final Set<String> expectedPayloadFields = new HashSet<>(List.of("body", "category", "id", "rating"));
 
     @Override
     public SplitSentenceResponse split(SplitSentenceRequest request) throws EnclaveServiceException {
         try {
-            // verify the request before processing
+            // Verify request
             verify(request);
 
-            // Decrypt the payload (body, category, id, rating)
+            // Decrypt joke payload
             Map<String, Object> payloadMap = decryptToMap(request.payload());
 
-            // ensure that all expected fields are present
+            // Verify expected fields
             if (!payloadMap.keySet().containsAll(expectedPayloadFields)) {
                 log.warn("JSON payload is missing expected fields.");
                 throw new RuntimeException("Invalid JSON payload structure.");
             }
 
-            // extract body from payload
+            // Extract body text
             String jokeText = (String) payloadMap.get("body");
             if (jokeText == null) {
                 log.warn("Could not extract 'body' from JSON payload");
                 throw new RuntimeException("Missing 'body' field in payload");
             }
 
-            // Decrypt the userId for re-encryption with per-word AAD
+            // Decrypt user ID for per-word re-encryption
             String userIdStr = decryptToString(request.userId());
 
-            // Split the joke text into words
+            // Split text into words
             //noinspection SimplifyStreamApiCallChains
             List<String> plainWords = Arrays.stream(jokeText.split("\\W+"))
                     .map(word -> word.toLowerCase(Locale.ROOT).trim())
                     .filter(word -> !word.isEmpty())
                     .collect(Collectors.toList());
 
-            // Create list of SealedWord (word, userId) pairs
-            // Each word is encrypted separately with a unique sequence number per tuple,
-            // since each SealedWord becomes its own tuple downstream
+            // Encrypt each word separately with a unique sequence number as each becomes a downstream tuple
             List<SealedWord> sealedWords = new ArrayList<>(plainWords.size());
             for (String plainWord : plainWords) {
                 int seq = nextSequenceNumber();
-                // Encrypt just the word (no user_id embedded)
+                // Encrypt word
                 EncryptedValue encryptedWord = encrypt(plainWord, seq);
-                // Encrypt count (1)
+                // Encrypt count
                 EncryptedValue encryptedCount = encrypt(1L, seq);
-                // Re-encrypt userId with this tuple's sequence number
+                // Re-encrypt user ID
                 EncryptedValue reEncryptedUserId = encrypt(userIdStr, seq);
 
-                // Generate routing information to route the same user's words to the same instance downstream
+                // Generate routing key based on user ID
                 String routingInfo = "user:" + userIdStr;
                 byte[] routingKey = Hash.computeHash(routingInfo.getBytes());
 
-                // Pair with the re-encrypted userId
+                // Create sealed word with re-encrypted user ID
                 sealedWords.add(new SealedWord(encryptedWord, encryptedCount, reEncryptedUserId, routingKey));
             }
 
-            // Return response with tuple format: List<(word, userId)>
+            // Return sealed words
             return new SplitSentenceResponse(sealedWords);
         } catch (Throwable t) {
             super.exceptionCtx.handleException(t);

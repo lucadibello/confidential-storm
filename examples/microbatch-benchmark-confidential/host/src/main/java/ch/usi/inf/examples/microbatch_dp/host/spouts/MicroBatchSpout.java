@@ -100,7 +100,7 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         this.numSpouts = context.getComponentTasks(context.getThisComponentId()).size();
         this.isLeader = (taskIndex == 0);
 
-        // Seed each instance distinctly so we don't generate identical sequences.
+        // Unique seed per instance to avoid identical sequences.
         this.rng = new Random(randomSeed + taskIndex);
         this.userContributionDistribution = new ZipfMandelbrotDistribution(100_000, 26, 6.738, rng);
         this.keyDistribution = new ZipfMandelbrotDistribution(numKeys, 1000, 1.4, rng);
@@ -179,9 +179,7 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         }
 
         if (!currentBatchEmitSignalled) {
-            // Drop pregen + chunk buffers now: their contents have been emitted
-            // (Values hold their own Strings, not int[] refs) so they're dead
-            // weight during the upcoming barrier + completion wait.
+            // Free pregeneration and chunk buffers to reclaim memory during barrier and completion wait.
             preKeyIds = null;
             preUserIds = null;
             encryptedChunk = null;
@@ -248,10 +246,7 @@ public class MicroBatchSpout extends ConfidentialSpout<MicroBatchDataService> {
         }
         int n = (int) myShare;
         this.myRecordsThisBatch = myShare;
-        // Encourage the JVM to reclaim the previous batch's int[] arrays before
-        // we allocate the (often larger) next pair. Without this hint, the new
-        // allocation can race ahead of background GC and trigger an OOM even
-        // though only the new arrays should be resident.
+        // Suggest GC to reclaim previous batch arrays before allocating the next pair to prevent OOM.
         if (currentBatchIdx > 0) {
             System.gc();
         }

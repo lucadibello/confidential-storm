@@ -21,10 +21,8 @@ public class SimpleBolt extends ConfidentialBolt<SimpleEnclaveService> {
     @Override
     protected void processTuple(Tuple input, SimpleEnclaveService service)
         throws EnclaveServiceException {
-        // extract `num` from tuple
         float num = input.getFloat(0);
 
-        // send request to TEE
         LOG.debug("Sending request with number", num);
         SimpleEnclaveResponse response = service.query(
             new SimpleEnclaveRequest(
@@ -39,12 +37,11 @@ public class SimpleBolt extends ConfidentialBolt<SimpleEnclaveService> {
             return;
         }
 
-        // read response (object + string)
         LOG.info("Received response from TEE: {}", response.response());
     }
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer outputFieldsDeclarer) {
-        // NOP -> sink node
+        // SimpleBolt is a sink node
     }
 }

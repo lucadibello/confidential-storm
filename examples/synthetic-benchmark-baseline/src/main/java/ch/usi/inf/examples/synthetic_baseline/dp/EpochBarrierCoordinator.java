@@ -22,7 +22,6 @@ import java.util.stream.Collectors;
 
 /**
  * Coordinates epoch synchronization across DataPerturbationBolt replicas using ZooKeeper.
- * (copied from confidentialstorm/host)
  */
 public class EpochBarrierCoordinator implements Closeable {
     private static final Logger LOG = LoggerFactory.getLogger(EpochBarrierCoordinator.class);

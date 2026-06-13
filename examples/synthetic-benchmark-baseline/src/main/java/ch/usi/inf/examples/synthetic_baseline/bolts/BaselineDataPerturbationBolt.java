@@ -65,16 +65,9 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
         this.tickIntervalSecs = ((Number) topoConf.getOrDefault("dp.tick.interval.secs", 5)).intValue();
         long mu = ((Number) topoConf.getOrDefault("dp.mu", DPConfig.mu())).longValue();
 
-        // Budget split (mirrors SyntheticDataPerturbationServiceProvider):
+        // Split privacy budget:
         //   epsilon: 50/50 split between key selection and histogram
         //   delta:   2/3 for key selection, 1/3 for histogram
-        //
-        // The mechanism runs the full DP-SQLP Section 4.4 calibration internally
-        // (compose the key-selection budget over C rounds, split the per-round
-        // delta into Gaussian-noise and threshold-failure shares, derive beta and
-        // the threshold quantile, and calibrate sigma_h against (eps_h, delta_h)).
-        // We use the same defaults as the confidential AbstractDataPerturbationServiceProvider:
-        // ZCDP_LINEAR composition (tightest) and alpha = 0.5.
         final double epsilonK = DPConfig.EPSILON / 2.0;
         final double deltaK = (2.0 / 3.0) * DPConfig.DELTA;
         final double epsilonH = DPConfig.EPSILON / 2.0;
@@ -92,7 +85,7 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
                 DPConfig.PER_RECORD_CLAMP,
                 alpha);
 
-        // Recompute the calibration purely for logging the derived noise scales.
+        // Recalibrate for logging
         DPUtil.DpCalibration cal = DPUtil.calibrate(
                 composition, epsilonK, deltaK, epsilonH, deltaH,
                 DPConfig.MAX_CONTRIBUTIONS_PER_USER, this.maxTimeSteps, DPConfig.PER_RECORD_CLAMP, alpha);
@@ -157,7 +150,7 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
         if (isTickTuple(input)) {
             handleEpochTick();
         } else {
-            // Add contribution to the mechanism (no ECALL + no encryption)
+            // Add contribution to the mechanism
             String userId = input.getStringByField("userId");
             String word = input.getStringByField("word");
             double clampedCount = input.getDoubleByField("count");
@@ -226,10 +219,8 @@ public class BaselineDataPerturbationBolt extends BaseRichBolt {
                 startBackgroundSnapshot();
             }
             // 3. Emit dummy to maintain constant-rate communication pattern.
-            //    This covers both cases: (a) behind target with snapshot in progress,
-            //    and (b) caught up (targetEpoch == localEpoch) waiting for other replicas.
             if (localEpoch > 0) {
-                emitHistogram(createDummyHistogram(), true); // No ECALL + no encryption
+                emitHistogram(createDummyHistogram(), true);
                 if (ProfilerConfig.ENABLED) {
                     profiler.incrementCounter("dummy_emissions");
                     profiler.recordLifecycleEvent(DPBoltLifecycleEvent.DUMMY_RELEASED, localEpoch);

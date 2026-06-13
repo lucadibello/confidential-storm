@@ -34,18 +34,18 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
 
     @Override
     protected void processTuple(Tuple input, SplitSentenceService service) throws EnclaveServiceException {
-        // Read input tuple format: (payload, userId)
+        // Read input tuple fields
         EncryptedValue encryptedPayload = (EncryptedValue) input.getValueByField("payload");
         EncryptedValue encryptedUserId = (EncryptedValue) input.getValueByField("userId");
         LOG.debug("[SplitSentenceBolt {}] Received encrypted joke entry", boltId);
 
-        // Request enclave to split the sentence
+        // Request enclave to split the joke text
         SplitSentenceResponse response = service.split(new SplitSentenceRequest(encryptedPayload, encryptedUserId));
         LOG.info("[SplitSentenceBolt {}] Emitting {} encrypted words", boltId, response.words().size());
 
-        // Send out each (word, userId) pair as a separate tuple
+        // Emit each sealed word as a separate tuple
         for (SealedWord sealedWord : response.words()) {
-            // Emit tuple format: (word, count, userId, routingKey)
+            // Output fields: word, count, userId, routingKey
             getCollector().emit(input, new Values(
                     sealedWord.word(), sealedWord.count(),
                     sealedWord.userId(), sealedWord.routingKey()
@@ -63,7 +63,7 @@ public class SplitSentenceBolt extends ConfidentialBolt<SplitSentenceService> {
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        // Tuple format: (word, count, userId, routingKey)
+        // Output fields: word, count, userId, routingKey
         declarer.declare(new Fields("word", "count", "userId", "routingKey"));
     }
 }

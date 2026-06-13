@@ -13,8 +13,6 @@ import org.apache.commons.math3.util.FastMath;
  * <p>
  * Refer to Algorithm 4 in "Differentially Private Stream Processing at Scale" and Appendix C
  * for additional information on the Honaker variance reduction technique.
- * <p>
- * Copied from confidentialstorm/enclave — no SGX dependencies.
  */
 public final class BinaryAggregationTree {
     private final double[] tree;

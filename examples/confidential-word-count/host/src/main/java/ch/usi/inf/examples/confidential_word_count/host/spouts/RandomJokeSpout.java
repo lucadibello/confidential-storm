@@ -32,7 +32,7 @@ public class RandomJokeSpout extends ConfidentialSpout<SpoutPreprocessingService
 
     @Override
     protected void afterOpen(Map<String, Object> conf, TopologyContext context, SpoutOutputCollector collector) {
-        // we need to load the jokes in memory
+        // Load jokes into memory
         JokeReader jokeReader = new JokeReader();
         try {
             encryptedJokes = jokeReader.readAll("jokes.enc.json");
@@ -52,32 +52,29 @@ public class RandomJokeSpout extends ConfidentialSpout<SpoutPreprocessingService
 
     @Override
     public void executeNextTuple() throws EnclaveServiceException {
-        // generate the next random joke
+        // Select random joke
         int idx = rand.nextInt(encryptedJokes.size());
         SealedJokeEntry currentJokeEntry = encryptedJokes.get(idx);
 
-        // use service to configure route for the joke entry (spout -> splitter)
-        // Request format: (payload, userId)
+        // Setup routing using the spout service
         SpoutPreprocessingResponse routedJokeEntry = getService().setupRoute(
                 new SpoutPreprocessingRequest(currentJokeEntry.payload(), currentJokeEntry.userId()));
 
-        // Emit tuple format: (payload, userId)
-        // NOTE: payload contains fields: ["body", "category", "id", "rating"]
-        // NOTE: userId contains field: ["user_id"]
+        // Emit joke payload and user ID
         LOG.info("[RandomJokeSpout {}] Emitting new joke tuple", this.state.getTaskId());
         getCollector().emit(new Values(routedJokeEntry.payload(), routedJokeEntry.userId()));
 
-        // sleep for a while to avoid starving the topology
+        // Sleep to limit emission rate and prevent starvation
         try {
             Thread.sleep(EMIT_DELAY_MS);
         } catch (InterruptedException e) {
-            // do nothing
+            // Ignore
         }
     }
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        // Tuple format: (payload, userId)
+        // Output fields: payload, userId
         declarer.declare(new Fields("payload", "userId"));
     }
 }

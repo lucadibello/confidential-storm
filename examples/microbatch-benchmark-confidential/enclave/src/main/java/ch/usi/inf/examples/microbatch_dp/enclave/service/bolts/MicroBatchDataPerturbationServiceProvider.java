@@ -12,7 +12,7 @@ public class MicroBatchDataPerturbationServiceProvider
     extends AbstractDataPerturbationServiceProvider
 {
 
-    // key selection parameters (refer to Section 5 "Experiments" of the paper for details)
+    // Key selection parameters (refer to Section 5 "Experiments" of the paper).
 
     @Override
     public double getEpsilonK() {
@@ -24,7 +24,7 @@ public class MicroBatchDataPerturbationServiceProvider
         return (2.0 / 3.0) * DPConfig.DELTA;
     }
 
-    // perturbation parameters (refer to Section 5 "Experiments" of the paper for details)
+    // Perturbation parameters (refer to Section 5 "Experiments" of the paper).
 
     @Override
     public double getEpsilonH() {

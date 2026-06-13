@@ -51,18 +51,16 @@ public final class ReplayWindow {
             return false; // too old
         }
 
-        // if sequence number is valid and greater than maxSeen, we need to update the window
-        // NOTE: as the sequence numbers only grow, we want to have maxSeen always as the LSB of the window
-        // [maxSeen - windowSize + 1, maxSeen]
+        // Update window if the sequence number exceeds maxSeen.
+        // Sequence numbers grow monotonically; maxSeen is anchored at bit 0.
         if (sequence > maxSeen) {
             long shift = sequence - maxSeen; // shift the window to fit the new maxSeen
 
-            // if the shift is larger than the window size, we clear the window as everything is out of range
-            // Example: windowSize = 128, maxSeen = 200, new sequence = 400 -> shift = 200 -> clear window
+            // Clear window if shift exceeds windowSize (all current history is out of range).
             if (shift >= windowSize) {
                 window.clear();
             }
-            // otherwise, we shift the bitset to the right by 'shift' positions
+            // Shift the bitset right by the shift amount.
             else if (maxSeen >= 0) {
                 // create empty bitset
                 BitSet shifted = new BitSet(windowSize);
@@ -76,20 +74,19 @@ public final class ReplayWindow {
                 // update window reference
                 window = shifted;
             }
-            // else, it's the first sequence number seen, so we just clear the window (we haven't seen anything yet)
+            // Initialize for the first sequence number seen.
             else {
                 window.clear();
             }
 
-            // the new sequence number is now the maxSeen
-            // NOTE: bit 0 always tracks maxSeen (the newest sequence), older ones sit at increasing offsets
+            // Update maxSeen; bit 0 represents the newest sequence.
             maxSeen = sequence;
             window.set(0); // mark as seen
 
             return true; // notify that the value has been accepted
         }
 
-        // otherwise, the sequence number is within the window range!
+        // Sequence number is within the window range.
 
         // find the offset from maxSeen (how far back it is) + ensure offset is within window size
         int offset = (int) (maxSeen - sequence);
@@ -97,7 +94,7 @@ public final class ReplayWindow {
             return false; // too old (should not happen due to previous checks actually)
         }
 
-        // if we have already seen this offset, it's a replay!
+        // Replay check.
         if (window.get(offset)) {
             return false; // replay detected
         }

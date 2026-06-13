@@ -174,9 +174,9 @@ public abstract class ConfidentialBoltService<T> {
         return sealedPayload.isRouteValid(value, expectedSourceComponent(), currentComponent());
     }
 
-    // NOTE: we assume all encrypted fields in the same request share the same producer and sequence number
+    // Assumes all encrypted fields in a request share the same producer and sequence number.
     private boolean isSequenceNotReplay(String producerId, long sequenceNumber) {
-        // we create or get the existing replay window for this producer (1 replay window per producer)
+        // Get or create replay window for the producer.
         return replayWindows
                 .computeIfAbsent(producerId, id -> new ReplayWindow(REPLAY_WINDOW_SIZE))
                 .accept(sequenceNumber);
@@ -207,7 +207,7 @@ public abstract class ConfidentialBoltService<T> {
 
         if (!values.isEmpty()) {
 
-            // we use these variables to track the producer ID and sequence number across all values in the request to ensure consistency
+            // Track producer ID and sequence number across all values to ensure consistency.
             boolean set = false;
             String producerId = null;
             long sequenceNumber = -1L;

@@ -16,7 +16,6 @@ import java.util.Map;
 
 public class SyntheticDataPerturbationBolt extends AbstractDataPerturbationBolt {
 
-    // create logger for this class
     private static final Logger LOG = LoggerFactory.getLogger(SyntheticDataPerturbationBolt.class);
 
     private int maxEpochs;

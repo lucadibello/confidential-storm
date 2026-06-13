@@ -26,9 +26,6 @@ import java.util.*;
 /**
  * Baseline histogram aggregation bolt - receives partial histograms,
  * merges them in-JVM, and writes benchmark reports.
- * <p>
- * This bolt matches the aggregation logic from the enclave-side AbstractHistogramAggregationServiceProvider
- * and the tick-based release logic from AbstractHistogramAggregationBolt.
  */
 public class BaselineHistogramAggregationBolt extends BaseRichBolt {
     private static final Logger LOG = LoggerFactory.getLogger(BaselineHistogramAggregationBolt.class);
@@ -49,7 +46,7 @@ public class BaselineHistogramAggregationBolt extends BaseRichBolt {
     private boolean hasNewHistogram = false;
     private int roundCount = 0;
 
-    // Per-epoch aggregation state (inlined from enclave service)
+    // Per-epoch aggregation state
     private final TreeMap<Integer, EpochState> epochStates = new TreeMap<>();
 
     private String outputFile;

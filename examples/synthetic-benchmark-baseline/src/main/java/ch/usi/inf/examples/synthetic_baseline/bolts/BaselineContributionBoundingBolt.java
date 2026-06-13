@@ -19,7 +19,7 @@ import java.util.Map;
 
 /**
  * Contribution bounding bolt - performs user contribution limiting
- * and per-record clamping directly in the JVM (no ECALL).
+ * and per-record clamping directly in the JVM.
  */
 public class BaselineContributionBoundingBolt extends BaseRichBolt {
     private static final Logger LOG = LoggerFactory.getLogger(BaselineContributionBoundingBolt.class);
@@ -49,7 +49,7 @@ public class BaselineContributionBoundingBolt extends BaseRichBolt {
         double count = input.getDoubleByField("count");
         String userId = input.getStringByField("userId");
 
-        // Check contribution limit (C = MAX_CONTRIBUTIONS_PER_USER)
+        // Limit user contributions and clamp value
         long t0 = ProfilerConfig.ENABLED && profiler.shouldSample() ? System.nanoTime() : 0;
         boolean allowed = limiter.allow(userId, DPConfig.MAX_CONTRIBUTIONS_PER_USER);
         double clampedCount = allowed ? Math.max(0.0, Math.min(count, DPConfig.PER_RECORD_CLAMP)) : 0;
@@ -62,7 +62,7 @@ public class BaselineContributionBoundingBolt extends BaseRichBolt {
         }
 
         if (allowed) {
-            // dpRoutingKey = word for consistent partitioning to DataPerturbation replicas
+            // Use word as routing key for consistent partitioning to DataPerturbation replicas
             collector.emit(input, new Values(word, clampedCount, userId, word));
         }
 

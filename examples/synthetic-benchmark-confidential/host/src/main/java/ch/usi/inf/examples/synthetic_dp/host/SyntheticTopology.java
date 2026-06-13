@@ -47,14 +47,14 @@ public class SyntheticTopology {
 
         TopologyBuilder builder = new TopologyBuilder();
 
-        // SyntheticSpout: generates synthetic user contributions
+        // Spout generates synthetic user contributions
         builder.setSpout(
                 ComponentConstants.SPOUT.toString(),
                 new SyntheticSpout(),
                 1
         );
 
-        // UserContributionBoundingBolt: bounds per-user contributions and clamps per-record values
+        // Bolt bounds per-user contributions and clamps per-record values
         builder.setBolt(
                 ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING.toString(),
                 new SyntheticUserContributionBoundingBolt(),
@@ -64,8 +64,8 @@ public class SyntheticTopology {
                 new Fields("routingKey")
         );
 
-        // DataPerturbationBolt: applies DP noise via streaming mechanism
-        // Epoch synchronization is handled out-of-band via ZooKeeper barriers
+        // Bolt applies differential privacy noise via streaming
+        // Epoch synchronization is handled via ZooKeeper barriers
         builder.setBolt(
                 ComponentConstants.BOLT_DATA_PERTURBATION.toString(),
                 new SyntheticDataPerturbationBolt(),
@@ -75,11 +75,8 @@ public class SyntheticTopology {
                 new Fields("dpRoutingKey")
         );
 
-        // HistogramAggregationBolt: merges encrypted partial histograms and writes report.
-        // Also subscribes to the spout's ground-truth stream (plaintext keys) so it can
-        // compute utility metrics (l0, l_inf, l_1, l_2) against the true histogram.
-        // When ground-truth is disabled, the spout never emits on that stream, so this
-        // subscription adds no runtime traffic (it's just a declared edge in the DAG).
+        // Bolt merges encrypted histograms and writes reports.
+        // Also subscribes to ground-truth stream for utility evaluation.
         builder.setBolt(
                 ComponentConstants.BOLT_HISTOGRAM_AGGREGATION.toString(),
                 new SyntheticHistogramAggregationBolt(),
@@ -95,9 +92,7 @@ public class SyntheticTopology {
     }
 
     public static void main(String[] args) throws Exception {
-        // Parse command line arguments to override system properties.
-        // NOTE: System.setProperty calls must happen before DPConfig methods are first invoked
-        // (i.e., before getTopologyBuilder()), since DPConfig reads properties lazily via getters.
+        // Parse CLI args to set system properties before DPConfig initialization
         Map<String, String> cliArgs = new HashMap<>();
         boolean testMode = false;
         for (int i = 0; i < args.length; i++) {
@@ -107,11 +102,11 @@ public class SyntheticTopology {
                 String key = args[i].substring(2);
                 String value = args[i + 1];
                 cliArgs.put(key, value);
-                i++; // skip value
+                i++;
             }
         }
 
-        // Apply DP/parallelism args as system properties so DPConfig picks them up.
+        // Propagate DP/parallelism parameters to system properties
         if (cliArgs.containsKey("mu")) {
             System.setProperty("dp.mu", cliArgs.get("mu"));
         }
@@ -125,7 +120,7 @@ public class SyntheticTopology {
             System.setProperty("dp.tick.interval.secs", cliArgs.get("tick-interval"));
         }
 
-        // Apply test mode: force parallelism=1 unless already overridden by --parallelism
+        // Test mode defaults to parallelism=1
         if (testMode && !cliArgs.containsKey("parallelism")) {
             System.setProperty("synthetic.parallelism", "1");
         }
@@ -149,17 +144,15 @@ public class SyntheticTopology {
                 ProfilerConfig.REPORT_INTERVAL_TICKS, ProfilerConfig.OUTPUT_DIR);
         LOG.info("=======================================");
 
-        // build topology
         TopologyBuilder builder = getTopologyBuilder();
 
-        // configure topology
         Config conf = new Config();
         conf.setDebug(false);
 
-        // Enclave proxy to detect enclave-side errors (disabled for max performance)
+        // Disable enclave proxy for maximum performance
         conf.put("confidentialstorm.enclave.proxy.enable", "false");
 
-        // Pass synthetic configuration to topology config (read by spouts/bolts via TopologyContext)
+        // Populate topology configuration
         conf.put("synthetic.num.users", numUsers);
         conf.put("synthetic.num.keys", numKeys);
         conf.put("synthetic.seed", seed);
@@ -170,7 +163,7 @@ public class SyntheticTopology {
         conf.put("dp.mu", DPConfig.mu());
         conf.put("dp.tick.interval.secs", Integer.getInteger("dp.tick.interval.secs", 5));
 
-        // Enable Storm's built-in metric collection when profiler is active
+        // Register metrics consumer if profiling is enabled
         if (ProfilerConfig.ENABLED) {
             conf.registerMetricsConsumer(LoggingMetricsConsumer.class, 1);
         }
@@ -178,7 +171,6 @@ public class SyntheticTopology {
         LOG.info("Topology Config: numUsers={}, numKeys={}, seed={}",
                 numUsers, numKeys, seed);
 
-        // submit topology to cluster
         LOG.info("Submitting topology...");
         String topoName = "SyntheticDP" + runId;
         StormTopology topo = builder.createTopology();

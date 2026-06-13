@@ -5,7 +5,6 @@ import java.util.Map;
 
 /**
  * Tracks per-user contribution counts and enforces a hard maximum.
- * (copied from confidentialstorm/enclave)
  */
 public final class UserContributionLimiter {
     private final Map<Object, Long> counts = new HashMap<>();

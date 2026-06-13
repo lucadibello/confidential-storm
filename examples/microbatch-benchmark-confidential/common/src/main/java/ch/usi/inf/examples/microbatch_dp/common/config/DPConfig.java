@@ -32,8 +32,7 @@ public final class DPConfig {
     public static final long MAX_CONTRIBUTIONS_PER_USER = 32L;
 
     /**
-     * The maximum absolute value for each individual record contribution.
-     * NOTE: we set L=1 since the aggregation function is COUNT.
+     * Maximum absolute value for each individual record contribution (1.0 for COUNT aggregation).
      */
     public static final double PER_RECORD_CLAMP = 1.0;
 

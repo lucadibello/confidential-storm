@@ -35,12 +35,10 @@ public final class EnclaveConfig {
         provider = found;
     }
 
-    // Various feature toggles - can be enabled/disabled as needed
+    // Configuration options
     /**
-     * Hard-coded stream key in hexadecimal format to decrypt data within the enclave.
-     * <p>
-     * NOTE: this is just for demonstration purposes. For production we may need to setup
-     * a secure key provisioning mechanism (i.e., using Intel SGX Remote Attestation).
+     * Hexadecimal stream key to decrypt data within the enclave.
+     * For production, implement a secure key provisioning mechanism (e.g., using Intel SGX Remote Attestation).
      */
     public static final String STREAM_KEY_HEX = provider.getStreamKeyHex();
 
@@ -50,10 +48,8 @@ public final class EnclaveConfig {
     public static final LogLevel LOG_LEVEL = provider.getLogLevel();
 
     /**
-     * Whether we should segregate exceptions within the enclave or not.
-     * <p>
-     * If true, exceptions will be isolated to prevent information leakage.
-     * If false, exceptions may propagate normally to the untrusted application.
+     * Whether exception isolation is enabled within the enclave.
+     * If true, exceptions are isolated to prevent information leakage.
      */
     public static final boolean ENABLE_EXCEPTION_ISOLATION = provider.isExceptionIsolationEnabled();
 

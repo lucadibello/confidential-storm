@@ -27,16 +27,16 @@ public class WordCountTopology extends ConfigurableTopology {
         TopologyBuilder builder = getTopologyBuilder();
         Logger LOG = LoggerFactory.getLogger(WordCountTopology.class);
 
-        // configure spout wait strategy to avoid starving other bolts
-        // NOTE: learn more here https://storm.apache.org/releases/current/Performance.html
+        // Configure spout wait strategy to prevent CPU starvation
+        // See: https://storm.apache.org/releases/current/Performance.html
         conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_STRATEGY, "org.apache.storm.policy.WaitStrategyProgressive");
-        conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_PROGRESSIVE_LEVEL1_COUNT, 1); // wait after 1 consecutive empty emit
-        conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_PROGRESSIVE_LEVEL2_COUNT, 100); // wait after 100 consecutive empty emits
-        conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_PROGRESSIVE_LEVEL3_SLEEP_MILLIS, 1); // sleep 1 ms at level 3
+        conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_PROGRESSIVE_LEVEL1_COUNT, 1); // Wait after 1 consecutive empty emit
+        conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_PROGRESSIVE_LEVEL2_COUNT, 100); // Wait after 100 consecutive empty emits
+        conf.put(Config.TOPOLOGY_BACKPRESSURE_WAIT_PROGRESSIVE_LEVEL3_SLEEP_MILLIS, 1); // Sleep 1 ms at level 3
 
         conf.setDebug(false);
 
-        // Enable Storm's built-in metric collection when profiler is active
+        // Enable metrics consumer when profiler is active
         if (ProfilerConfig.ENABLED) {
             conf.registerMetricsConsumer(LoggingMetricsConsumer.class, 1);
         }
@@ -49,21 +49,21 @@ public class WordCountTopology extends ConfigurableTopology {
     public static TopologyBuilder getTopologyBuilder() {
         TopologyBuilder builder = new TopologyBuilder();
 
-        // RandomJokeSpout: emits random jokes (json entries with "body" field)
+        // Spout to emit random joke entries
         builder.setSpout(
                 ComponentConstants.SPOUT_RANDOM_JOKE.toString(),
                 new RandomJokeSpout(),
                 1
         );
 
-        // SplitSentenceBolt: splits body into words
+        // Bolt to split jokes into individual words
         builder.setBolt(
                 ComponentConstants.BOLT_SENTENCE_SPLIT.toString(),
                 new SplitSentenceBolt(),
                 2
         ).shuffleGrouping(ComponentConstants.SPOUT_RANDOM_JOKE.toString());
 
-        // UserContributionBoundingBolt: bounds user contributions to the histogram
+        // Bolt to bound user contributions for differential privacy (DP)
         builder.setBolt(
                 ComponentConstants.BOLT_USER_CONTRIBUTION_BOUNDING.toString(),
                 new UserContributionBoundingBolt(),
@@ -73,8 +73,8 @@ public class WordCountTopology extends ConfigurableTopology {
                 new Fields("routingKey")
         );
 
-        // DataPerturbationBolt: computes the histogram and perturbs it to ensure differential privacy
-        // Uses parallelism=2 with word-only routing so each replica sees all contributions for its assigned keys
+        // Bolt to compute and perturb the histogram to ensure differential privacy.
+        // Uses routing key grouping so that all instances for a key route to the same replica.
         builder.setBolt(
                 ComponentConstants.BOLT_DATA_PERTURBATION.toString(),
                 new DataPerturbationBolt(),
@@ -84,8 +84,7 @@ public class WordCountTopology extends ConfigurableTopology {
                 new Fields("dpRoutingKey")
         );
 
-        // HistogramAggregatorBolt: receives encrypted partial histograms from DataPerturbation replicas
-        // and merges them inside the enclave to produce the final global histogram
+        // Bolt to aggregate encrypted partial histograms and merge them inside the enclave.
         builder.setBolt(
                 ComponentConstants.BOLT_HISTOGRAM_AGGREGATION.toString(),
                 new HistogramAggregatorBolt(),

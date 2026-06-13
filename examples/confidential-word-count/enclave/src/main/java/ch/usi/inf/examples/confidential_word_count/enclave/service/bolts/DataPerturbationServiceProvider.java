@@ -12,39 +12,38 @@ public class DataPerturbationServiceProvider extends AbstractDataPerturbationSer
 
     @Override
     public double getEpsilonK() {
-        // privacy budget split (50% for contribution bounding, 50% for histogram perturbation)
+        // Privacy budget split: 50% for contribution bounding, 50% for histogram perturbation
         return DPConfig.EPSILON / 2.0;
     }
 
     @Override
     public double getEpsilonH() {
-        // privacy budget split (50% for contribution bounding, 50% for histogram perturbation)
+        // Privacy budget split: 50% for contribution bounding, 50% for histogram perturbation
         return DPConfig.EPSILON / 2.0;
     }
 
     @Override
     public double getDeltaK() {
-        // contribution bounding gets 2/3 of the delta budget, histogram perturbation gets 1/3 of the delta budget
+        // Delta budget split: 2/3 for contribution bounding, 1/3 for histogram perturbation
         return (2.0 / 3.0) * DPConfig.DELTA;
     }
 
     @Override
     public double getDeltaH() {
-        // contribution bounding gets 2/3 of the delta budget, histogram perturbation gets 1/3 of the delta budget
+        // Delta budget split: 2/3 for contribution bounding, 1/3 for histogram perturbation
         return (1.0 / 3.0) * DPConfig.DELTA;
     }
 
     @Override
     public long getMu() {
-        // the "mu" parameter for the Gaussian mechanism, which controls the amount of noise added to the histogram counts
+        // Parameter for the Gaussian mechanism, controlling noise added to histogram counts
         return 15L;
     }
 
     @Override
     public int getMaxTimeSteps() {
         /*
-         * NOTE: This example runs for 120 seconds with releases every 5 seconds = 24 time steps.
-         * However, using fewer time steps (10-12) reduces noise accumulation and improves utility.
+         * Fewer time steps (10-12) reduce noise accumulation and improve utility compared to 24 time steps.
          */
         return 12;
     }

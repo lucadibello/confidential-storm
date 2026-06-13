@@ -48,7 +48,7 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
 
     private void writeSnapshot(Map<String, Long> snap) {
         File file = new File(OUTPUT_FILE);
-        // Ensure the output directory exists
+        // Ensure directory exists
         File parent = file.getParentFile();
         if (parent != null && !parent.exists()) {
             if (!parent.mkdirs() && !parent.exists()) {
@@ -57,7 +57,7 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
             }
         }
         try {
-            // Create the file if it does not exist
+            // Ensure file exists
             if (!file.exists() && !file.createNewFile()) {
                 LOG.error("Could not create output file: {}", file.getAbsolutePath());
                 return;
@@ -73,7 +73,7 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
 
     @Override
     protected void processTuple(Tuple input, HistogramService service) throws EnclaveServiceException {
-        // if tick tuple -> export histogram to file
+        // Export histogram snapshot on tick tuple
         if (isTickTuple(input)) {
             LOG.info("[HistogramBolt {}] Received tick tuple. Exporting histogram snapshot...", boltId);
             HistogramSnapshotResponse snapshot = service.snapshot();
@@ -82,7 +82,7 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
             if (io != null) {
                 io.submit(() -> writeSnapshot(snap));
             } else {
-                // export snapshot to file
+                // Write snapshot
                 writeSnapshot(snap);
             }
             LOG.info("[HistogramBolt {}] Exported histogram snapshot with {} entries.", boltId, snapshot.counts().size());
@@ -92,6 +92,6 @@ public class HistogramBolt extends ConfidentialBolt<HistogramService> {
 
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        // sink bolt
+        // Sink bolt (no output fields)
     }
 }

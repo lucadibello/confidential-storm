@@ -311,8 +311,7 @@ public class StreamingDPMechanism {
             this.stagingWindowUniqueUsers = new HashMap<>();
         }
 
-        // if timeStep exceeds maxTimeSteps, return final histogram
-        // NOTE: no further processing as we won't have DP guarantees in the next release
+        // No further processing if maxTimeSteps is exceeded (prevents privacy budget exhaustion).
         if (timeStep >= maxTimeSteps) {
             log.debug("[DP-MECHANISM] timeStep >= maxTimeSteps, returning final histogram");
             // Free all accumulated per-key state that will never be used again
@@ -336,7 +335,7 @@ public class StreamingDPMechanism {
             Map.Entry<String, Integer> entry = predictionIt.next();
             if (entry.getValue() == timeStep) {
                 keysToProcess.add(entry.getKey());
-                predictionIt.remove(); // remove prediction as we are processing it now
+                predictionIt.remove(); // Remove prediction since key is being processed.
             }
         }
 
@@ -419,8 +418,6 @@ public class StreamingDPMechanism {
         // Proceed to next time step
         timeStep++;
 
-        // NOTE: GC will take care of cleaning up old hashmaps
-
         // Produce and return the noisy histogram
         Map<String, Long> result = produceHistogram();
         log.debug("[DP-MECHANISM] snapshot() COMPLETE - returning {} keys", result.size());
@@ -437,9 +434,8 @@ public class StreamingDPMechanism {
         // Get or create histogram tree, catching up if new
         BinaryAggregationTree histTree = histogramForest.get(key);
         if (histTree == null) {
-            // Create new tree. Leaves [0, timeStep) are implicitly zero
-            // NOTE: BinaryAggregationTree pre-seeds every node with calibrated Gaussian 
-            // noise at construction
+            // Create new tree. Leaves [0, timeStep) are implicitly zero.
+            // Nodes are pre-seeded with calibrated Gaussian noise.
             histTree = new BinaryAggregationTree(maxTimeSteps, sigmaHist);
             histogramForest.put(key, histTree);
             log.debug("[DP-MECHANISM] Created new histogram tree for key {} at timeStep {}", key, timeStep);
@@ -453,9 +449,9 @@ public class StreamingDPMechanism {
 
         // Step 9 of algo 2 - compute noisy sum for this key at current time step
         double noisySum = histTree.getTotalSum(timeStep);
-        currentSums.put(key, noisySum); // NOTE: store result for histogram production
+        currentSums.put(key, noisySum); // Store result for histogram production
 
-        // Clear the buffer since we've now incorporated it into the tree
+        // Clear buffer once value is incorporated into the tree.
         unreleasedHistogramBuffer.remove(key);
     }
 

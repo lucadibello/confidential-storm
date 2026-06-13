@@ -19,23 +19,16 @@ import org.slf4j.LoggerFactory;
 public class StreamingDPMechanism {
     private static final Logger log = LoggerFactory.getLogger(StreamingDPMechanism.class);
 
-    // Aggregation trees for key selection and histogram (algorithm 4)
-
     /**
      * Forest of binary aggregation trees for key selection.
-     * <p>
-     * For each key detected during the key selection phase, we maintain a separate binary aggregation tree to track
-     * the number of unique users contributing to that key over time.
-     * <p>
-     * This guarantees p-zCDP for each of the trees for each key.
      */
     private final Map<String, BinaryAggregationTree> keySelectionForest = new HashMap<>();
 
     /**
      * Forest of binary aggregation trees for histogram release.
      * <p>
-     * For each selected key, we maintain a separate binary aggregation tree to track the sum of contributions
-     * over time with added noise.
+     * For each selected key, we maintain a separate binary aggregation tree to track
+     * the sum of contributions over time with added noise.
      */
     private final Map<String, BinaryAggregationTree> histogramForest = new HashMap<>();
     
@@ -86,10 +79,8 @@ public class StreamingDPMechanism {
     private Map<String, Set<String>> stagingWindowUniqueUsers = new HashMap<>();
 
     /**
-     * Lightweight lock that protects only the reference swap between the staging
-     * buffers and the snapshot drain buffers. Held for O(1).
-     * 
-     * NOTE: held for just two reference, so it never blocks the executor thread for a meaningful duration.
+     * Lightweight lock that protects the reference swap between the staging
+     * buffers and the snapshot drain buffers.
      */
     private final Object bufferLock = new Object();
 
@@ -120,13 +111,7 @@ public class StreamingDPMechanism {
 
     /**
      * Quantile Phi^{-1}(1 - beta) of the standard normal distribution used to compute the
-     * time-dependent key-selection threshold tau_tr_i = sqrt(lambda^2_tr_i) * Phi^{-1}(1 - beta).
-     * <p>
-     * beta is the accuracy parameter of Algorithm 1 and must be derived from the per-round
-     * privacy budget (epsilon_k_round, delta_k_round) via the pre-allocation approach (see
-     * thesis background chapter on choosing beta): beta = alpha * delta_k_round / (e^eps + 1)
-     * where alpha in (0,1) is the share of the per-round delta budget reserved for the
-     * threshold-failure cost.
+     * time-dependent key-selection threshold.
      */
     private final double thresholdQuantile;
 
@@ -296,10 +281,9 @@ public class StreamingDPMechanism {
         log.debug("[DP-MECHANISM] snapshot() START - timeStep={}, maxTimeSteps={}", timeStep, maxTimeSteps);
 
         /* 
-         * Swap-and-drain mechanism to atomically grab the staging buffers and replace them
-         * with fresh empty maps. The lock is held for O(1) (two reference swaps).
-         * NOTE: needed in order to make `addContribution()` thread-safe and avoid Apache Storm's task threads being blocked.
-        */
+         * Atomically swap the staging buffers with fresh empty maps to ensure
+         * thread-safety for addContribution() without blocking executor threads.
+         */
         final Map<String, Double> currentWindowCounts;
         final Map<String, Set<String>> currentWindowUniqueUsers;
         synchronized (bufferLock) {
@@ -309,8 +293,7 @@ public class StreamingDPMechanism {
             this.stagingWindowUniqueUsers = new HashMap<>();
         }
 
-        // if timeStep exceeds maxTimeSteps, return final histogram
-        // NOTE: no further processing as we won't have DP guarantees in the next release
+        // If max time steps are exceeded, return the final histogram
         if (timeStep >= maxTimeSteps) {
             log.debug("[DP-MECHANISM] timeStep >= maxTimeSteps, returning final histogram");
             // Free all accumulated per-key state that will never be used again
@@ -318,17 +301,11 @@ public class StreamingDPMechanism {
             return produceHistogram();
         }
 
-        // 1. Identify all keys that need processing in this step
-        // a) Unique set of keys in this stream window D_tr_i (Step 4 of Algo 1)
-        // b) Keys predicted to be released at this specific timeStep (Algo 3 Case 2)
-
-        // Step 1 of Algo 3 - DeltaD_tr_j = D_tr_j - D_tr_(j-1) (data in current micro-batch)
-        // NOTE: currentWindowCounts represents DeltaD_tr_j (keys with contributions this window)
+        // 1. Identify keys to process (current window active keys + predicted releases)
         Set<String> keysToProcess = new HashSet<>(currentWindowCounts.keySet());
         log.debug("[DP-MECHANISM] Keys with contributions this window: {}", keysToProcess.size());
 
-        // Algo 3 Case 2 - Load keys with predicted release time = current time step
-        // "DP-SQLP loaded system states for key k at predicted time tr_p"
+        // Load keys with predicted release time equal to current time step (Algo 3 Case 2)
         Iterator<Map.Entry<String, Integer>> predictionIt = predictedReleaseTimes.entrySet().iterator();
         while (predictionIt.hasNext()) {
             Map.Entry<String, Integer> entry = predictionIt.next();
@@ -348,13 +325,12 @@ public class StreamingDPMechanism {
             // Get inputs for this window
             double countInput = currentWindowCounts.getOrDefault(key, 0.0);
 
-            // Step 7 of Algo 2 - Aggregate contributions for this key since last release to compute DeltaV_key
+            // Accumulate contributions since last release
             unreleasedHistogramBuffer.merge(key, countInput, Double::sum);
 
             // --- Key Selection Logic (Algo 1 & 3) ---
 
-            // Algo 3 Case 1 - Key appears before predicted time (j < n < p)
-            // "The prior prediction result is discarded"
+            // Discard prior prediction if key appears before predicted time (Algo 3 Case 1)
             if (keyAppearedThisStep && predictedReleaseTimes.containsKey(key)) {
                 int predictedTime = predictedReleaseTimes.get(key);
                 if (predictedTime > timeStep) {
@@ -363,51 +339,49 @@ public class StreamingDPMechanism {
                 }
             }
 
-            // Algo 1 step 5 - initialize or reuse tree; prefer reuse even if key went silent
+            // Initialize or reuse key-selection tree (Algo 1 Step 5)
             BinaryAggregationTree t_key = keySelectionForest.get(key);
             if (t_key == null) {
                 t_key = new BinaryAggregationTree(maxTimeSteps, sigmaKey);
                 keySelectionForest.put(key, t_key);
-                // Reset user tracking for this key since we're starting fresh round
+                // Reset user tracking for the new round
                 observedUsersForKeySelection.remove(key);
                 log.debug("[DP-MECHANISM] Key {} initialized with new key-selection tree", key);
             }
 
-            // Step 7 of Algo 1: Add count_key(D_tr_i) - count_key(D_tr_(i-1)) to the tree
+            // Add user count delta to the tree (Algo 1 Step 7)
             Set<String> observedUsers = observedUsersForKeySelection.computeIfAbsent(key, k -> new HashSet<>());
             Set<String> windowUsers = currentWindowUniqueUsers.getOrDefault(key, Collections.emptySet());
 
-            // Count NEW unique users in current round for this key
+            // Count new unique users in current round for this key
             int newUniqueUsers = 0;
             for (String userId : windowUsers) {
                 if (observedUsers.add(userId)) {
-                    newUniqueUsers++; // this is count_key(D_tr_i) - count_key(D_tr_(i-1)) for current round
+                    newUniqueUsers++;
                 }
             }
-
-            // Add the delta to the key-selection tree
             t_key.addToTree(timeStep, newUniqueUsers);
 
-            // Step 8 of Algo 1 - compute the noisy unique users for this key at time step i
+            // Compute noisy unique users (Algo 1 Step 8)
             double noisyUniqueUsers = t_key.getTotalSum(timeStep);
 
-            // Step 9 of Algo 1 - check key selection condition
+            // Check key selection condition (Algo 1 Step 9)
             double currentVariance = t_key.getHonakerVariance(timeStep);
             double tau_tr_i = computeTau(currentVariance);
             if (noisyUniqueUsers >= (double) mu + tau_tr_i) {
                 // KEY SELECTED FOR RELEASE!
 
-                // Run Algorithm 2 with accumulated unreleased buffer value
+                // Release key and update histogram tree (Algo 2)
                 updateHistogramTree(key);
 
-                // Restart key selection round after release (Section 4.4)
+                // Reset key selection state for the next round
                 resetKeySelectionState(key);
                 log.debug("[DP-MECHANISM] Key {} SELECTED (noisy users={} >= mu+tau={})",
                         key, noisyUniqueUsers, mu + tau_tr_i);
             } else {
                 // NOT SELECTED
 
-                // Step 2-3 of Algo 3 - For keys in S_tr_j (current micro-batch) not selected, run prediction
+                // Predict future release time for unselected keys (Algo 3 Steps 2-3)
                 if (keyAppearedThisStep) {
                     runEmptyKeyPrediction(key, t_key);
                 }
@@ -416,8 +390,6 @@ public class StreamingDPMechanism {
 
         // Proceed to next time step
         timeStep++;
-
-        // NOTE: GC will take care of cleaning up old hashmaps
 
         // Produce and return the noisy histogram
         Map<String, Long> result = produceHistogram();
@@ -435,25 +407,23 @@ public class StreamingDPMechanism {
         // Get or create histogram tree, catching up if new
         BinaryAggregationTree histTree = histogramForest.get(key);
         if (histTree == null) {
-            // Create new tree. Leaves [0, timeStep) are implicitly zero
-            // NOTE: BinaryAggregationTree pre-seeds every node with calibrated Gaussian 
-            // noise at construction
+            // BinaryAggregationTree pre-seeds every node with noise at construction
             histTree = new BinaryAggregationTree(maxTimeSteps, sigmaHist);
             histogramForest.put(key, histTree);
             log.debug("[DP-MECHANISM] Created new histogram tree for key {} at timeStep {}", key, timeStep);
         }
 
-        // Step 7 of Algo 2 - get the DeltaV_key (aggregated value since last release)
+        // Get aggregated value since last release (Algo 2 Step 7)
         double deltaV = unreleasedHistogramBuffer.getOrDefault(key, 0.0);
 
-        // Step 8 of Algo 2 - add DeltaV_key to the histogram tree at current time step
+        // Add delta to the histogram tree (Algo 2 Step 8)
         histTree.addToTree(timeStep, deltaV);
 
-        // Step 9 of algo 2 - compute noisy sum for this key at current time step
+        // Compute noisy sum (Algo 2 Step 9)
         double noisySum = histTree.getTotalSum(timeStep);
-        currentSums.put(key, noisySum); // NOTE: store result for histogram production
+        currentSums.put(key, noisySum); // Store result for release
 
-        // Clear the buffer since we've now incorporated it into the tree
+        // Clear unreleased buffer
         unreleasedHistogramBuffer.remove(key);
     }
 
@@ -474,20 +444,20 @@ public class StreamingDPMechanism {
         int futureSteps = maxTimeSteps - timeStep - 1;
         log.debug("[PREDICTION] Starting prediction for key {} ({} future steps to check)", key, futureSteps);
 
-        // Step 4 of Algo 3 - for tr_p from tr_j+1 (which is the next time step) to tr_|Trw| (the final time step)
+        // Iterate through future steps to predict release (Algo 3 Step 4)
         int iterationCount = 0;
         for (int tr_p = timeStep + 1; tr_p < maxTimeSteps; tr_p++) {
             iterationCount++;
-            // Step 5 of Algo 3 - D_tr_p = D_tr_j -> we assume no new contributions for this key in future steps
+            // Assume no new contributions in future steps (Algo 3 Step 5)
 
-            // Step 6 of Algo 3 - Perform streaming private key selection via Algorithm 1 at time tr_p
+            // Perform streaming private key selection at future step (Algo 3 Step 6)
             double predictedNoisyCount = keyTree.getTotalSum(tr_p);
             double futureVariance = keyTree.getHonakerVariance(tr_p);
             double futureTau = computeTau(futureVariance);
 
-            // Step 7 of Algo 3 - if key is selected, then write <key, tr_p> to state store and break
+            // Record predicted release step if selected (Algo 3 Step 7)
             if (predictedNoisyCount >= (double) mu + futureTau) {
-                // Key predicted to be selected at future time tr_p due to noise
+                // Predicted selection due to noise
                 predictedReleaseTimes.put(key, tr_p);
 
                 log.debug("[PREDICTION] Key {} will be released at future step tr_p={} (checked {} iterations)",
@@ -500,7 +470,7 @@ public class StreamingDPMechanism {
     /**
      * Computes the tau value based on the Gaussian distribution.
      * <p>
-     * Refer to Appendix D of the "Differentially Private Stream Processing at Scale" paper.
+     * Uses the standard Gaussian cumulative distribution.
      *
      * @param lambda_square The total Honaker variance at time step i.
      * @return The computed tau value.
@@ -512,7 +482,7 @@ public class StreamingDPMechanism {
     /**
      * Produces a differentially private histogram sorted by counts in descending order.
      * <p>
-     * This function rounds negative counts to zero to avoid negative counts in the released histogram.
+     * Rounds negative counts to zero to avoid showing negative values.
      *
      * @return A map representing the noisy histogram with keys and their corresponding counts.
      */
@@ -524,11 +494,11 @@ public class StreamingDPMechanism {
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
                 .forEach(entry -> {
                     long rounded = FastMath.round(entry.getValue());
-                    // Clamp to zero to avoid negative counts in the released histogram
+                    // Clamp to zero
                     sortedHistogram.put(entry.getKey(), FastMath.max(0L, rounded));
                 });
 
-        // return sorted histogram
+        // Return sorted histogram
         return sortedHistogram;
     }
 
@@ -543,7 +513,7 @@ public class StreamingDPMechanism {
         observedUsersForKeySelection.clear();
         predictedReleaseTimes.clear();
         unreleasedHistogramBuffer.clear();
-        // acquire lock to safely clear staging buffers
+        // Acquire lock to safely clear staging buffers
         synchronized (bufferLock) {
             stagingWindowCounts.clear();
             stagingWindowUniqueUsers.clear();

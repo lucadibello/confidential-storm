@@ -9,7 +9,7 @@ import com.google.auto.service.AutoService;
 public final class WordCountEnclaveConfigProvider implements EnclaveConfiguration {
     @Override
     public String getStreamKeyHex() {
-        // FIXME: this is a dummy key, replace with a secure key for production use
+        // FIXME: Dummy key, replace with secure key for production
         return "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
     }
 
@@ -35,8 +35,7 @@ public final class WordCountEnclaveConfigProvider implements EnclaveConfiguratio
 
     @Override
     public EncryptionScheme getEncryptionScheme() {
-        // NOTE: now using AES-256-GCM instead of CHACHA20_POLY1305 since we are using Intel Xeon CPU,
-        // which has hardware acceleration for AES
+        // AES-256-GCM for hardware acceleration on Intel Xeon CPUs
         return EncryptionScheme.AES_256_GCM;
     }
 }

@@ -33,13 +33,9 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
     private int tickIntervalSecs;
 
     /**
-     * Worker-local ground-truth histogram populated from the spout's ground-truth stream.
-     * Stays empty when {@code synthetic.ground-truth.enabled=false}: the bolt always
-     * subscribes to the stream, but the spout skips emission on it, so no tuples arrive.
-     * <p>
-     * The aggregation bolt has parallelism=1, so a plain {@link HashMap} is safe: all
-     * ground-truth tuples and all complete-histogram callbacks run on the bolt's single
-     * executor thread.
+     * Worker-local ground-truth histogram.
+     * With parallelism=1, a plain {@link HashMap} is safe as all callbacks
+     * run on the single executor thread.
      */
     private final Map<String, Long> groundTruth = new HashMap<>();
 
@@ -77,7 +73,7 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
         LOG.info("SyntheticHistogramAggregationBolt: configuring with upstream parallelism={}, output file: {}",
                 upstreamTasks, outputFile);
 
-        // Pass runtime replica count to the enclave service via ECALL
+        // Pass runtime replica count to the enclave service
         service.setExpectedReplicaCount(upstreamTasks);
     }
 
@@ -88,7 +84,7 @@ public class SyntheticHistogramAggregationBolt extends AbstractHistogramAggregat
 
     @Override
     protected void processTuple(Tuple input, HistogramAggregationService service) throws EnclaveServiceException {
-        // ground-truth tuples are plaintext and never go through the enclave -- intercept before super()
+        // Intercept plaintext ground-truth tuples before passing to super
         if (ComponentConstants.GROUND_TRUTH_STREAM.equals(input.getSourceStreamId())) {
             String key = input.getStringByField("key");
             groundTruth.merge(key, 1L, Long::sum);

@@ -12,7 +12,7 @@ public class SyntheticDataPerturbationServiceProvider
     extends AbstractDataPerturbationServiceProvider
 {
 
-    // key selection parameters (refer to Section 5 "Experiments" of the paper for details)
+    // Key selection parameters
 
     @Override
     public double getEpsilonK() {
@@ -24,7 +24,7 @@ public class SyntheticDataPerturbationServiceProvider
         return (2.0 / 3.0) * DPConfig.DELTA;
     }
 
-    // perturbation parameters (refer to Section 5 "Experiments" of the paper for details)
+    // Perturbation parameters
 
     @Override
     public double getEpsilonH() {

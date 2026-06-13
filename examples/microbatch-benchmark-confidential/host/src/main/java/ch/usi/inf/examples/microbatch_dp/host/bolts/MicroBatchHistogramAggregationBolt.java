@@ -159,9 +159,7 @@ public class MicroBatchHistogramAggregationBolt extends AbstractHistogramAggrega
                 LOG.info("[MicroBatchAggregator] BEGIN batch {} (size={} GB, target {} records)",
                         batchId, b.sizeGb, b.recordCount);
             }
-            // Storm gives no cross-stream ordering guarantee, so BEGIN can land
-            // after all ENDs have already arrived. Retry completion here so we
-            // don't deadlock waiting for an event that already passed.
+            // Retry completion as BEGIN can arrive after all ENDs due to out-of-order streams.
             tryComplete(batchId, b);
         } else if (BatchMarker.END.equals(type)) {
             b.endsFrom.add(input.getSourceTask());
@@ -202,12 +200,12 @@ public class MicroBatchHistogramAggregationBolt extends AbstractHistogramAggrega
 
     @Override
     protected void processCompleteHistogram(Map<String, Long> mergedHistogram) {
-        // Dormant in micro-batch mode -- DP partials are not emitted.
+        // Unused in micro-batch mode.
     }
 
     @Override
     protected void processStaleHistogram(Map<String, Long> staleHistogram) {
-        // Dormant in micro-batch mode.
+        // Unused in micro-batch mode.
     }
 
     @Override

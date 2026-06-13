@@ -8,12 +8,11 @@ import org.apache.teaclave.javasdk.common.annotations.EnclaveService;
 @EnclaveService
 public interface SpoutPreprocessingService {
     /**
-     * Setup the routing information for the given encrypted tuple, ensuring correct AAD information
-     * needed for security features implemented by downstream bolts.
+     * Sets up the routing and AAD information for the encrypted tuple.
      *
      * @param request the request containing the encrypted tuple
-     * @return
-     * @throws EnclaveServiceException
+     * @return the preprocessed response with updated routing details
+     * @throws EnclaveServiceException if routing setup fails
      */
     SpoutPreprocessingResponse setupRoute(SpoutPreprocessingRequest request) throws EnclaveServiceException;
 }

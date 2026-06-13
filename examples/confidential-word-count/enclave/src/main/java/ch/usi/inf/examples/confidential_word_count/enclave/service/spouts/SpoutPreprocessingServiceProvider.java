@@ -11,14 +11,9 @@ import ch.usi.inf.examples.confidential_word_count.common.topology.ComponentCons
 import com.google.auto.service.AutoService;
 
 /**
- * The SpoutRouterServiceProvider is responsible to re-encrypt the data coming from the spout with the
- * correct AAD routing information so that it can be correctly verified and decrypted by the downstream component.
- * <p>
- * This implementation allows to ensure routing integrity and confidentiality of the data as it moves through
- * the topology.
- * <p>
- * NOTE: If we disable routing verification, this is not needed.
- * (refer to @link{ch.usi.inf.examples.confidential_word_count.enclave.WordCountEnclaveConfigProvider#isRouteValidationEnabled()}
+ * Re-encrypts spout data with correct AAD routing information
+ * for verification and decryption by downstream components.
+ * Ensures routing integrity and data confidentiality.
  */
 @AutoService(SpoutPreprocessingService.class)
 public final class SpoutPreprocessingServiceProvider
@@ -28,15 +23,15 @@ public final class SpoutPreprocessingServiceProvider
     @Override
     public SpoutPreprocessingResponse setupRoute(SpoutPreprocessingRequest request) throws EnclaveServiceException {
         try {
-            // ensure request is valid (skip replay protection as spout data does not have sequence numbers)
+            // Verify request (replay protection skipped as spout data lacks sequence numbers)
             verify(request, false, true);
 
-            // Decrypt and re-encrypt payload / user_id with new AAD routing information
+            // Decrypt and re-encrypt payload and user ID with new routing AAD
             int seq = nextSequenceNumber();
             EncryptedValue reEncryptedPayload = encrypt(decryptToBytes(request.payload()), seq);
             EncryptedValue reEncryptedUserId = encrypt(decryptToBytes(request.userId()), seq);
 
-            // Return tuple format: (payload, userId)
+            // Return preprocessed response
             return new SpoutPreprocessingResponse(reEncryptedPayload, reEncryptedUserId);
         } catch (Throwable t) {
             exceptionCtx.handleException(t);
@@ -46,15 +41,13 @@ public final class SpoutPreprocessingServiceProvider
 
     @Override
     public TopologySpecification.Component expectedSourceComponent() {
-        // The data originates from the dataset loader, which is a synthetic component not registered
-        // as a Storm bolt and therefore absent from the encrypted topology graph. This override is
-        // intentional: the default graph-based lookup cannot resolve this synthetic source.
+        // Data originates from synthetic dataset loader not registered in the topology graph.
         return ComponentConstants._DATASET;
     }
 
     @Override
     public TopologySpecification.Component currentComponent() {
-        // this service is a spout router, so the current component is the spout itself
+        // Component is the spout itself
         return ComponentConstants.SPOUT_RANDOM_JOKE;
     }
 }

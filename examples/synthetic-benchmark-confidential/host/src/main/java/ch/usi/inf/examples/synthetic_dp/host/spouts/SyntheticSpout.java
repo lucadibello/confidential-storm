@@ -38,24 +38,16 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
     private long randomSeed;
     private boolean groundTruthEnabled;
 
-    /**
-     * The Zipf-Mandelbrot distribution for key selection.
-     */
+    /** Zipf-Mandelbrot distribution for key selection. */
     private ZipfMandelbrotDistribution keyDistribution;
 
-    /**
-     * The Zipf-Mandelbrot distribution for user contribution counts, used to decide how many records each user contributes.
-     */
+    /** Zipf-Mandelbrot distribution of per-user record contributions. */
     private ZipfMandelbrotDistribution userContributionDistribution;
 
-    /**
-     * Stores the remaining contributions for each user, initialized from the user contribution distribution.
-     */
+    /** Remaining contribution budget for each user. */
     private long[] userRemainingContributions;
 
-    /**
-     * Random number generator for sampling.
-     */
+    /** RNG for sampling. */
     private Random rng;
 
 
@@ -94,8 +86,7 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
 
         this.rng = new Random(randomSeed);
 
-        // User contribution distribution: zipf-mandelbrot with N=10^5, q=26, s=6.738 (Section 5.1),
-        // NOTE: with this settings, ~15% of users contribute more than 10 records.
+        // Zipf-Mandelbrot distribution for user contributions (N=10^5, q=26, s=6.738)
         this.userContributionDistribution = new ZipfMandelbrotDistribution(
             100_000,
             26,
@@ -103,8 +94,7 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
             rng
         );
 
-        // Key distribution: zipf-mandelbrot with N=10^6, q=1000, s=1.4 (Section 5.1)
-        // NOTE: with these settings, roughly 1/3 of records have the first 10^3 keys
+        // Zipf-Mandelbrot distribution for keys (N=10^6, q=1000, s=1.4)
         this.keyDistribution = new ZipfMandelbrotDistribution(
             numKeys,
             1000,
@@ -112,19 +102,18 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
             rng
         );
 
-        // Initialize target contributions for each user based on the user contribution distribution
+        // Initialize user contribution budgets
         this.userRemainingContributions = new long[numUsers];
         for (int i = 0; i < numUsers; i++) {
-            // Sample the target contribution count for this user, capped at MAX_CONTRIBUTIONS_PER
+            // Sample target contribution count for the user
             long target = userContributionDistribution.sample();
 
-            // NOTE: these assertions are just to ensure that the user contribution distribution is calibrated correctly to produce values in the expected range
+            // Validate constraints
             assert target >
             0 : "User contribution distribution should only produce positive values";
             assert target <=
             DPConfig.MAX_CONTRIBUTIONS_PER_USER : "User contribution distribution should be calibrated to produce values within the max contributions per user";
 
-            // Initialize the remaining contributions for this user
             userRemainingContributions[i] = target;
         }
 
@@ -132,35 +121,35 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
 
     @Override
     protected void executeNextTuple() throws EnclaveServiceException {
-        // fetch the next user to emit for
+        // Select next user at random
         final int userId = rng.nextInt(numUsers);
 
-        // check if user has already emitted their target contribution count, if so skip
+        // Skip if user contribution budget is exhausted
         if (userRemainingContributions[userId] <= 0) return;
 
-        // fetch a new record for this user
+        // Generate a new key for this user
         final String key = Integer.toString(keyDistribution.sample());
 
-        // encrypt the record using the custom enclave service
-        // FIXME: we should convert the "count" parameter from String to long in the service API (the count will always be a number)
+        // Encrypt record via enclave service
+        // TODO: Change 'count' parameter in service API to long
         SyntheticEncryptedRecord rec = getService().encryptRecord(
             key,
             "1",
             Integer.toString(userId)
         );
-        // if encryption fails, means that the enclave has crashed or is unresponsive - in either case, we should trigger a fatal error to signal that the topology cannot continue processing
+        // Terminate topology on encryption failure
         if (rec == null) {
             throw new EnclaveServiceException(
                 "Failed to encrypt record for user " + userId
             );
         }
 
-        // emit tuple on the default stream to the contribution-bounding bolt
+        // Emit encrypted record to contribution-bounding bolt
         getCollector().emit(
             new Values(rec.key(), rec.count(), rec.userId(), rec.routingKey())
         );
 
-        // emit the plaintext key on the ground-truth stream to the aggregation bolt (only if enabled)
+        // Emit plaintext key for ground-truth tracking
         if (groundTruthEnabled) {
             getCollector().emit(
                 ComponentConstants.GROUND_TRUTH_STREAM,
@@ -168,7 +157,7 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
             );
         }
 
-        // record that userId has emitted one more record
+        // Decrement remaining user contribution budget
         userRemainingContributions[userId]--;
     }
 
@@ -176,8 +165,7 @@ public class SyntheticSpout extends ConfidentialSpout<SyntheticDataService> {
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
         declarer.declare(new Fields("key", "count", "userId", "routingKey"));
 
-        // Ground truth stream for emitting plaintext keys for building the ground-truth histogram in the aggregation bolt
-        // NOTE: when ground truth collection is disabled, no tuples will be emitted on this stream, so there is no overhead in declaring it
+        // Plaintext key stream for ground-truth evaluation
         declarer.declareStream(
             ComponentConstants.GROUND_TRUTH_STREAM,
             new Fields("key")

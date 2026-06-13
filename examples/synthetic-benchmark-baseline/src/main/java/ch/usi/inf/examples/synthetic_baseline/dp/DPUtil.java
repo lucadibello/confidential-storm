@@ -5,7 +5,6 @@ import org.apache.commons.math3.util.FastMath;
 
 /**
  * Utility class for Differential Privacy (DP) calculations.
- * (copy of confidentialstorm/enclave)
  */
 public class DPUtil {
 
@@ -220,8 +219,7 @@ public class DPUtil {
 
       // Score the candidate per-round budget using the rho implied by the standard
       // zCDP->DP conversion.
-      // NOTE: since sigma_k scales with 1/sqrt(rho), maximizing rho minimizes noise
-      // and maximizes utility.
+      // Maximizing rho minimizes key-selection noise scale.
       double score = rhoFromDpUpperBound(epsilonRound, deltaRound);
 
       // update best per-round budget if this candidate has a better score (higher
@@ -256,10 +254,8 @@ public class DPUtil {
   }
 
   /**
-   * Find the larger per-round epsilon^(k) such that the K-Fold adaptive
-   * composition cot of k round is at most epsilonTotal, maximizing the per-round
-   * privacy budget and minimizing the noise needed for each round (maximizing
-   * utility)
+   * Find the largest per-round epsilon such that the K-Fold adaptive
+   * composition cost of k rounds is at most epsilonTotal.
    *
    * @param epsilonTotal total epsilon budget to be allocated across rounds
    * @param k            number of rounds/compositions

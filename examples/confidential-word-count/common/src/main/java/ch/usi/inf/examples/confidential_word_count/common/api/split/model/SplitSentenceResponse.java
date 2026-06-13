@@ -19,8 +19,7 @@ public record SplitSentenceResponse(List<SealedWord> words) implements Serializa
 
     public SplitSentenceResponse {
         Objects.requireNonNull(words, "Words cannot be null");
-        // NOTE: List.copyOf would return a list whose implementation is not guaranteed to be serializable.
-        // Therefore, we return an unmodifiable view over a new array list.
+        // Return an unmodifiable view of a new ArrayList since List.copyOf is not guaranteed serializable.
         words = Collections.unmodifiableList(new ArrayList<>(words));
     }
 }

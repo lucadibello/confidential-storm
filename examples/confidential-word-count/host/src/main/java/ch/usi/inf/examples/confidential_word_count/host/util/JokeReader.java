@@ -24,7 +24,7 @@ public final class JokeReader {
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
-    // Tiny demo
+    // Main method for manual verification
     public static void main(String[] args) throws Exception {
         JokeReader reader = new JokeReader();
         List<SealedJokeEntry> jokes = reader.readAll("jokes.enc.json");
@@ -55,7 +55,7 @@ public final class JokeReader {
             }
             List<SealedJokeEntry> encryptedJokes = new ArrayList<>();
             for (JsonNode entry : root) {
-                // Parse separately encrypted userId and payload
+                // Parse encrypted user ID and payload
                 JsonNode userIdNode = entry.get("userId");
                 JsonNode payloadNode = entry.get("payload");
 
@@ -67,7 +67,7 @@ public final class JokeReader {
                 EncryptedValue encryptedUserId = parseEncryptedValue(userIdNode);
                 EncryptedValue encryptedPayload = parseEncryptedValue(payloadNode);
 
-                // Format: (payload, userId)
+                // Create sealed joke entry
                 encryptedJokes.add(new SealedJokeEntry(encryptedPayload, encryptedUserId));
             }
             return encryptedJokes;

@@ -34,20 +34,20 @@ public class ZipfMandelbrotDistribution {
      * @param random Random number generator
      */
     public ZipfMandelbrotDistribution(int N, double q, double s, Random random) {
-        // ensure that parameters are valid (wikipedia constraints)
+        // Validate parameters against Zipf-Mandelbrot constraints.
         if (N <= 0) throw new IllegalArgumentException("N must be positive");
         if (q < 0) throw new IllegalArgumentException("q must be >= 0");
         if (s <= 0) throw new IllegalArgumentException("s must be > 0");
 
-        // store distribution parameters
+        // Store distribution parameters.
         this.N = N;
         this.q = q;
         this.s = s;
 
-        // precompute H_{N,q,s}
-        this.H_N_q_s = computeHarmonicNumber(N, q, s); // computes H_{N,q,s}
+        // Precompute harmonic number H_{N,q,s}.
+        this.H_N_q_s = computeHarmonicNumber(N, q, s);
 
-        // store random generator for sampling
+        // Store random generator.
         this.random = random;
     }
 
@@ -67,18 +67,17 @@ public class ZipfMandelbrotDistribution {
      */
     private double[] computeCumulativeProbabilities() {
         double[] cdf = new double[N];
-        double H_k_q_s = 0.0; // compute H_{k,q,s} incrementally for normalization
+        double H_k_q_s = 0.0; // Incremental sum of H_{k,q,s} for normalization
 
-        // NOTE: rather than use computeHarmonicNumber, we compute H_{k,q,s} incrementally to avoid redundant computation
+        // Compute H_{k,q,s} incrementally to avoid redundant O(N) calculations.
         for (int k = 1; k <= N; k++) {
             H_k_q_s += 1.0 / FastMath.pow(k + q, s);
-            cdf[k - 1] = H_k_q_s / H_N_q_s; // i-1 as array is 0-indexed
+            cdf[k - 1] = H_k_q_s / H_N_q_s; // CDF values are 0-indexed
         }
 
-        // the last value should be exactly 1.0
+        // Ensure the final CDF value is exactly 1.0.
         cdf[N - 1] = 1.0;
 
-        // return CDF array
         return cdf;
     }
 
@@ -88,15 +87,15 @@ public class ZipfMandelbrotDistribution {
      * Source: <a href="https://en.wikipedia.org/wiki/Inverse_transform_sampling">Inverse Random Sampling</a>
      */
     public int sample() {
-        // Lazy initialization of cumulative probabilities
+        // Lazily initialize cumulative probabilities.
         if (cumulativeProbabilities == null) {
             cumulativeProbabilities = computeCumulativeProbabilities();
         }
 
-        // Generate a uniform random number in [0, 1)
+        // Generate uniform random value in [0, 1).
         double u = random.nextDouble();
 
-        // Find the smallest index where CDF[index] >= u
+        // Find the smallest index where CDF[index] >= u using binary search.
         int left = 0;
         int right = N - 1;
         while (left < right) {
@@ -107,7 +106,7 @@ public class ZipfMandelbrotDistribution {
                 right = mid;
             }
         }
-        return left + 1; // return rank (1-indexed)
+        return left + 1; // Return 1-indexed rank
     }
 
     /**

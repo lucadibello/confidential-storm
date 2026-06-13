@@ -55,7 +55,7 @@ public class HistogramAggregatorBolt extends AbstractHistogramAggregationBolt {
     protected void processCompleteHistogram(Map<String, Long> mergedHistogram) {
         if (io != null) {
             io.submit(() -> {
-                // Collect into a NEW LinkedHashMap to preserve the sorted order
+                // Preserve sorted order in LinkedHashMap
                 Map<String, Long> sortedHistogram = mergedHistogram.entrySet().stream()
                         .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                         .collect(Collectors.toMap(
@@ -64,14 +64,14 @@ public class HistogramAggregatorBolt extends AbstractHistogramAggregationBolt {
                                 (e1, e2) -> e1,
                                 LinkedHashMap::new
                         ));
-                // write the sorted histogram snapshot to file
+                // Write sorted snapshot to file
                 writeSnapshot(sortedHistogram);
             });
         } else {
             LOG.error("IO executor service is not initialized. Cannot write snapshot.");
         }
 
-        // emit the merged histogram downstream
+        // Emit merged histogram
         getCollector().emit(new Values(mergedHistogram));
     }
 
