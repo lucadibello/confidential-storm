@@ -140,7 +140,7 @@ MICROBATCH_ENCLAVE = TopologyType(
     build_target="build-profiled",
 )
 
-# Modes that drive batches via BEGIN/END markers — they ignore mu/num_users/
+# Modes that drive batches via BEGIN/END markers - they ignore mu/num_users/
 # /num_keys/tick/max_time_steps and instead take batch-sizes-gb + runs-per-size.
 MICROBATCH_MODES = ("microbatch-baseline", "microbatch-enclave")
 
@@ -238,7 +238,7 @@ def parse_args():
                    default=env_float("PER_WORKER_BATCH_GB", 0.0),
                    help="Activates weak-scaling mode when > 0. The total batch size "
                         "submitted for each parallelism p is per_worker_batch_gb * p "
-                        "(e.g. 0.1 with parallelisms 1,2,4 → 0.1, 0.2, 0.4 GB). "
+                        "(e.g. 0.1 with parallelisms 1,2,4 -> 0.1, 0.2, 0.4 GB). "
                         "Overrides --batch-sizes-gb. Default: 0 (disabled, strong-scaling).")
 
     # ---- Grid parameters ---------------------------------------------------
@@ -388,7 +388,7 @@ def build_slaves(args, slot_ports):
     for h in hostnames:
         if h == args.master_host:
             # Master IP is also listed as a supervisor: the supervisor service
-            # is rendered into the master compose, so the slave acts locally —
+            # is rendered into the master compose, so the slave acts locally -
             # no SSH tunnel, no SCP push, and rsync reads files directly from
             # the master's FRAMEWORK_ROOT bind-mount.
             slave = SupervisorHost(
@@ -715,7 +715,7 @@ def main():
     is_microbatch = args.mode in MICROBATCH_MODES
     is_weak_scaling = is_microbatch and args.per_worker_batch_gb > 0
 
-    # Build the grid. In micro-batch mode only parallelism is swept — batch
+    # Build the grid. In micro-batch mode only parallelism is swept - batch
     # sizes and runs-per-size are handled inside one topology submission.
     if is_microbatch:
         grid = [(0, par, 0, 0, 0, 0) for par in args.parallelisms]
@@ -786,10 +786,10 @@ def main():
                 (s, scaled_completion_timeout_ms(
                     s, args.hours_per_gb, args.completion_timeout_ms) / 3_600_000.0)
                 for s in weak_sizes]
-            print(" Scaling mode:        WEAK  ({}GB/worker × parallelism)".format(
+            print(" Scaling mode:        WEAK  ({}GB/worker x parallelism)".format(
                 args.per_worker_batch_gb))
             print(" Derived batch sizes: {}".format(
-                ", ".join("p{}→{}GB".format(par, s)
+                ", ".join("p{}->{}GB".format(par, s)
                           for par, s in zip(args.parallelisms, weak_sizes))))
         else:
             sizes_list = [s.strip() for s in args.batch_sizes_gb.split(",") if s.strip()]
@@ -842,7 +842,7 @@ def main():
     cluster_root.mkdir(parents=True, exist_ok=True)
     staging_root.mkdir(parents=True, exist_ok=True)
 
-    # Storm logs dir — devcontainer-side path used for reading/archiving.
+    # Storm logs dir - devcontainer-side path used for reading/archiving.
     local_logs_dir = FRAMEWORK_ROOT / "data" / "storm-logs"
     for sub in ("nimbus", "ui", "supervisor", "supervisor/profiler", "logviewer"):
         (local_logs_dir / sub).mkdir(parents=True, exist_ok=True)
@@ -856,7 +856,7 @@ def main():
     except RuntimeError as exc:
         print("[grid-search] WARNING: {}".format(exc))
         print("[grid-search]          Falling back to devcontainer path for "
-              "master compose volumes — Storm containers may not start.")
+              "master compose volumes - Storm containers may not start.")
 
     # host_logs_dir is the path the host Docker daemon will bind-mount for logs.
     host_logs_dir = (

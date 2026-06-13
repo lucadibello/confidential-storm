@@ -1464,7 +1464,7 @@ def tick_tuple_validation(
     pct = (all_violations / all_deltas * 100) if all_deltas else 0
     ax_delta.text(
         0.01, 0.97,
-        f"Violations: {all_violations}/{all_deltas} ({pct:.0f}%) -- expected Δ = {tick_s:.0f}s",
+        f"Violations: {all_violations}/{all_deltas} ({pct:.0f}%) -- expected delta = {tick_s:.0f}s",
         transform=ax_delta.transAxes, fontsize=9, va="top",
         bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
     )
@@ -1607,12 +1607,12 @@ def traffic_pattern_analysis(
             continue
         violations = td[(td["delta_s"] < lo) | (td["delta_s"] > hi)]
         if violations.empty:
-            print(f"  Task {task_id}: ALL OK ✓ ({len(td)} intervals)")
+            print(f"  Task {task_id}: ALL OK ({len(td)} intervals)")
         else:
             print(f"  Task {task_id}: {len(violations)} violation(s) out of {len(td)} intervals:")
             for _, v in violations.iterrows():
                 direction = "short" if v["delta_s"] < lo else "long"
-                print(f"    t={v['elapsed_s']:.1f}s  Δ={v['delta_s']:.1f}s ({direction})  "
+                print(f"    t={v['elapsed_s']:.1f}s  delta={v['delta_s']:.1f}s ({direction})  "
                       f"{v['prev_event']}->{v['event']}  epoch={int(v['epoch'])}")
 
     save_or_show(fig, output_dir, plot_name, fmt, show)

@@ -133,7 +133,7 @@ class ConfigRenderer(object):
         ))
         out.master_storm_yaml = RenderedFile(master_yaml_path)
 
-        # Master compose — volumes use the host-side path so the host Docker
+        # Master compose - volumes use the host-side path so the host Docker
         # daemon can resolve them when docker compose runs inside the devcontainer.
         master_compose_path = master_dir / "docker-compose.yml"
         master_host_logs = (

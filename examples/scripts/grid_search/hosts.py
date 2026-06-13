@@ -113,7 +113,7 @@ class SupervisorHost(object):
         # HOST filesystem paths, not devcontainer paths).
         self.host_project_dir = None  # type: str
 
-        # Tunnel state — populated by open_tunnel()
+        # Tunnel state - populated by open_tunnel()
         self._local_forward_port = None  # type: int
         self._tunnel_proc = None  # type: subprocess.Popen
 
@@ -392,7 +392,7 @@ class MasterHost(object):
         self.ui_port = ui_port
         self.logviewer_port = logviewer_port
         # Path as seen inside the master devcontainer (used as Docker Compose
-        # build context — the CLI tarballs it from the devcontainer filesystem).
+        # build context - the CLI tarballs it from the devcontainer filesystem).
         self.container_project_dir = container_project_dir
         self.host_project_dir = None  # type: str
 
