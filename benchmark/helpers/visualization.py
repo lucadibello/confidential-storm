@@ -715,6 +715,7 @@ def parameter_heatmap_faceted(
     plot_name: str = "param-heatmap-faceted",
     fmt: str = "png",
     show: bool = True,
+    base_fig_size: tuple[float, float] = (7, 5),
 ) -> plt.Figure | None:
     """Side-by-side heatmaps for baseline and confidential."""
     has_types = "topology_type" in df.columns and df["topology_type"].nunique() > 1
@@ -734,7 +735,7 @@ def parameter_heatmap_faceted(
         return None
 
     n_panels = len(pivots)
-    fig, axes = plt.subplots(1, n_panels, figsize=(7 * n_panels, 5),
+    fig, axes = plt.subplots(1, n_panels, figsize=(base_fig_size[0] * n_panels, base_fig_size[1]),
                              squeeze=False, constrained_layout=True)
 
     # Shared color scale
