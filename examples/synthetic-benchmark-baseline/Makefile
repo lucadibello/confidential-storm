@@ -96,7 +96,7 @@ run-profiled: build-profiled
 
 cluster-submit-profiled: build-profiled
 	@echo "Submitting $(TOPOLOGY_NAME) to cluster with profiling enabled..."
-	storm jar $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) $(TOPOLOGY_ARGS)
+	$(STORM_JAR) $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) $(TOPOLOGY_ARGS)
 	@echo "Topology submitted with profiling. CSV reports will be at $(PROFILER_OUTPUT_DIR)/profiler-*.csv"
 
 grid-search:
