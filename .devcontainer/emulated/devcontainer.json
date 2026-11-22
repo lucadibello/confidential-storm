@@ -1,0 +1,44 @@
+// Non-SGX hosts (e.g. Apple Silicon): same image, built/run as linux/amd64 under emulation.
+// No SGX devices: use confidentialstorm.enclave.type=MOCK_IN_SVM (TEE_SDK needs real SGX hardware).
+{
+  "name": "Teaclave+Storm devcontainer (amd64 emulated, no SGX)",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": "../..",
+    "options": ["--platform=linux/amd64"],
+    "args": {
+      "REMOTE_USER": "dev",
+      "REMOTE_UID": "${localEnv:REMOTE_UID}",
+      "REMOTE_GID": "${localEnv:REMOTE_GID}",
+      "NODE_VERSION": "16.20.2",
+      "STORM_VERSION": "2.8.3",
+      "GIT_EMAIL": "lucadibello@proton.me",
+      "GIT_NAME": "Luca Di Bello",
+    },
+  },
+  "remoteUser": "dev",
+  "runArgs": [
+    "--platform=linux/amd64",
+    "--name=confidential-storm-devcontainer",
+    "--env-file",
+    ".env",
+    "--network",
+    "storm-net",
+    "--publish",
+    "127.0.0.1:2222:2222",
+  ],
+  "overrideCommand": false,
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "forwardPorts": [2222],
+  "mounts": [
+    // Docker Desktop can't bind the macOS agent socket directly; it proxies it here.
+    "source=/run/host-services/ssh-auth.sock,target=/ssh-agent,type=bind",
+    "source=${localWorkspaceFolder}/conf/storm.yaml,target=/home/dev/.storm/storm.yaml,type=bind,readonly",
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
+  ],
+  "containerEnv": {
+    "SSH_AUTH_SOCK": "/ssh-agent",
+  },
+  "postCreateCommand": "sudo passwd dev && mkdir -p /home/dev/.ssh && chmod 700 /home/dev/.ssh && ([ -f /home/dev/.ssh/id_ed25519 ] || ssh-keygen -t ed25519 -f /home/dev/.ssh/id_ed25519 -N '' -C 'dev@confidential-storm-devcontainer')",
+  "postStartCommand": "sudo chmod 666 /var/run/docker.sock || true",
+}

@@ -4,6 +4,13 @@ FRAMEWORK_ROOT ?= ../..
 COMPOSE_FILE   ?= $(FRAMEWORK_ROOT)/docker-compose.yml
 NIMBUS_HOST    ?= nimbus
 
+# No SGX device (host: /dev/sgx_enclave, SGX devcontainer: /dev/sgx/enclave) => amd64-emulated
+# cluster without SGX devices + mock enclaves. Override with ENCLAVE_TYPE=TEE_SDK|MOCK_IN_SVM.
+SGX_DEVICE   := $(wildcard /dev/sgx_enclave /dev/sgx/enclave)
+COMPOSE      := docker compose -f $(COMPOSE_FILE) $(if $(SGX_DEVICE),,-f $(FRAMEWORK_ROOT)/docker-compose.emulated.yml)
+ENCLAVE_TYPE ?= $(if $(SGX_DEVICE),,MOCK_IN_SVM)
+STORM_JAR    := storm jar $(if $(ENCLAVE_TYPE),-c confidentialstorm.enclave.type=$(ENCLAVE_TYPE))
+
 .PHONY: install-framework cluster-up cluster-down cluster-status cluster-logs cluster-logs-local \
        cluster-submit cluster-kill
 
@@ -29,17 +36,17 @@ cluster-up:
 	@mkdir -p $(FRAMEWORK_ROOT)/data/storm-logs/supervisor/profiler
 	@mkdir -p $(FRAMEWORK_ROOT)/data/storm-logs/logviewer
 	@echo "[INFO] Starting Storm cluster..."
-	docker compose -f $(COMPOSE_FILE) up -d
+	$(COMPOSE) up -d
 	@echo "[INFO] Storm cluster is starting. UI will be at http://localhost:$${STORM_UI_PORT:-9090}"
 
 cluster-down:
 	@echo "[INFO] Stopping Storm cluster..."
-	docker compose -f $(COMPOSE_FILE) down
+	$(COMPOSE) down
 	@echo "[INFO] Cluster stopped."
 
 cluster-submit: build
 	@echo "[INFO] Submitting $(TOPOLOGY_NAME) to Docker Storm cluster (nimbus=$(NIMBUS_HOST))..."
-	storm jar $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) $(TOPOLOGY_ARGS)
+	$(STORM_JAR) $(TOPOLOGY_JAR) $(TOPOLOGY_CLASS) $(TOPOLOGY_ARGS)
 	@echo "[INFO] Topology submitted. Check status with: make cluster-status"
 
 cluster-kill:
@@ -48,7 +55,7 @@ cluster-kill:
 	@echo "[INFO] Kill request sent (5 s wait)."
 
 cluster-status:
-	@docker compose -f $(COMPOSE_FILE) ps 2>/dev/null || true
+	@$(COMPOSE) ps 2>/dev/null || true
 	@echo ""
 	@echo "--- Active topologies ---"
 	@storm list 2>/dev/null \
@@ -56,7 +63,7 @@ cluster-status:
 		|| echo "(nimbus not reachable -- is the cluster running?)"
 
 cluster-logs:
-	docker compose -f $(COMPOSE_FILE) logs -f
+	$(COMPOSE) logs -f
 
 STORM_LOGS_DIR ?= $(FRAMEWORK_ROOT)/data/storm-logs
 

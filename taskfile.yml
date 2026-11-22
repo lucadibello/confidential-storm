@@ -15,6 +15,11 @@ vars:
     sh: id -u
   REMOTE_GID:
     sh: id -g
+  # Real SGX host -> SGX config; anything else (e.g. Apple Silicon) -> amd64-emulated, no-SGX config.
+  # Override with: task devcontainer CONFIG=.devcontainer/devcontainer.json
+  CONFIG:
+    sh: '[ -e /dev/sgx_enclave ] && echo .devcontainer/devcontainer.json || echo .devcontainer/emulated/devcontainer.json'
+  DC_ARGS: --workspace-folder {{.WORKSPACE}} --config {{.CONFIG}}
 
 tasks:
   devcontainer:
@@ -36,6 +41,14 @@ tasks:
     cmds:
       - docker network create {{.STORM_NETWORK}} 2>/dev/null || true
 
+  ensure-amd64-emulation:
+    desc: Register QEMU binfmt handlers so Docker can run linux/amd64 images (idempotent)
+    internal: true
+    status:
+      - '[ -e /dev/sgx_enclave ] || docker run --rm --platform linux/amd64 alpine uname -m | grep -qx x86_64'
+    cmds:
+      - docker run --privileged --rm tonistiigi/binfmt --install amd64
+
   devcontainer-build:
     desc: Build the devcontainer image for this workspace
     preconditions:
@@ -47,12 +60,16 @@ tasks:
       REMOTE_UID: "{{.REMOTE_UID}}"
       REMOTE_GID: "{{.REMOTE_GID}}"
     cmds:
-      - devcontainer build --workspace-folder {{.WORKSPACE}}
+      - task: ensure-amd64-emulation
+      - devcontainer build {{.DC_ARGS}}
 
   devcontainer-up:
     desc: Start (or reuse) the devcontainer for this workspace
     deps: [ensure-network]
     preconditions:
+      # Older CLIs miss Docker 29's start event (`Action` field) and hang after `docker run`.
+      - sh: printf '0.80.3\n%s\n' "$(devcontainer --version)" | sort -V -C
+        msg: "devcontainer CLI >= 0.80.3 required: npm i -g @devcontainers/cli@latest"
       - sh: test -f .env
         msg: ".env file not found — copy .env.example and fill in your secrets"
       - sh: test -S "$SSH_AUTH_SOCK"
@@ -61,7 +78,7 @@ tasks:
       REMOTE_UID: "{{.REMOTE_UID}}"
       REMOTE_GID: "{{.REMOTE_GID}}"
     cmds:
-      - devcontainer up --workspace-folder {{.WORKSPACE}}
+      - devcontainer up {{.DC_ARGS}}
 
   devcontainer-attach:
     desc: Exec into the devcontainer and start a bash shell
@@ -69,7 +86,7 @@ tasks:
       - sh: test -S "$SSH_AUTH_SOCK"
         msg: "SSH_AUTH_SOCK is not set or does not point to a valid socket"
     cmds:
-      - devcontainer exec --workspace-folder {{.WORKSPACE}} bash
+      - devcontainer exec {{.DC_ARGS}} bash
 
   devcontainer-attach-tmux:
     desc: Exec into the devcontainer and start/attach tmux
@@ -77,7 +94,7 @@ tasks:
       - sh: test -S "$SSH_AUTH_SOCK"
         msg: "SSH_AUTH_SOCK is not set or does not point to a valid socket"
     cmds:
-      - devcontainer exec --workspace-folder {{.WORKSPACE}} tmux new-session -A -s {{.SESSION}}
+      - devcontainer exec {{.DC_ARGS}} tmux new-session -A -s {{.SESSION}}
 
   devcontainer-down:
     desc: Stop and remove the devcontainer for this workspace

@@ -1,0 +1,19 @@
+# Non-SGX hosts (e.g. Apple Silicon): run the Storm images as linux/amd64 (the enclave
+# .so files are x86_64) and drop SGX devices / AESM socket. Submit with
+# confidentialstorm.enclave.type=MOCK_IN_SVM.
+#   docker compose -f docker-compose.yml -f docker-compose.emulated.yml up -d
+x-amd64: &amd64
+  platform: linux/amd64
+
+services:
+  nimbus: *amd64
+  ui: *amd64
+  logviewer: *amd64
+  supervisor:
+    <<: *amd64
+    devices: !reset []
+    volumes: !override
+      - ./conf/storm.yaml:/conf/storm.yaml
+      - storm-data:/data
+      - ./data/storm-logs/supervisor:/logs/storm
+      - ./data/storm-logs/supervisor/profiler:/logs/storm/profiler

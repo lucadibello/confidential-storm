@@ -54,7 +54,7 @@ RUN rm -f /etc/apt/sources.list.d/*sgx* /etc/apt/sources.list.d/*intel* \
   # Shells & terminal
   sudo tmux zsh \
   # Newer Java version
-  openjdk-${OPENJDK_VERSION}-jdk \
+  openjdk-${OPENJDK_VERSION}-jdk-headless \
   && rm -rf /var/lib/apt/lists/* \
   && ln -sf /usr/bin/fdfind /usr/local/bin/fd
 
@@ -109,7 +109,10 @@ RUN set -eux; \
   url="https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-${GRAALVM_VERSION}/graalvm-ce-java17-linux-${GRAALVM_ARCH}-${GRAALVM_VERSION}.tar.gz"; \
   curl -fsSL -o /tmp/graalvm.tgz "$url"; \
   tar -xzf /tmp/graalvm.tgz -C /root/tools; \
-  /root/tools/graalvm-ce-java17-${GRAALVM_VERSION}/bin/gu install native-image; \
+  # graalvm.org component catalog is gone (404): install native-image from the release jar
+  curl -fsSL -o /tmp/native-image.jar "https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-${GRAALVM_VERSION}/native-image-installable-svm-java17-linux-${GRAALVM_ARCH}-${GRAALVM_VERSION}.jar"; \
+  /root/tools/graalvm-ce-java17-${GRAALVM_VERSION}/bin/gu install -L /tmp/native-image.jar; \
+  rm -f /tmp/graalvm.tgz /tmp/native-image.jar; \
   ln -s /root/tools/graalvm-ce-java17-${GRAALVM_VERSION}/bin/native-image /usr/local/bin/native-image; \
   echo "GraalVM ${GRAALVM_VERSION} installed successfully."
 
@@ -183,6 +186,10 @@ RUN set -eux; \
   cp -r sdk/native/script/build_app /opt/javaenclave/; \
   rm -rf /tmp/teaclave-sdk; \
   echo "TeaClave SDK build complete."
+
+# `sed -i` fails on Docker Desktop (macOS) bind mounts ("couldn't open temporary file"); perl -pi works everywhere.
+RUN sed -i 's/^sed -i /perl -pi -e /' /opt/javaenclave/build_app/create_tee_sdk_configure.sh \
+  && ! grep -q 'sed -i' /opt/javaenclave/build_app/create_tee_sdk_configure.sh
 
 # Install Docker CLI + Compose v2 plugin (DooD: socket bind-mounted at runtime via devcontainer.json).
 # Static binaries are used instead of the apt repo because Ubuntu 18.04 only
